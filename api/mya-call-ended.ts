@@ -53,7 +53,40 @@ function extractCallerName(transcript: any[]): string | null {
   return null;
 }
 
-/** Build a short summary for the SMS */
+/** Build bullet-point details from transcript */
+function extractBullets(transcript: any[]): string[] {
+  if (!Array.isArray(transcript)) return [];
+  const userText = transcript
+    .filter((t: any) => t.role === "user")
+    .map((t: any) => (t.message || t.text || "").trim())
+    .filter(Boolean)
+    .join(" ");
+  const bullets: string[] = [];
+
+  // Address
+  const addrMatch = userText.match(/(\d+\s+[\w\s]+(?:street|st|avenue|ave|road|rd|drive|dr|lane|ln|boulevard|blvd|way|court|ct|circle|place|pl)[,.\s]*[\w\s]*(?:georgia|ga|atlanta)?)/i);
+  if (addrMatch) bullets.push(`📍 ${addrMatch[1].trim()}`);
+
+  // Phone mentioned by caller (different from their caller ID)
+  const phoneMatch = userText.match(/(\d{3}[-.\s]?\d{3}[-.\s]?\d{4})/);
+  if (phoneMatch) bullets.push(`📱 ${phoneMatch[1]}`);
+
+  // Service keywords
+  const services = userText.match(/\b(roof\s*leak|water\s*damage|flood|mold|fire\s*damage|storm\s*damage|hail|wind|leak|restoration|renovation|remodel|plumbing|electrical|hvac|foundation|siding|gutters?|drywall|painting|demo(?:lition)?|inspection)\b/gi);
+  if (services) {
+    const unique = [...new Set(services.map((s: string) => s.toLowerCase()))];
+    bullets.push(`🔧 ${unique.join(", ")}`);
+  }
+
+  // Urgency
+  if (/\b(emergency|urgent|asap|immediately|24.?hour|right away|flooding|water coming)\b/i.test(userText)) {
+    bullets.push("⚡ URGENT");
+  }
+
+  return bullets;
+}
+
+/** Build the full SMS with bullet-point summary */
 function buildSmsSummary(data: {
   callerName: string | null;
   callerPhone: string;
@@ -62,22 +95,51 @@ function buildSmsSummary(data: {
   duration: number;
   intent: string;
   conversationId: string;
+  summaryTitle: string;
+  transcriptSummary: string;
+  transcript: any[];
 }): string {
   const label = data.callerName || data.callerPhone || "Unknown";
   const dir = data.direction === "outbound" ? "Outbound" : "Inbound";
   const mins = Math.round(data.duration / 60);
   const durStr = mins > 0 ? `${mins}m` : `${data.duration}s`;
-  const convoLink = data.conversationId
-    ? `\n🎧 Listen: https://elevenlabs.io/app/conversational-ai/history?conversation_id=${data.conversationId}`
-    : "";
-  return [
-    `📞 ${dir} call ended — ${label}`,
-    `Duration: ${durStr}`,
-    data.intent ? `Intent: ${data.intent}` : null,
-    `Outcome: ${data.outcome || "completed"}`,
-  ]
-    .filter(Boolean)
-    .join("\n") + convoLink;
+
+  const lines: string[] = [
+    `📞 ${dir} call — ${label}`,
+    `⏱ ${durStr} | ${data.outcome || "completed"}`,
+  ];
+
+  // Bullet-point summary from transcript analysis
+  if (data.transcriptSummary) {
+    lines.push("");
+    lines.push(`📋 Summary:`);
+    // Split the summary into sentence-level bullets
+    const sentences = data.transcriptSummary
+      .split(/(?<=[.!?])\s+/)
+      .filter((s: string) => s.length > 10)
+      .slice(0, 4);
+    for (const s of sentences) {
+      lines.push(`• ${s.trim()}`);
+    }
+  } else if (data.intent) {
+    lines.push("");
+    lines.push(`📋 ${data.intent}`);
+  }
+
+  // Extracted details from transcript
+  const bullets = extractBullets(data.transcript);
+  if (bullets.length > 0) {
+    lines.push("");
+    lines.push(bullets.join("\n"));
+  }
+
+  // Conversation link
+  if (data.conversationId) {
+    lines.push("");
+    lines.push(`🎧 Listen: https://elevenlabs.io/app/conversational-ai/history?conversation_id=${data.conversationId}`);
+  }
+
+  return lines.join("\n");
 }
 
 /* ── handler ─────────────────────────────────────────────────── */
@@ -162,6 +224,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     /* 2. SMS summary to owner ────────────────────────────────── */
+    const summaryTitle    = analysis.call_summary_title || "";
+    const transcriptSum   = analysis.transcript_summary || "";
+
     await sendSms(
       OWNER_PHONE,
       buildSmsSummary({
@@ -172,6 +237,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         duration: durationSecs,
         intent: callerIntent,
         conversationId,
+        summaryTitle: summaryTitle,
+        transcriptSummary: transcriptSum,
+        transcript,
       })
     );
 
