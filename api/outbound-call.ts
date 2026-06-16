@@ -53,7 +53,7 @@ async function triggerOutboundCall(phone: string, leadName: string) {
       agent_id: ELEVENLABS_AGENT_ID,
       agent_phone_number_id: ELEVENLABS_PHONE_ID,
       to_number: normalisePhone(phone),
-      first_message: `Hi ${leadName || "there"}, this is Mya from Elevate Restoration. You just submitted a request on our website — I'd love to help. Do you have a moment?`,
+      first_message: `Hi ${leadName || "there"}, this is Mya calling from Elevate Construction. You just filled out a form on our website and I wanted to follow up with you — do you have a quick moment?`,
     }),
   });
 
