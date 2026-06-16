@@ -43,7 +43,7 @@ function normalisePhone(raw: string): string {
 
 /** Trigger an ElevenLabs outbound call to the lead */
 async function triggerOutboundCall(phone: string, leadName: string) {
-  const res = await fetch("https://api.elevenlabs.io/v1/convai/conversation/create_phone_call", {
+  const res = await fetch("https://api.elevenlabs.io/v1/convai/twilio/outbound_call", {
     method: "POST",
     headers: {
       "xi-api-key": ELEVENLABS_API_KEY,
@@ -52,7 +52,7 @@ async function triggerOutboundCall(phone: string, leadName: string) {
     body: JSON.stringify({
       agent_id: ELEVENLABS_AGENT_ID,
       agent_phone_number_id: ELEVENLABS_PHONE_ID,
-      customer_phone_number: normalisePhone(phone),
+      to_number: normalisePhone(phone),
       first_message: `Hi ${leadName || "there"}, this is Mya from Elevate Restoration. You just submitted a request on our website — I'd love to help. Do you have a moment?`,
     }),
   });
