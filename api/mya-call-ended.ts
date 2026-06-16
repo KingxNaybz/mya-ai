@@ -61,11 +61,15 @@ function buildSmsSummary(data: {
   outcome: string;
   duration: number;
   intent: string;
+  conversationId: string;
 }): string {
   const label = data.callerName || data.callerPhone || "Unknown";
   const dir = data.direction === "outbound" ? "Outbound" : "Inbound";
   const mins = Math.round(data.duration / 60);
   const durStr = mins > 0 ? `${mins}m` : `${data.duration}s`;
+  const convoLink = data.conversationId
+    ? `\n🎧 Listen: https://elevenlabs.io/app/conversational-ai/history?conversation_id=${data.conversationId}`
+    : "";
   return [
     `📞 ${dir} call ended — ${label}`,
     `Duration: ${durStr}`,
@@ -73,7 +77,7 @@ function buildSmsSummary(data: {
     `Outcome: ${data.outcome || "completed"}`,
   ]
     .filter(Boolean)
-    .join("\n");
+    .join("\n") + convoLink;
 }
 
 /* ── handler ─────────────────────────────────────────────────── */
@@ -158,6 +162,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         outcome: callOutcome,
         duration: durationSecs,
         intent: callerIntent,
+        conversationId,
       })
     );
 
