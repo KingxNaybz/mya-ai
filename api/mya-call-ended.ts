@@ -93,17 +93,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const body = req.body || {};
+    const rawBody = req.body || {};
 
     /*
-     * ElevenLabs post-call webhook payload fields:
-     *   conversation_id, agent_id, status, transcript (array),
-     *   metadata.phone_call.direction, metadata.phone_call.external_number,
-     *   metadata.phone_call.called_number,
-     *   metadata.call_duration_secs, metadata.start_time_unix_secs,
-     *   analysis.transcript_summary, analysis.call_successful,
-     *   analysis.data_collection_results (object with extracted fields)
+     * ElevenLabs workspace post-call webhook can send the payload in two formats:
+     *   1. Wrapped: { type: "post_call_transcript", event_timestamp: ..., data: { ...conversation... } }
+     *   2. Direct: { conversation_id, agent_id, ... }
+     * Handle both by unwrapping if a "data" key is present.
      */
+    const body = rawBody.data && rawBody.data.conversation_id ? rawBody.data : rawBody;
 
     const conversationId = body.conversation_id || "";
     const agentId        = body.agent_id || "";
@@ -114,7 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const direction      = phoneCall.direction || "unknown";
     const callerNumber   = phoneCall.external_number || "";
-    const calledNumber   = phoneCall.called_number || "";
+    const calledNumber   = phoneCall.called_number || phoneCall.agent_number || "";
     const durationSecs   = metadata.call_duration_secs || 0;
     const messageCount   = Array.isArray(transcript) ? transcript.length : 0;
 
@@ -132,6 +130,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .map((t: any) => `${t.role === "agent" ? "Mya" : "Caller"}: ${t.message || t.text || ""}`)
           .join("\n")
       : JSON.stringify(transcript);
+
+    // Log key fields for debugging
+    console.log("mya-call-ended:", JSON.stringify({
+      conversationId,
+      direction,
+      callerNumber,
+      durationSecs,
+      hasTranscript: Array.isArray(transcript) && transcript.length > 0,
+      bodyKeys: Object.keys(rawBody),
+      isWrapped: !!(rawBody.data && rawBody.data.conversation_id),
+    }));
 
     /* 1. Save call to Supabase ──────────────────────────────── */
     const { error: dbErr } = await supabase.from("calls").insert({
