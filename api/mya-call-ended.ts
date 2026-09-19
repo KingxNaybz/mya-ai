@@ -230,8 +230,87 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error("Supabase calls insert error:", dbErr);
     }
 
-    /* 2. SMS summary to owner ────────────────────────────────── */
-    const summaryTitle    = analysis.call_summary_title || "";
+    /* 2. Sync Mya contact + conversation ─────────────────────── */    let contactId: string | null = null;
+
+    if (callerNumber) {
+      const { data: existingContact, error: contactLookupErr } = await supabase
+        .from("mya_contacts")
+        .select("id,name,total_calls")
+        .eq("phone", callerNumber)
+        .maybeSingle();
+
+      if (contactLookupErr) {
+        console.error("Mya contact lookup error:", contactLookupErr);
+      } else if (existingContact) {
+        contactId = existingContact.id;
+
+        const { error: contactUpdateErr } = await supabase
+          .from("mya_contacts")
+          .update({
+            name: callerName || existingContact.name || null,
+            last_call_summary: callerIntent || null,
+            total_calls: (existingContact.total_calls || 0) + 1,
+            last_contact_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingContact.id);
+
+        if (contactUpdateErr) {
+          console.error("Mya contact update error:", contactUpdateErr);
+        }
+      } else {
+        const { data: newContact, error: contactInsertErr } = await supabase
+          .from("mya_contacts")
+          .insert({
+            phone: callerNumber,
+            name: callerName || null,
+            lead_source: "phone",
+            status: "new",
+            last_call_summary: callerIntent || null,
+            total_calls: 1,
+            last_contact_at: new Date().toISOString(),
+          })
+          .select("id")
+          .single();
+
+        if (contactInsertErr) {
+          console.error("Mya contact insert error:", contactInsertErr);
+        } else {
+          contactId = newContact?.id || null;
+        }
+      }
+    }
+
+    const callSuccessful =
+      callOutcome === true ||
+      String(callOutcome).toLowerCase() === "success" ||
+      String(callOutcome).toLowerCase() === "successful" ||
+      String(callOutcome).toLowerCase() === "completed";
+
+    const { error: conversationErr } = await supabase
+      .from("mya_conversations")
+      .upsert(
+        {
+          conversation_id: conversationId,
+          contact_id: contactId,
+          phone: callerNumber || null,
+          direction,
+          duration_secs: durationSecs,
+          summary: callerIntent || null,
+          transcript: transcriptText,
+          call_successful: callSuccessful,
+        },
+        {
+          onConflict: "conversation_id",
+        }
+      );
+
+    if (conversationErr) {
+      console.error("Mya conversation insert error:", conversationErr);
+    }
+
+
+    /* 3. SMS summary to owner ────────────────────────────────── */    const summaryTitle    = analysis.call_summary_title || "";
     const transcriptSum   = analysis.transcript_summary || "";
 
     await sendSms(
