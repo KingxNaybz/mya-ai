@@ -301,7 +301,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const { data: newContact, error: contactInsertErr } = await supabase
           .from("mya_contacts")
           .insert({
-            phone: callerNumber,
+            phone: crmPhone,
             name: callerName || null,
             lead_source: "phone",
             status: "new",
