@@ -219,17 +219,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const durationSecs   = metadata.call_duration_secs || 0;
     const messageCount   = Array.isArray(transcript) ? transcript.length : 0;
 
-    // Extract info from analysis or transcript
-    const customerPhone   = extractCustomerPhone(transcript);
-    const propertyAddress = extractPropertyAddress(transcript);
-    const crmPhone = customerPhone || callerNumber;
+    // Structured data collected by ElevenLabs
+const collected = analysis.data_collection_results || {};
 
-    const callerName     = analysis.data_collection_results?.caller_name
-                           || extractCallerName(transcript);
-    const callerIntent   = analysis.data_collection_results?.caller_intent
-                           || analysis.transcript_summary?.slice(0, 200)
-                           || "";
-    const callOutcome    = analysis.call_successful || body.status || "completed";
+// Prefer structured ElevenLabs data, with transcript extraction as fallback
+const structuredPhone = collected.caller_phone
+  ? String(collected.caller_phone).replace(/\D/g, "")
+  : "";
+
+const normalizedStructuredPhone =
+  structuredPhone.length === 10
+    ? `+1${structuredPhone}`
+    : structuredPhone.length === 11 && structuredPhone.startsWith("1")
+      ? `+${structuredPhone}`
+      : "";
+
+const customerPhone =
+  normalizedStructuredPhone || extractCustomerPhone(transcript);
+
+const propertyAddress =
+  collected.property_address || extractPropertyAddress(transcript);
+
+const crmPhone = customerPhone || callerNumber;
+
+const callerName =
+  collected.caller_name || extractCallerName(transcript);
+
+const callerIntent =
+  collected.caller_intent ||
+  analysis.transcript_summary?.slice(0, 200) ||
+  "";
+
+const callerType = collected.caller_type || "other";
+const callPurpose = collected.call_purpose || "other";
+const preferredLanguage = collected.preferred_language || "unknown";
+const companyName = collected.company_name || null;
+const requiresMichael = collected.requires_michael === true;
+
+const projectType = collected.project_type || null;
+const projectDescription = collected.project_description || null;
+const timeline = collected.timeline || null;
+const budgetRange = collected.budget_range || null;
+const decisionMakers = collected.decision_makers || null;
+const motivation = collected.motivation || null;
+const contractorHistory = collected.contractor_history || null;
+const leadSource = collected.lead_source || null;
+
+const trade = collected.trade || null;
+const crewSize = collected.crew_size ?? null;
+const serviceArea = collected.service_area || null;
+const subcontractorInsuranceStatus =
+  collected.subcontractor_insurance_status || null;
+const availability = collected.availability || null;
+
+const callOutcome =
+  analysis.call_successful || body.status || "completed";
 
     // Full transcript as text
     const transcriptText = Array.isArray(transcript)
@@ -268,57 +312,68 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error("Supabase calls insert error:", dbErr);
     }
 
-        /* 2. Sync Mya contact + conversation ─────────────────────── */
-    let contactId: string | null = null;
+/* 2. Sync Mya contact + conversation ─────────────────────── */
+let contactId: string | null = null;
 
-    if (crmPhone) {
-      const { data: existingContact, error: contactLookupErr } = await supabase
-        .from("mya_contacts")
-        .select("id,name,total_calls")
-        .eq("phone", crmPhone)
-        .maybeSingle();
+if (crmPhone) {
+  const { data: existingContact, error: contactLookupErr } = await supabase
+    .from("mya_contacts")
+    .select(
+      "id,name,company,address,project_type,lead_source,total_calls"
+    )
+    .eq("phone", crmPhone)
+    .maybeSingle();
 
-      if (contactLookupErr) {
-        console.error("Mya contact lookup error:", contactLookupErr);
-      } else if (existingContact) {
-        contactId = existingContact.id;
+  if (contactLookupErr) {
+    console.error("Mya contact lookup error:", contactLookupErr);
+  } else if (existingContact) {
+    contactId = existingContact.id;
 
-        const { error: contactUpdateErr } = await supabase
-          .from("mya_contacts")
-          .update({
-            name: callerName || existingContact.name || null,
-            last_call_summary: callerIntent || null,
-            total_calls: (existingContact.total_calls || 0) + 1,
-            last_contact_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existingContact.id);
+    const { error: contactUpdateErr } = await supabase
+      .from("mya_contacts")
+      .update({
+        name: callerName || existingContact.name || null,
+        company: companyName || existingContact.company || null,
+        address: propertyAddress || existingContact.address || null,
+        project_type:
+          projectType || existingContact.project_type || null,
+        lead_source:
+          leadSource || existingContact.lead_source || "phone",
+        last_call_summary: callerIntent || null,
+        total_calls: (existingContact.total_calls || 0) + 1,
+        last_contact_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existingContact.id);
 
-        if (contactUpdateErr) {
-          console.error("Mya contact update error:", contactUpdateErr);
-        }
-      } else {
-        const { data: newContact, error: contactInsertErr } = await supabase
-          .from("mya_contacts")
-          .insert({
-            phone: crmPhone,
-            name: callerName || null,
-            lead_source: "phone",
-            status: "new",
-            last_call_summary: callerIntent || null,
-            total_calls: 1,
-            last_contact_at: new Date().toISOString(),
-          })
-          .select("id")
-          .single();
-
-        if (contactInsertErr) {
-          console.error("Mya contact insert error:", contactInsertErr);
-        } else {
-          contactId = newContact?.id || null;
-        }
-      }
+    if (contactUpdateErr) {
+      console.error("Mya contact update error:", contactUpdateErr);
     }
+  } else {
+    const { data: newContact, error: contactInsertErr } = await supabase
+      .from("mya_contacts")
+      .insert({
+        phone: crmPhone,
+        name: callerName || null,
+        company: companyName,
+        address: propertyAddress,
+        project_type: projectType,
+        lead_source: leadSource || "phone",
+        status: "new",
+        last_call_summary: callerIntent || null,
+        total_calls: 1,
+        last_contact_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+
+    if (contactInsertErr) {
+      console.error("Mya contact insert error:", contactInsertErr);
+    } else {
+      contactId = newContact?.id || null;
+    }
+  }
+}
 
     const callSuccessful =
       callOutcome === true ||
@@ -348,8 +403,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error("Mya conversation insert error:", conversationErr);
     }
 
+    /* 3. Create project intake when this call is a new project lead ─────── */
+const shouldCreateProjectIntake =
+  callerType === "prospective_client" &&
+  [
+    "new_project",
+    "damage_restoration",
+    "estimate_or_consultation",
+    "insurance_claim",
+  ].includes(callPurpose);
 
-    /* 3. SMS summary to owner ────────────────────────────────── */    const summaryTitle    = analysis.call_summary_title || "";
+if (shouldCreateProjectIntake) {
+  const { error: intakeErr } = await supabase
+    .from("mya_intakes")
+    .insert({
+      full_name: callerName || null,
+      phone: crmPhone || null,
+      property_address: propertyAddress || null,
+      company_name: companyName,
+      project_type: projectType,
+      motivation,
+      project_description: projectDescription,
+      timeline,
+      budget_range: budgetRange,
+      decision_makers: decisionMakers,
+      contractor_history: contractorHistory,
+      lead_source: leadSource || "phone",
+      call_disposition: callerIntent || null,
+      notes: requiresMichael
+        ? "Requires Michael follow-up."
+        : null,
+      status: "new",
+      qualified_by: "Mya",
+    });
+
+  if (intakeErr) {
+    console.error("Mya intake insert error:", intakeErr);
+  }
+}
+
+    /* 4. SMS summary to owner ────────────────────────────────── */    const summaryTitle    = analysis.call_summary_title || "";
     const transcriptSum   = analysis.transcript_summary || "";
 
     await sendSms(
