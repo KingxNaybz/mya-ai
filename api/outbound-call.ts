@@ -2,8 +2,15 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 
 /* ── env ─────────────────────────────────────────────────────── */
-const SUPABASE_URL        = process.env.SUPABASE_URL || "";
-const SUPABASE_KEY        = process.env.SUPABASE_SERVICE_KEY || "";
+const SUPABASE_URL =
+  process.env.VITE_SUPABASE_URL ||
+  process.env.SUPABASE_URL ||
+  "";
+
+const SUPABASE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SERVICE_KEY ||
+  "";
 const ELEVENLABS_API_KEY  = process.env.ELEVENLABS_API_KEY || "";
 const ELEVENLABS_AGENT_ID = process.env.ELEVENLABS_AGENT_ID || "";
 const ELEVENLABS_PHONE_ID = process.env.ELEVENLABS_PHONE_NUMBER_ID || "";
