@@ -60,6 +60,40 @@ function extractCallerName(transcript: any[]): string | null {
   return null;
 }
 
+/** Extract customer-provided callback number from transcript */
+function extractCustomerPhone(transcript: any[]): string | null {
+  if (!Array.isArray(transcript)) return null;
+
+  const userText = transcript
+    .filter((t: any) => t.role === "user")
+    .map((t: any) => t.message || t.text || "")
+    .join(" ");
+
+  const match = userText.match(
+    /(?:\+?1[-.\s]?)?(\d{3})[-.\s]?(\d{3})[-.\s]?(\d{4})/
+  );
+
+  if (!match) return null;
+
+  return `+1${match[1]}${match[2]}${match[3]}`;
+}
+
+/** Extract a clean property street address from transcript */
+function extractPropertyAddress(transcript: any[]): string | null {
+  if (!Array.isArray(transcript)) return null;
+
+  const userText = transcript
+    .filter((t: any) => t.role === "user")
+    .map((t: any) => t.message || t.text || "")
+    .join(" ");
+
+  const match = userText.match(
+    /\b(\d+\s+(?:[A-Za-z0-9'-]+\s+){0,5}(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Boulevard|Blvd|Way|Court|Ct|Circle|Place|Pl))\b/i
+  );
+
+  return match?.[1]?.trim() || null;
+}
+
 /** Build bullet-point details from transcript */
 function extractBullets(transcript: any[]): string[] {
   if (!Array.isArray(transcript)) return [];
@@ -71,8 +105,8 @@ function extractBullets(transcript: any[]): string[] {
   const bullets: string[] = [];
 
   // Address
-  const addrMatch = userText.match(/(\d+\s+[\w\s]+(?:street|st|avenue|ave|road|rd|drive|dr|lane|ln|boulevard|blvd|way|court|ct|circle|place|pl)[,.\s]*[\w\s]*(?:georgia|ga|atlanta)?)/i);
-  if (addrMatch) bullets.push(`📍 ${addrMatch[1].trim()}`);
+  const propertyAddress = extractPropertyAddress(transcript);
+  if (propertyAddress) bullets.push(`📍 ${propertyAddress}`);
 
   // Phone mentioned by caller (different from their caller ID)
   const phoneMatch = userText.match(/(\d{3}[-.\s]?\d{3}[-.\s]?\d{4})/);
@@ -186,6 +220,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const messageCount   = Array.isArray(transcript) ? transcript.length : 0;
 
     // Extract info from analysis or transcript
+    const customerPhone   = extractCustomerPhone(transcript);
+    const propertyAddress = extractPropertyAddress(transcript);
+    const crmPhone = customerPhone || callerNumber;
+
     const callerName     = analysis.data_collection_results?.caller_name
                            || extractCallerName(transcript);
     const callerIntent   = analysis.data_collection_results?.caller_intent
@@ -230,13 +268,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error("Supabase calls insert error:", dbErr);
     }
 
-    /* 2. Sync Mya contact + conversation ─────────────────────── */    let contactId: string | null = null;
+        /* 2. Sync Mya contact + conversation ─────────────────────── */
+    let contactId: string | null = null;
 
-    if (callerNumber) {
+    if (crmPhone) {
       const { data: existingContact, error: contactLookupErr } = await supabase
         .from("mya_contacts")
         .select("id,name,total_calls")
-        .eq("phone", callerNumber)
+        .eq("phone", crmPhone)
         .maybeSingle();
 
       if (contactLookupErr) {
