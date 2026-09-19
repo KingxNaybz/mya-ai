@@ -245,105 +245,12 @@ const collected = analysis.data_collection_results || {};
 const collectedValue = (key: string) =>
   getCollectedValue(collected?.[key]);
 
+
+
 // Prefer structured ElevenLabs data, with transcript extraction as fallback
 const rawCollectedPhone = collectedValue("caller_phone");
 const structuredPhone = rawCollectedPhone
   ? String(rawCollectedPhone).replace(/\D/g, "")
-  : "";
-
-const normalizedStructuredPhone =
-  structuredPhone.length === 10
-    ? `+1${structuredPhone}`
-    : structuredPhone.length === 11 && structuredPhone.startsWith("1")
-      ? `+${structuredPhone}`
-      : "";
-
-const customerPhone =
-  normalizedStructuredPhone || extractCustomerPhone(transcript);
-
-const collectedAddress = collectedValue("property_address");
-const propertyAddress =
-  (collectedAddress ? String(collectedAddress).trim() : "") ||
-  extractPropertyAddress(transcript);
-
-const crmPhone = customerPhone || callerNumber;
-
-const collectedName = collectedValue("caller_name");
-const callerName =
-  (collectedName ? String(collectedName).trim() : "") ||
-  extractCallerName(transcript);
-
-const collectedIntent = collectedValue("caller_intent");
-const callerIntent =
-  (collectedIntent ? String(collectedIntent).trim() : "") ||
-  analysis.transcript_summary?.slice(0, 200) ||
-  "";
-
-const callerType =
-  String(collectedValue("caller_type") || "other").trim();
-
-const callPurpose =
-  String(collectedValue("call_purpose") || "other").trim();
-
-const preferredLanguage =
-  String(collectedValue("preferred_language") || "unknown").trim();
-
-const companyName =
-  collectedValue("company_name") || null;
-
-const requiresMichael =
-  collectedValue("requires_michael") === true;
-
-const projectType =
-  collectedValue("project_type") || null;
-
-const projectDescription =
-  collectedValue("project_description") || null;
-
-const timeline =
-  collectedValue("timeline") || null;
-
-const budgetRange =
-  collectedValue("budget_range") || null;
-
-const decisionMakers =
-  collectedValue("decision_makers") || null;
-
-const motivation =
-  collectedValue("motivation") || null;
-
-const contractorHistory =
-  collectedValue("contractor_history") || null;
-
-const leadSource =
-  collectedValue("lead_source") || null;
-
-const trade =
-  collectedValue("trade") || null;
-
-const rawCrewSize = collectedValue("crew_size");
-const crewSize =
-  rawCrewSize === null ||
-  rawCrewSize === undefined ||
-  rawCrewSize === ""
-    ? null
-    : Number(rawCrewSize);
-
-const serviceArea =
-  collectedValue("service_area") || null;
-
-const subcontractorInsuranceStatus =
-  collectedValue("subcontractor_insurance_status") || null;
-
-const availability =
-  collectedValue("availability") || null;
-
-const callOutcome =
-  analysis.call_successful || body.status || "completed";
-
-// Prefer structured ElevenLabs data, with transcript extraction as fallback
-const structuredPhone = collected.caller_phone
-  ? String(collected.caller_phone).replace(/\D/g, "")
   : "";
 
 const normalizedStructuredPhone =
