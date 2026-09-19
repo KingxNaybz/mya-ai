@@ -283,15 +283,38 @@ const callOutcome =
       : JSON.stringify(transcript);
 
     // Log key fields for debugging
-    console.log("mya-call-ended:", JSON.stringify({
-      conversationId,
-      direction,
-      callerNumber,
-      durationSecs,
-      hasTranscript: Array.isArray(transcript) && transcript.length > 0,
-      bodyKeys: Object.keys(rawBody),
-      isWrapped: !!(rawBody.data && rawBody.data.conversation_id),
-    }));
+console.log("mya-call-ended:", JSON.stringify({
+  conversationId,
+  direction,
+  callerNumber,
+  durationSecs,
+  hasTranscript: Array.isArray(transcript) && transcript.length > 0,
+  bodyKeys: Object.keys(rawBody),
+  isWrapped: !!(rawBody.data && rawBody.data.conversation_id),
+}));
+
+// ADD THIS BELOW — DON'T DELETE THE BLOCK ABOVE
+console.log(
+  "mya-data-collection:",
+  JSON.stringify({
+    caller_name: collected.caller_name,
+    caller_type: collected.caller_type,
+    call_purpose: collected.call_purpose,
+    preferred_language: collected.preferred_language,
+    caller_phone: collected.caller_phone,
+    company_name: collected.company_name,
+    property_address: collected.property_address,
+    requires_michael: collected.requires_michael,
+    project_type: collected.project_type,
+    project_description: collected.project_description,
+    timeline: collected.timeline,
+    budget_range: collected.budget_range,
+    decision_makers: collected.decision_makers,
+    motivation: collected.motivation,
+    contractor_history: collected.contractor_history,
+    lead_source: collected.lead_source,
+  })
+);
 
     /* 1. Save call to Supabase ──────────────────────────────── */
     const { error: dbErr } = await supabase.from("calls").insert({
