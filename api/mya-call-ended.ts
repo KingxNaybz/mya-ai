@@ -442,44 +442,58 @@ if (crmPhone) {
     }
 
     /* 3. Create project intake when this call is a new project lead ─────── */
-const shouldCreateProjectIntake =
-  callerType === "prospective_client" &&
-  [
-    "new_project",
-    "damage_restoration",
-    "estimate_or_consultation",
-    "insurance_claim",
-  ].includes(callPurpose);
+    const shouldCreateProjectIntake =
+      callerType === "prospective_client" &&
+      [
+        "new_project",
+        "damage_restoration",
+        "estimate_or_consultation",
+        "insurance_claim",
+      ].includes(callPurpose);
 
-if (shouldCreateProjectIntake) {
-  const { error: intakeErr } = await supabase
-    .from("mya_intakes")
-    .insert({
-      full_name: callerName || null,
-      phone: crmPhone || null,
-      property_address: propertyAddress || null,
-      company_name: companyName,
-      project_type: projectType,
-      motivation,
-      project_description: projectDescription,
-      timeline,
-      budget_range: budgetRange,
-      decision_makers: decisionMakers,
-      contractor_history: contractorHistory,
-      lead_source: leadSource || "phone",
-      call_disposition: callerIntent || null,
-      notes: requiresMichael
-        ? "Requires Michael follow-up."
-        : null,
-      status: "new",
-      qualified_by: "Mya",
+    console.log("Mya intake decision:", {
+      callerType,
+      callPurpose,
+      shouldCreateProjectIntake,
     });
 
-  if (intakeErr) {
-    console.error("Mya intake insert error:", intakeErr);
-  }
-}
+    if (shouldCreateProjectIntake) {
+      const { data: intakeData, error: intakeErr } = await supabase
+        .from("mya_intakes")
+        .insert({
+          full_name: callerName || null,
+          phone: crmPhone || null,
+          property_address: propertyAddress || null,
+          company_name: companyName,
+          project_type: projectType,
+          motivation,
+          project_description: projectDescription,
+          timeline,
+          budget_range: budgetRange,
+          decision_makers: decisionMakers,
+          contractor_history: contractorHistory,
+          lead_source: leadSource || "phone",
+          call_disposition: callerIntent || null,
+          notes: requiresMichael
+            ? "Requires Michael follow-up."
+            : null,
+          status: "new",
+          qualified_by: "Mya",
+        })
+        .select("id,full_name,phone,project_type,lead_source,created_at");
 
+      console.log("Mya intake result:", {
+        shouldCreateProjectIntake,
+        callerType,
+        callPurpose,
+        data: intakeData,
+        error: intakeErr,
+      });
+
+      if (intakeErr) {
+        console.error("Mya intake insert error:", intakeErr);
+      }
+    }
     /* 4. SMS summary to owner ────────────────────────────────── */    const summaryTitle    = analysis.call_summary_title || "";
     const transcriptSum   = analysis.transcript_summary || "";
 
