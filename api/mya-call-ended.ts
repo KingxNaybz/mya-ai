@@ -441,6 +441,126 @@ if (crmPhone) {
       console.error("Mya conversation insert error:", conversationErr);
     }
 
+    /* 2B. Sync persistent customer profile ───────────────────────── */
+    if (contactId) {
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const todayStart = new Date(now);
+      todayStart.setHours(0, 0, 0, 0);
+
+      const { data: existingProfile, error: profileLookupErr } =
+        await supabase
+          .from("mya_customer_profiles")
+          .select(
+            "id,preferred_name,relationship_type,relationship_summary,current_context,memory_summary,communication_preferences,important_notes,open_follow_ups,first_contact_at,last_contact_at,last_call_at,calls_today,lifetime_calls,last_call_summary"
+          )
+          .eq("contact_id", contactId)
+          .maybeSingle();
+
+      if (profileLookupErr) {
+        console.error("Mya customer profile lookup error:", profileLookupErr);
+      } else {
+        const previousLastCall = existingProfile?.last_call_at
+          ? new Date(existingProfile.last_call_at)
+          : null;
+
+        const calledEarlierToday =
+          previousLastCall !== null &&
+          previousLastCall >= todayStart;
+
+        const nextCallsToday = existingProfile
+          ? calledEarlierToday
+            ? (existingProfile.calls_today || 0) + 1
+            : 1
+          : 1;
+
+        const nextLifetimeCalls =
+          (existingProfile?.lifetime_calls || 0) + 1;
+
+        const relationshipType =
+          callerType === "existing_client"
+            ? "existing_client"
+            : callerType === "prospective_client"
+              ? "prospective_client"
+              : callerType || existingProfile?.relationship_type || "unknown";
+
+        const relationshipSummary =
+          existingProfile?.relationship_summary ||
+          (callerName && projectType
+            ? `${callerName} contacted Elevate Construction regarding ${projectType}.`
+            : callerName
+              ? `${callerName} is a contact of Elevate Construction.`
+              : null);
+
+        const currentContext =
+          projectDescription ||
+          callerIntent ||
+          existingProfile?.current_context ||
+          null;
+
+        const memorySummaryParts = [
+          existingProfile?.memory_summary || null,
+          callerIntent
+            ? `Latest call: ${callerIntent}`
+            : null,
+        ].filter(Boolean);
+
+        const memorySummary =
+          memorySummaryParts.length > 0
+            ? memorySummaryParts.join("\n").slice(-4000)
+            : null;
+
+        const profilePayload = {
+          contact_id: contactId,
+          preferred_name:
+            callerName ||
+            existingProfile?.preferred_name ||
+            null,
+          relationship_type: relationshipType,
+          relationship_summary: relationshipSummary,
+          current_context: currentContext,
+          memory_summary: memorySummary,
+          communication_preferences:
+            existingProfile?.communication_preferences || null,
+          important_notes:
+            existingProfile?.important_notes || null,
+          open_follow_ups:
+            existingProfile?.open_follow_ups || null,
+          first_contact_at:
+            existingProfile?.first_contact_at || nowIso,
+          last_contact_at: nowIso,
+          last_call_at: nowIso,
+          calls_today: nextCallsToday,
+          lifetime_calls: nextLifetimeCalls,
+          last_call_summary:
+            callerIntent ||
+            existingProfile?.last_call_summary ||
+            null,
+          updated_at: nowIso,
+        };
+
+        const { error: profileUpsertErr } = await supabase
+          .from("mya_customer_profiles")
+          .upsert(profilePayload, {
+            onConflict: "contact_id",
+          });
+
+        if (profileUpsertErr) {
+          console.error(
+            "Mya customer profile upsert error:",
+            profileUpsertErr
+          );
+        } else {
+          console.log("Mya customer profile synced:", {
+            contactId,
+            preferredName: profilePayload.preferred_name,
+            callsToday: nextCallsToday,
+            lifetimeCalls: nextLifetimeCalls,
+            returningToday: calledEarlierToday,
+          });
+        }
+      }
+    }
     /* 3. Create project intake when this call is a new project lead ─────── */
     const shouldCreateProjectIntake =
       callerType === "prospective_client" &&
