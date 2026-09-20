@@ -64,9 +64,19 @@ export default async function handler(
           relationship_type: "unknown",
           calls_today: "0",
           returning_today: "false",
+
+          company_name: "",
+          property_address: "",
+          project_type: "",
+
+          relationship_summary: "",
           current_context: "",
           memory_summary: "",
           last_call_summary: "",
+
+          communication_preferences: "",
+          important_notes: "",
+          open_follow_ups: "",
         },
       });
     }
@@ -90,9 +100,19 @@ export default async function handler(
           relationship_type: "unknown",
           calls_today: "0",
           returning_today: "false",
+
+          company_name: "",
+          property_address: "",
+          project_type: "",
+
+          relationship_summary: "",
           current_context: "",
           memory_summary: "",
           last_call_summary: "",
+
+          communication_preferences: "",
+          important_notes: "",
+          open_follow_ups: "",
         },
       });
     }
@@ -106,9 +126,19 @@ export default async function handler(
           relationship_type: "unknown",
           calls_today: "0",
           returning_today: "false",
+
+          company_name: "",
+          property_address: "",
+          project_type: "",
+
+          relationship_summary: "",
           current_context: "",
           memory_summary: "",
           last_call_summary: "",
+
+          communication_preferences: "",
+          important_notes: "",
+          open_follow_ups: "",
         },
       });
     }
@@ -147,6 +177,15 @@ export default async function handler(
       contact.name ||
       "";
 
+    const greetingName =
+      preferredName.trim().split(/\s+/)[0] || "";
+
+    const firstMessage =
+      returningToday && greetingName
+        ? `Hey ${greetingName}, how's it going?`
+        : greetingName
+          ? `It's a great day at Elevate! This is Mya speaking. Hi ${greetingName}, how are you today?`
+          : `It's a great day at Elevate! This is Mya speaking. How can I help you today?`;
     console.log("Mya recognized caller:", {
       contactId: contact.id,
       preferredName,
@@ -156,6 +195,11 @@ export default async function handler(
 
     return res.status(200).json({
       type: "conversation_initiation_client_data",
+      conversation_config_override: {
+        agent: {
+          first_message: firstMessage,
+        },
+      },
       dynamic_variables: {
         known_caller: "true",
         preferred_name: preferredName,
@@ -194,16 +238,26 @@ export default async function handler(
 
     return res.status(200).json({
       type: "conversation_initiation_client_data",
-      dynamic_variables: {
-        known_caller: "false",
-        preferred_name: "",
-        relationship_type: "unknown",
-        calls_today: "0",
-        returning_today: "false",
-        current_context: "",
-        memory_summary: "",
-        last_call_summary: "",
-      },
+        dynamic_variables: {
+          known_caller: "false",
+          preferred_name: "",
+          relationship_type: "unknown",
+          calls_today: "0",
+          returning_today: "false",
+
+          company_name: "",
+          property_address: "",
+          project_type: "",
+
+          relationship_summary: "",
+          current_context: "",
+          memory_summary: "",
+          last_call_summary: "",
+
+          communication_preferences: "",
+          important_notes: "",
+          open_follow_ups: "",
+        },
     });
   }
 }
