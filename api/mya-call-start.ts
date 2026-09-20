@@ -60,6 +60,7 @@ export default async function handler(
         type: "conversation_initiation_client_data",
         dynamic_variables: {
           known_caller: "false",
+          known_name: "false",
           preferred_name: "",
           relationship_type: "unknown",
           calls_today: "0",
@@ -96,6 +97,7 @@ export default async function handler(
         type: "conversation_initiation_client_data",
         dynamic_variables: {
           known_caller: "false",
+          known_name: "false",
           preferred_name: "",
           relationship_type: "unknown",
           calls_today: "0",
@@ -122,6 +124,7 @@ export default async function handler(
         type: "conversation_initiation_client_data",
         dynamic_variables: {
           known_caller: "false",
+          known_name: "false",
           preferred_name: "",
           relationship_type: "unknown",
           calls_today: "0",
@@ -172,13 +175,22 @@ export default async function handler(
         : 0;
     }
 
-    const preferredName =
+    const rawPreferredName =
       profile?.preferred_name ||
       contact.name ||
       "";
 
+    const preferredName =
+      typeof rawPreferredName === "string" &&
+      rawPreferredName.trim() &&
+      rawPreferredName.trim() !== "[object Object]"
+        ? rawPreferredName.trim()
+        : "";
+
+    const hasKnownName = Boolean(preferredName);
+
     const greetingName =
-      preferredName.trim().split(/\s+/)[0] || "";
+      preferredName.split(/\s+/)[0] || "";
 
     const firstMessage =
       returningToday && greetingName
@@ -202,6 +214,7 @@ export default async function handler(
       },
       dynamic_variables: {
         known_caller: "true",
+        known_name: hasKnownName ? "true" : "false",
         preferred_name: preferredName,
         relationship_type:
           profile?.relationship_type ||
@@ -240,6 +253,7 @@ export default async function handler(
       type: "conversation_initiation_client_data",
         dynamic_variables: {
           known_caller: "false",
+          known_name: "false",
           preferred_name: "",
           relationship_type: "unknown",
           calls_today: "0",

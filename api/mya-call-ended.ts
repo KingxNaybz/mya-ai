@@ -268,8 +268,12 @@ const propertyAddress =
 
 const crmPhone = customerPhone || callerNumber;
 
+const collectedName = getCollectedValue(collected.caller_name);
+
 const callerName =
-  collected.caller_name || extractCallerName(transcript);
+  typeof collectedName === "string" && collectedName.trim()
+    ? collectedName.trim()
+    : extractCallerName(transcript);
 
 const callerIntent =
   collected.caller_intent ||
