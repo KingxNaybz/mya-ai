@@ -57,6 +57,7 @@ export default async function handler(
 
     if (!callerPhone) {
       return res.status(200).json({
+        type: "conversation_initiation_client_data",
         dynamic_variables: {
           known_caller: "false",
           preferred_name: "",
@@ -82,6 +83,7 @@ export default async function handler(
       console.error("Mya call-start contact lookup error:", contactErr);
 
       return res.status(200).json({
+        type: "conversation_initiation_client_data",
         dynamic_variables: {
           known_caller: "false",
           preferred_name: "",
@@ -97,6 +99,7 @@ export default async function handler(
 
     if (!contact) {
       return res.status(200).json({
+        type: "conversation_initiation_client_data",
         dynamic_variables: {
           known_caller: "false",
           preferred_name: "",
@@ -152,6 +155,7 @@ export default async function handler(
     });
 
     return res.status(200).json({
+      type: "conversation_initiation_client_data",
       dynamic_variables: {
         known_caller: "true",
         preferred_name: preferredName,
@@ -189,6 +193,7 @@ export default async function handler(
     console.error("mya-call-start error:", err);
 
     return res.status(200).json({
+      type: "conversation_initiation_client_data",
       dynamic_variables: {
         known_caller: "false",
         preferred_name: "",
