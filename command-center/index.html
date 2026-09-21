@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mya — Elevate Construction AI Operations</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============ TOP BAR ============ -->
+<header class="topbar">
+  <div class="topbar-left">
+    <div class="brand-mark" aria-hidden="true"></div>
+    <div class="brand-text">
+      <h1>MYA</h1>
+      <span>Elevate Construction AI Operations</span>
+    </div>
+    <div class="status-pill">
+      <span class="dot dot-online"></span> System Online
+    </div>
+  </div>
+
+  <div class="topbar-center">
+    <div class="clock" id="clock">--:--:-- --</div>
+    <div class="clock-date" id="clock-date">Loading date…</div>
+  </div>
+
+  <div class="topbar-right">
+    <div class="access-indicator" tabindex="0">
+      <span class="lock-icon">🔒</span> Computer Access: OFF
+      <span class="tooltip">Not connected yet — display only.</span>
+    </div>
+    <button class="stop-mya-btn" tabindex="0">
+      STOP MYA
+      <span class="tooltip">Not connected yet — display only.</span>
+    </button>
+  </div>
+</header>
+
+<div class="app-shell">
+
+  <!-- ============ LEFT NAV ============ -->
+  <nav class="sidenav">
+    <a href="#" class="nav-item active">
+      <span class="nav-icon">◆</span> Command Center
+    </a>
+    <a href="#" class="nav-item">
+      <span class="nav-icon">☎</span> Calls
+    </a>
+    <a href="#" class="nav-item">
+      <span class="nav-icon">✦</span> Leads
+    </a>
+    <a href="#" class="nav-item">
+      <span class="nav-icon">↻</span> Follow-Ups
+    </a>
+    <a href="#" class="nav-item">
+      <span class="nav-icon">▣</span> Projects
+    </a>
+    <a href="#" class="nav-item">
+      <span class="nav-icon">✓</span> Approvals
+    </a>
+    <a href="#" class="nav-item">
+      <span class="nav-icon">◈</span> Memory
+    </a>
+    <a href="#" class="nav-item">
+      <span class="nav-icon">⚙</span> Settings
+    </a>
+
+    <div class="sidenav-footer">
+      <div class="logo-slot">Elevate<br>Logo Here</div>
+    </div>
+  </nav>
+
+  <!-- ============ MAIN CONTENT ============ -->
+  <main class="main-content">
+
+    <!-- KPI ROW -->
+    <section class="kpi-row" id="kpi-row" aria-label="Key performance indicators"></section>
+
+    <!-- HERO -->
+    <section class="hero-row">
+      <div class="panel status-panel">
+        <div class="panel-header">
+          <h2>Mya System Status</h2>
+          <span class="sample-badge">SAMPLE DATA</span>
+        </div>
+        <div class="status-list" id="status-list"></div>
+      </div>
+
+      <div class="orb-wrap">
+        <div class="orb">
+          <div class="orb-core"></div>
+          <div class="orb-ring ring-1"></div>
+          <div class="orb-ring ring-2"></div>
+          <div class="orb-ring ring-3"></div>
+        </div>
+        <div class="orb-label">MYA</div>
+        <div class="orb-sublabel">Listening &amp; Ready</div>
+      </div>
+
+      <div class="panel activity-panel">
+        <div class="panel-header">
+          <h2>Live Activity Feed</h2>
+          <span class="sample-badge">SAMPLE DATA</span>
+        </div>
+        <div class="activity-list" id="activity-list"></div>
+      </div>
+    </section>
+
+    <!-- APPROVALS + WORKING NOW -->
+    <section class="split-row">
+      <div class="panel approvals-panel">
+        <div class="panel-header">
+          <h2>Needs Your Approval</h2>
+          <span class="sample-badge">SAMPLE DATA</span>
+        </div>
+        <div class="approvals-list" id="approvals-list"></div>
+      </div>
+
+      <div class="panel working-panel">
+        <div class="panel-header">
+          <h2>Mya Working Now</h2>
+          <span class="sample-badge">SAMPLE DATA</span>
+        </div>
+        <ul class="working-list" id="working-list"></ul>
+      </div>
+    </section>
+
+    <!-- CALLS / FOLLOW-UPS / LEADS -->
+    <section class="triple-row">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Today's Calls</h2>
+          <span class="sample-badge">SAMPLE DATA</span>
+        </div>
+        <div class="list-block" id="calls-list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Follow-Ups Due</h2>
+          <span class="sample-badge">SAMPLE DATA</span>
+        </div>
+        <div class="timeline" id="followups-list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>New Leads</h2>
+          <span class="sample-badge">SAMPLE DATA</span>
+        </div>
+        <div class="list-block" id="leads-list"></div>
+      </div>
+    </section>
+
+    <!-- PROJECTS / RECENT ACTIVITY / MEMORY -->
+    <section class="triple-row">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Projects Needing Attention</h2>
+          <span class="sample-badge">SAMPLE DATA</span>
+        </div>
+        <div class="list-block" id="projects-list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Recent Activity</h2>
+          <span class="sample-badge">SAMPLE DATA</span>
+        </div>
+        <div class="list-block" id="recent-activity-list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Memory Insights</h2>
+          <span class="sample-badge">SAMPLE DATA</span>
+        </div>
+        <div class="memory-stats" id="memory-stats"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ============ BOTTOM DOCK: ASK MYA + FOOTER ============ -->
+<div class="bottom-dock">
+  <div class="ask-mya-bar">
+    <div class="ask-mya-input-wrap">
+      <span class="ask-icon">✦</span>
+      <input type="text" placeholder="Ask Mya…" disabled>
+      <span class="tooltip">Not connected yet — display only.</span>
+    </div>
+    <button class="briefing-btn" tabindex="0">
+      Executive Briefing
+      <span class="tooltip">Not connected yet — display only.</span>
+    </button>
+  </div>
+
+  <footer class="footer-strip">
+    <span class="safety-mode">🔒 Safety Mode: Computer Access OFF</span>
+    <span class="tagline">Building Excellence. Elevating Standards.</span>
+  </footer>
+</div>
+
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
