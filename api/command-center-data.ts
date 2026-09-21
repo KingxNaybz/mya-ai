@@ -50,6 +50,38 @@ function sevenDaysAgoIso(): string {
   return d.toISOString();
 }
 
+/**
+ * Some ElevenLabs "collected data" fields (e.g. calls.caller_intent) can end
+ * up stored as a raw internal object — { data_collection_id, json_schema,
+ * value, rationale, ... } — instead of the plain sentence they're meant to
+ * hold. This defensively pulls out just the readable text, whatever shape
+ * the field actually is in, and always caps the length so a single odd row
+ * can never blow up a card's layout.
+ */
+function cleanText(value: unknown, maxLen = 140): string {
+  let text = "";
+
+  if (typeof value === "string") {
+    text = value;
+  } else if (value && typeof value === "object" && typeof (value as any).value === "string") {
+    text = (value as any).value;
+  }
+
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      text = typeof parsed?.value === "string" ? parsed.value : "";
+    } catch {
+      text = "";
+    }
+  }
+
+  text = text.replace(/\s+/g, " ").trim();
+  if (text.length > maxLen) text = text.slice(0, maxLen - 1) + "…";
+  return text;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -117,9 +149,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         value: callsTodayCount.count ?? null,
         error: callsTodayCount.error?.message || null,
         recent: (recentCalls.data || []).map((c: any) => ({
-          name: c.caller_name || c.caller_number || "Unknown caller",
-          topic: c.caller_intent || "",
-          outcome: c.call_outcome || "",
+          name: cleanText(c.caller_name, 60) || c.caller_number || "Unknown caller",
+          topic: cleanText(c.caller_intent, 100),
+          outcome: cleanText(c.call_outcome, 40),
           time: c.created_at,
         })),
       },
@@ -127,25 +159,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         value: newLeadsCount.count ?? null,
         error: newLeadsCount.error?.message || null,
         recent: (recentLeads.data || []).map((l: any) => ({
-          name: l.name || l.phone || "Unknown lead",
-          interest: l.project_type || "",
-          source: l.lead_source || "",
+          name: cleanText(l.name, 60) || l.phone || "Unknown lead",
+          interest: cleanText(l.project_type, 60),
+          source: cleanText(l.lead_source, 40),
           receivedAt: l.last_contact_at,
         })),
       },
       recentActivity: [
-        ...(recentCalls.data || []).map((c: any) => ({
-          time: c.created_at,
-          text: `${c.caller_name || c.caller_number || "Someone"} called${
-            c.caller_intent ? ` about ${c.caller_intent}` : ""
-          }.`,
-        })),
-        ...(recentIntakes.data || []).map((i: any) => ({
-          time: i.created_at,
-          text: `New project intake: ${i.full_name || "Unknown"}${
-            i.project_type ? ` (${i.project_type})` : ""
-          }.`,
-        })),
+        ...(recentCalls.data || []).map((c: any) => {
+          const intent = cleanText(c.caller_intent, 100);
+          const who = cleanText(c.caller_name, 60) || c.caller_number || "Someone";
+          return {
+            time: c.created_at,
+            text: `${who} called${intent ? ` about ${intent}` : ""}.`,
+          };
+        }),
+        ...(recentIntakes.data || []).map((i: any) => {
+          const name = cleanText(i.full_name, 60) || "Unknown";
+          const projectType = cleanText(i.project_type, 60);
+          return {
+            time: i.created_at,
+            text: `New project intake: ${name}${projectType ? ` (${projectType})` : ""}.`,
+          };
+        }),
       ]
         .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
         .slice(0, 6),
