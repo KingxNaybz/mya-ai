@@ -8,18 +8,21 @@
 
 const SAMPLE_DATA = {
 
+  owner: { firstName: "Michael" },
+
   kpis: {
-    todaysCalls:    { value: 27,  trend: [4, 6, 5, 8, 7, 9, 11, 10, 13, 15, 18, 27] },
-    newLeads:       { value: 6,   trend: [0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6] },
-    followUpsDue:   { value: 9,   trend: [2, 2, 3, 3, 4, 5, 5, 6, 7, 7, 8, 9] },
-    openProjects:   { value: 14,  trend: [12, 12, 13, 13, 13, 14, 14, 14, 14, 14, 14, 14] }
+    todaysCalls:  { value: 27, icon: "☎", trendDirection: "up",   trendText: "+18% vs yesterday",  trend: [4, 6, 5, 8, 7, 9, 11, 10, 13, 15, 18, 27] },
+    newLeads:     { value: 6,  icon: "✦", trendDirection: "up",   trendText: "+50% vs last week",  trend: [0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6] },
+    followUpsDue: { value: 9,  icon: "↻", trendDirection: "down", trendText: "-33% vs yesterday", trend: [2, 2, 3, 3, 4, 5, 5, 6, 7, 7, 8, 9] },
+    openProjects: { value: 14, icon: "▣", trendDirection: "up",   trendText: "+17% vs last week",  trend: [12, 12, 13, 13, 13, 14, 14, 14, 14, 14, 14, 14] }
   },
 
-  systemStatus: [
-    { name: "Phone Line",    state: "online",  detail: "Twilio — connected" },
-    { name: "Database",      state: "online",  detail: "Supabase — connected" },
-    { name: "Hermes Agent",  state: "offline", detail: "Not connected yet" },
-    { name: "OpenAI",        state: "online",  detail: "ElevenLabs voice — connected" }
+  todaysSchedule: [
+    { time: "10:00 AM", label: "Call with Sample Customer A (follow-up)" },
+    { time: "11:30 AM", label: "Estimate review — Sample Project #204" },
+    { time: "1:00 PM",  label: "Site visit — Sample Project #198" },
+    { time: "3:00 PM",  label: "Call with new lead (intake)" },
+    { time: "4:30 PM",  label: "Subcontractor follow-up" }
   ],
 
   activityFeed: [
@@ -55,19 +58,6 @@ const SAMPLE_DATA = {
     "Summarizing this morning's calls into project notes"
   ],
 
-  todaysCalls: [
-    { time: "9:41 AM", name: "Sample Customer A", topic: "Kitchen remodel estimate", outcome: "Estimate scheduled" },
-    { time: "8:58 AM", name: "Sample Customer B", topic: "Deck addition inquiry", outcome: "New lead" },
-    { time: "8:40 AM", name: "Sample Customer C", topic: "Missed call — general inquiry", outcome: "Callback queued" },
-    { time: "8:02 AM", name: "Sample Customer G", topic: "Project status check-in", outcome: "Update provided" }
-  ],
-
-  followUpsDue: [
-    { when: "Today, 11:00 AM",  name: "Sample Customer D", note: "Send bathroom renovation estimate" },
-    { when: "Today, 2:30 PM",   name: "Sample Lead E",     note: "Callback re: fence installation quote" },
-    { when: "Tomorrow, 9:00 AM", name: "Sample Customer H", note: "Confirm start date for roofing project" }
-  ],
-
   newLeads: [
     { name: "Sample Customer B", source: "Phone", interest: "Deck addition", receivedAgo: "42 min ago" },
     { name: "Sample Lead E",     source: "Website form", interest: "Fence installation", receivedAgo: "1 hr ago" },
@@ -80,17 +70,31 @@ const SAMPLE_DATA = {
     { name: "Sample Project #211", issue: "Inspection needs to be scheduled", days: 5 }
   ],
 
-  recentActivity: [
-    { time: "Today, 9:22 AM", text: "Follow-up reminder sent for Sample Project #204." },
-    { time: "Today, 8:15 AM", text: "Vendor invoice logged for Sample Vendor F." },
-    { time: "Yesterday, 4:50 PM", text: "Sample Project #198 status updated to 'In Progress'." },
-    { time: "Yesterday, 2:10 PM", text: "Sample Customer H confirmed roofing project start date." }
-  ],
-
   memoryInsights: {
     totalContactsRemembered: 128,
     recurringCustomers: 34,
     notesLoggedThisWeek: 19
-  }
+  },
+
+  connectedServices: [
+    { name: "Phone Line",   detail: "Twilio",     connected: true },
+    { name: "Database",     detail: "Supabase",   connected: true },
+    { name: "Voice Engine", detail: "ElevenLabs", connected: true },
+    { name: "Hermes Agent", detail: "Not connected yet", connected: false }
+  ],
+
+  devices: [
+    { name: "Sample Office PC",     status: "online" },
+    { name: "Sample Mobile Device", status: "offline" },
+    { name: "Mya Cloud",            status: "online" }
+  ],
+
+  quickActions: [
+    { icon: "🖥",  label: "Take a Screenshot" },
+    { icon: "↻",  label: "Create a Follow-Up" },
+    { icon: "📄", label: "Generate a Report" },
+    { icon: "⇧",  label: "Upload a File" },
+    { icon: "⚙",  label: "Settings" }
+  ]
 
 };
