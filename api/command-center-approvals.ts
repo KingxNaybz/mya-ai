@@ -99,7 +99,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let manualFollowUpNeeded = false;
 
     if (action === "approve" && data.action_type === "notify_owner") {
-      await sendSms(OWNER_PHONE, `✅ Approved: ${data.title}`);
+      const { data: settings } = await supabase
+        .from("mya_settings")
+        .select("notify_enabled,notify_phone")
+        .eq("id", 1)
+        .maybeSingle();
+
+      const notifyEnabled = settings?.notify_enabled ?? true;
+      const notifyPhone = settings?.notify_phone || OWNER_PHONE;
+
+      if (notifyEnabled) {
+        await sendSms(notifyPhone, `✅ Approved: ${data.title}`);
+      }
     }
 
     if (action === "approve" && data.action_type === "send_to_customer") {

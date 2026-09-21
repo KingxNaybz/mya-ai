@@ -8,6 +8,7 @@
   "use strict";
 
   const ATLANTA_TZ = "America/New_York";
+  let ownerFirstName = SAMPLE_DATA.owner.firstName;
 
   /* ---------------- Clock + greeting (Atlanta / America/New_York) ---------------- */
   function partOfDay(hour) {
@@ -38,7 +39,7 @@
     document.getElementById("clock").textContent = timeFmt.format(now) + " ET";
     document.getElementById("clock-date").textContent = dateFmt.format(now);
     document.getElementById("greeting-title").textContent =
-      `Good ${partOfDay(hour)}, ${SAMPLE_DATA.owner.firstName}`;
+      `Good ${partOfDay(hour)}, ${ownerFirstName}`;
   }
   updateClock();
   setInterval(updateClock, 1000);
@@ -376,7 +377,7 @@
   }
 
   /* ---------------- Quick actions ---------------- */
-  const LIVE_QUICK_ACTIONS = { "Create a Follow-Up": "create-followup", "Generate a Report": "generate-report" };
+  const LIVE_QUICK_ACTIONS = { "Create a Follow-Up": "create-followup", "Generate a Report": "generate-report", "Settings": "open-settings" };
 
   function renderQuickActions() {
     const container = document.getElementById("quick-actions");
@@ -557,6 +558,7 @@
       const action = btn.getAttribute("data-quick-action");
       if (action === "create-followup") openModal();
       if (action === "generate-report") generateReport();
+      if (action === "open-settings") openSettingsModal();
     });
   }
 
@@ -614,6 +616,99 @@
     URL.revokeObjectURL(url);
   }
 
+  /* ---------------- Settings ---------------- */
+  let currentSettings = null;
+
+  function applySettingsToPage(settings) {
+    if (!settings) return;
+    if (settings.owner_name) ownerFirstName = settings.owner_name;
+    if (settings.footer_tagline) {
+      const el = document.getElementById("footer-tagline-text");
+      if (el) el.textContent = settings.footer_tagline;
+    }
+    updateClock();
+  }
+
+  async function loadSettingsIfAvailable() {
+    if (location.protocol === "file:") return;
+    try {
+      const res = await fetch("/api/command-center-settings");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.settings) {
+        currentSettings = data.settings;
+        applySettingsToPage(currentSettings);
+      }
+    } catch (e) {
+      /* silent fallback to sample data */
+    }
+  }
+
+  function openSettingsModal() {
+    const modal = document.getElementById("settings-modal");
+    if (!modal) return;
+    const nameInput = document.getElementById("settings-owner-name");
+    const taglineInput = document.getElementById("settings-tagline");
+    const notifyCheckbox = document.getElementById("settings-notify-enabled");
+    const phoneInput = document.getElementById("settings-notify-phone");
+    const statusEl = document.getElementById("settings-status");
+
+    nameInput.value = currentSettings?.owner_name || ownerFirstName || "";
+    taglineInput.value = currentSettings?.footer_tagline || "";
+    notifyCheckbox.checked = currentSettings?.notify_enabled !== false;
+    phoneInput.value = currentSettings?.notify_phone || "";
+    statusEl.textContent = "";
+    statusEl.className = "modal-status";
+
+    modal.hidden = false;
+    nameInput.focus();
+  }
+
+  function initSettingsModal() {
+    const modal = document.getElementById("settings-modal");
+    const form = document.getElementById("settings-form");
+    if (!modal || !form) return;
+
+    function closeModal() { modal.hidden = true; }
+
+    document.getElementById("settings-modal-close").addEventListener("click", closeModal);
+    document.getElementById("settings-cancel").addEventListener("click", closeModal);
+    modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const submitBtn = document.getElementById("settings-submit");
+      const statusEl = document.getElementById("settings-status");
+      submitBtn.disabled = true;
+      statusEl.textContent = "Saving…";
+      statusEl.className = "modal-status";
+      try {
+        const res = await fetch("/api/command-center-settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ownerName: document.getElementById("settings-owner-name").value,
+            footerTagline: document.getElementById("settings-tagline").value,
+            notifyEnabled: document.getElementById("settings-notify-enabled").checked,
+            notifyPhone: document.getElementById("settings-notify-phone").value
+          })
+        });
+        if (!res.ok) throw new Error("Request failed");
+        const result = await res.json();
+        currentSettings = result.settings;
+        applySettingsToPage(currentSettings);
+        statusEl.textContent = "Settings saved.";
+        statusEl.className = "modal-status success";
+        setTimeout(closeModal, 900);
+      } catch (err) {
+        statusEl.textContent = "Couldn't save — try again.";
+        statusEl.className = "modal-status";
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  }
+
   /* ---------------- Init ---------------- */
   renderMyaMessage();
   renderKPIs();
@@ -630,7 +725,9 @@
   loadLiveDataIfAvailable();
   loadApprovalsIfAvailable();
   loadFollowUpCountIfAvailable();
+  loadSettingsIfAvailable();
   initFollowUpModal();
+  initSettingsModal();
 
   document.getElementById("approvals-list").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-action]");

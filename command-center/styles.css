@@ -907,6 +907,18 @@ button{ font-family: inherit; cursor: pointer; }
   border-color: var(--accent);
 }
 
+.modal-checkbox{
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-mid);
+  cursor: pointer;
+}
+.modal-checkbox input{ width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+
 .modal-status{ font-size: 12.5px; min-height: 16px; margin-bottom: 8px; color: var(--danger); }
 .modal-status.success{ color: var(--success-on-light); }
 
