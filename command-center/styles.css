@@ -543,6 +543,15 @@ button{ font-family: inherit; cursor: pointer; }
 .btn-approve:hover{ background: rgba(52,224,161,0.14); }
 .btn-decline{ color: var(--danger); border-color: rgba(255,77,94,0.4); }
 .btn-decline:hover{ background: rgba(255,77,94,0.1); }
+.btn-approve:disabled, .btn-decline:disabled{ opacity: 0.5; cursor: default; }
+.btn-approve:not(:disabled), .btn-decline:not(:disabled){ cursor: pointer; }
+
+.approval-empty{
+  font-size: 13px;
+  color: var(--text-mid);
+  text-align: center;
+  padding: 20px 10px;
+}
 
 /* ---------- Working now ---------- */
 .working-list{ list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }

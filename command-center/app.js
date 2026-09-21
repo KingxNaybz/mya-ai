@@ -190,24 +190,67 @@
   }
 
   /* ---------------- Approvals ---------------- */
-  function renderApprovals() {
+  function renderApprovals(items, isLive) {
     const container = document.getElementById("approvals-list");
-    document.getElementById("approvals-count").textContent = SAMPLE_DATA.approvals.length;
-    SAMPLE_DATA.approvals.forEach((item) => {
+    container.innerHTML = "";
+    const list = items || SAMPLE_DATA.approvals;
+    document.getElementById("approvals-count").textContent = list.length;
+
+    if (isLive && list.length === 0) {
+      container.innerHTML = `<div class="approval-empty">Nothing needs your attention right now.</div>`;
+      setLiveBadge("approvals-list", true);
+      return;
+    }
+
+    list.forEach((item) => {
       const card = el("div", "approval-card");
+      const meta = isLive ? `Requested ${formatRelative(item.requestedAt)}` : `Requested ${item.requestedAgo}`;
+      const actionAttrs = isLive
+        ? `data-id="${item.id}" data-action="approve"`
+        : "disabled";
+      const declineAttrs = isLive
+        ? `data-id="${item.id}" data-action="decline"`
+        : "disabled";
       card.innerHTML = `
         <div class="approval-text">
           <strong>${item.title}</strong>
-          <span>${item.detail}</span>
-          <div class="approval-meta">Requested ${item.requestedAgo}</div>
+          <span>${item.detail || ""}</span>
+          <div class="approval-meta">${meta}</div>
         </div>
         <div class="approval-actions">
-          <button class="btn-approve" type="button" disabled>Approve</button>
-          <button class="btn-decline" type="button" disabled>Decline</button>
+          <button class="btn-approve" type="button" ${actionAttrs}>Approve</button>
+          <button class="btn-decline" type="button" ${declineAttrs}>Decline</button>
         </div>
       `;
       container.appendChild(card);
     });
+    setLiveBadge("approvals-list", Boolean(isLive));
+  }
+
+  async function handleApprovalAction(id, action, buttonEl) {
+    const card = buttonEl.closest(".approval-card");
+    const buttons = card.querySelectorAll("button");
+    buttons.forEach((b) => { b.disabled = true; });
+    try {
+      const res = await fetch("/api/command-center-approvals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action })
+      });
+      if (!res.ok) throw new Error("Request failed");
+      card.remove();
+      const countEl = document.getElementById("approvals-count");
+      const remaining = Math.max(0, parseInt(countEl.textContent, 10) - 1);
+      countEl.textContent = remaining;
+      if (remaining === 0) {
+        document.getElementById("approvals-list").innerHTML =
+          `<div class="approval-empty">Nothing needs your attention right now.</div>`;
+      }
+    } catch (e) {
+      buttons.forEach((b) => { b.disabled = false; });
+      const meta = card.querySelector(".approval-meta");
+      if (meta) meta.textContent = "Couldn't update — try again.";
+    }
   }
 
   /* ---------------- Working now ---------------- */
@@ -379,6 +422,27 @@
     }
   }
 
+  async function loadApprovalsIfAvailable() {
+    if (location.protocol === "file:") return;
+    try {
+      const res = await fetch("/api/command-center-approvals");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!Array.isArray(data.approvals)) return;
+      renderApprovals(
+        data.approvals.map((a) => ({
+          id: a.id,
+          title: a.title,
+          detail: a.detail,
+          requestedAt: a.requested_at
+        })),
+        true
+      );
+    } catch (e) {
+      /* silent fallback to sample data */
+    }
+  }
+
   /* ---------------- Init ---------------- */
   renderMyaMessage();
   renderKPIs();
@@ -393,4 +457,11 @@
   renderDevices();
   renderQuickActions();
   loadLiveDataIfAvailable();
+  loadApprovalsIfAvailable();
+
+  document.getElementById("approvals-list").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-action]");
+    if (!btn) return;
+    handleApprovalAction(btn.getAttribute("data-id"), btn.getAttribute("data-action"), btn);
+  });
 })();
