@@ -348,7 +348,15 @@
   async function fetchLiveData(key) {
     const res = await fetch(LIVE_ENDPOINT, { headers: { "x-cc-key": key } });
     if (!res.ok) {
-      throw new Error(res.status === 401 ? "Invalid access key." : `Server error (${res.status}).`);
+      let reason = null;
+      try { reason = (await res.json()).reason; } catch (e) { /* ignore */ }
+      if (res.status === 401 && reason === "not_configured") {
+        throw new Error("Server has no access key set yet (COMMAND_CENTER_KEY missing in Vercel).");
+      }
+      if (res.status === 401) {
+        throw new Error("Invalid access key.");
+      }
+      throw new Error(`Server error (${res.status}).`);
     }
     return res.json();
   }

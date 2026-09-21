@@ -52,8 +52,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const providedKey = req.headers["x-cc-key"] || req.query?.key || "";
 
-  if (!ACCESS_KEY || providedKey !== ACCESS_KEY) {
-    return res.status(401).json({ error: "Unauthorized" });
+  // These two cases are kept distinct (without ever revealing the actual
+  // key value) so a connection problem can be diagnosed from the client:
+  // "not_configured" means COMMAND_CENTER_KEY never reached this function
+  // (env var missing/misnamed, or deployed before it was saved); "invalid_key"
+  // means it's configured but what was typed doesn't match it.
+  if (!ACCESS_KEY) {
+    return res.status(401).json({ error: "Unauthorized", reason: "not_configured" });
+  }
+  if (providedKey !== ACCESS_KEY) {
+    return res.status(401).json({ error: "Unauthorized", reason: "invalid_key" });
   }
 
   const todayIso = startOfTodayAtlanta();
