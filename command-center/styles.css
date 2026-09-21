@@ -795,6 +795,9 @@ button{ font-family: inherit; cursor: pointer; }
 .qa-btn:hover .tooltip{ opacity: 1; transform: translateY(0); }
 .qa-btn .tooltip{ left: 50%; right: auto; transform: translate(-50%, -4px); top: calc(100% + 6px); }
 .qa-btn:hover .tooltip{ transform: translate(-50%, 0); }
+.qa-btn:disabled{ opacity: 0.45; cursor: default; }
+.qa-btn:not(:disabled){ cursor: pointer; }
+.qa-btn:not(:disabled):hover{ background: rgba(47,178,255,0.16); border-color: var(--accent); }
 .qa-icon{ font-size: 18px; color: var(--accent-on-light); }
 
 /* ==========================================================================
@@ -835,3 +838,97 @@ button{ font-family: inherit; cursor: pointer; }
   .mya-hero{ flex-direction: column; text-align: center; }
   .footer-strip{ flex-direction: column; gap: 6px; text-align: center; }
 }
+
+/* ==========================================================================
+   MODAL (Create a Follow-Up)
+   ========================================================================== */
+.modal-overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 8, 16, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 20px;
+}
+.modal-overlay[hidden]{ display: none; }
+
+.modal-card{
+  width: 100%;
+  max-width: 420px;
+  background: linear-gradient(180deg, var(--bg-panel-2), var(--bg-panel));
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--card-glow);
+  padding: 22px 24px;
+  --text-hi: var(--card-text-hi);
+  --text-mid: var(--card-text-mid);
+  --text-low: var(--card-text-low);
+}
+
+.modal-header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.modal-header h3{ margin: 0; font-size: 17px; color: var(--text-hi); }
+.modal-close{
+  background: transparent;
+  border: none;
+  color: var(--text-mid);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.modal-field{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-mid);
+}
+.modal-field input, .modal-field textarea{
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text-hi);
+  background: var(--row-tint);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  resize: vertical;
+}
+.modal-field input:focus, .modal-field textarea:focus{
+  outline: none;
+  border-color: var(--accent);
+}
+
+.modal-status{ font-size: 12.5px; min-height: 16px; margin-bottom: 8px; color: var(--danger); }
+.modal-status.success{ color: var(--success-on-light); }
+
+.modal-actions{ display: flex; justify-content: flex-end; gap: 10px; }
+.modal-cancel{
+  background: transparent;
+  border: 1px solid var(--card-border);
+  color: var(--text-mid);
+  padding: 9px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.modal-submit{
+  background: linear-gradient(180deg, var(--accent-bright), var(--accent));
+  border: none;
+  color: #04141f;
+  padding: 9px 16px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.modal-submit:disabled{ opacity: 0.6; cursor: default; }

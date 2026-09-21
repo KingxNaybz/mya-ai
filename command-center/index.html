@@ -224,6 +224,35 @@
   <span class="tagline">Elevate Construction &nbsp;—&nbsp; Building Excellence. Elevating Standards.</span>
 </footer>
 
+<!-- ============ CREATE FOLLOW-UP MODAL ============ -->
+<div class="modal-overlay" id="followup-modal" hidden>
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3>Create a Follow-Up</h3>
+      <button type="button" class="modal-close" id="followup-modal-close">✕</button>
+    </div>
+    <form id="followup-form">
+      <label class="modal-field">
+        <span>Customer name</span>
+        <input type="text" id="followup-name" required autocomplete="off">
+      </label>
+      <label class="modal-field">
+        <span>Note (optional)</span>
+        <textarea id="followup-note" rows="3"></textarea>
+      </label>
+      <label class="modal-field">
+        <span>Due date (optional)</span>
+        <input type="date" id="followup-due">
+      </label>
+      <div class="modal-status" id="followup-status"></div>
+      <div class="modal-actions">
+        <button type="button" class="modal-cancel" id="followup-cancel">Cancel</button>
+        <button type="submit" class="modal-submit" id="followup-submit">Create Follow-Up</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script src="sample-data.js"></script>
 <script src="app.js"></script>
 </body>

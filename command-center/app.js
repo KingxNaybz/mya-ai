@@ -376,16 +376,25 @@
   }
 
   /* ---------------- Quick actions ---------------- */
+  const LIVE_QUICK_ACTIONS = { "Create a Follow-Up": "create-followup", "Generate a Report": "generate-report" };
+
   function renderQuickActions() {
     const container = document.getElementById("quick-actions");
+    const canGoLive = location.protocol !== "file:";
     SAMPLE_DATA.quickActions.forEach((a) => {
+      const actionKey = LIVE_QUICK_ACTIONS[a.label];
+      const isLive = canGoLive && actionKey;
       const btn = el("button", "qa-btn");
       btn.type = "button";
-      btn.disabled = true;
+      if (isLive) {
+        btn.setAttribute("data-quick-action", actionKey);
+      } else {
+        btn.disabled = true;
+      }
       btn.innerHTML = `
         <span class="qa-icon">${a.icon}</span>
         ${a.label}
-        <span class="tooltip">Not connected yet — display only.</span>
+        <span class="tooltip">${isLive ? "" : "Not connected yet — display only."}</span>
       `;
       container.appendChild(btn);
     });
@@ -400,6 +409,12 @@
      Any failure (protection not yet passed, network error, etc.) just
      leaves the dashboard on sample data, silently — nothing here is
      required for the page to work. */
+  let liveKpiValues = {};
+  function updateLiveKpis(partial) {
+    Object.assign(liveKpiValues, partial);
+    renderKPIs(liveKpiValues);
+  }
+
   async function loadLiveDataIfAvailable() {
     if (location.protocol === "file:") return;
 
@@ -408,7 +423,7 @@
       if (!res.ok) return;
       const data = await res.json();
 
-      renderKPIs({
+      updateLiveKpis({
         todaysCalls: data.todaysCalls,
         newLeads: data.newLeads
       });
@@ -466,6 +481,139 @@
     }
   }
 
+  /* ---------------- Follow-ups (real count feeds the KPI card) ---------------- */
+  async function loadFollowUpCountIfAvailable() {
+    if (location.protocol === "file:") return;
+    try {
+      const res = await fetch("/api/command-center-followups");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (typeof data.openCount === "number") {
+        updateLiveKpis({ followUpsDue: { value: data.openCount } });
+      }
+    } catch (e) {
+      /* silent fallback to sample data */
+    }
+  }
+
+  /* ---------------- Create-a-Follow-Up modal ---------------- */
+  function initFollowUpModal() {
+    const modal = document.getElementById("followup-modal");
+    const form = document.getElementById("followup-form");
+    if (!modal || !form) return;
+
+    const nameInput = document.getElementById("followup-name");
+    const noteInput = document.getElementById("followup-note");
+    const dueInput = document.getElementById("followup-due");
+    const statusEl = document.getElementById("followup-status");
+    const submitBtn = document.getElementById("followup-submit");
+
+    function openModal() {
+      form.reset();
+      statusEl.textContent = "";
+      statusEl.className = "modal-status";
+      modal.hidden = false;
+      nameInput.focus();
+    }
+    function closeModal() { modal.hidden = true; }
+
+    document.getElementById("followup-modal-close").addEventListener("click", closeModal);
+    document.getElementById("followup-cancel").addEventListener("click", closeModal);
+    modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const customerName = nameInput.value.trim();
+      if (!customerName) return;
+      submitBtn.disabled = true;
+      statusEl.textContent = "Saving…";
+      statusEl.className = "modal-status";
+      try {
+        const res = await fetch("/api/command-center-followups", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customerName,
+            note: noteInput.value.trim(),
+            dueAt: dueInput.value ? new Date(dueInput.value).toISOString() : null
+          })
+        });
+        if (!res.ok) throw new Error("Request failed");
+        statusEl.textContent = "Follow-up created.";
+        statusEl.className = "modal-status success";
+        loadFollowUpCountIfAvailable();
+        setTimeout(closeModal, 900);
+      } catch (err) {
+        statusEl.textContent = "Couldn't save — try again.";
+        statusEl.className = "modal-status";
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    document.getElementById("quick-actions").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-quick-action]");
+      if (!btn) return;
+      const action = btn.getAttribute("data-quick-action");
+      if (action === "create-followup") openModal();
+      if (action === "generate-report") generateReport();
+    });
+  }
+
+  /* ---------------- Generate a Report ----------------
+     No email/PDF service is defined yet, so this compiles whatever is
+     currently on screen (real or sample, honestly labeled) into a plain
+     text file the browser downloads directly. No new backend needed. */
+  function generateReport() {
+    const lines = [];
+    lines.push("MYA COMMAND CENTER — SNAPSHOT");
+    lines.push(`Elevate Construction · Generated ${new Date().toLocaleString("en-US", { timeZone: "America/New_York" })} ET`);
+    lines.push("");
+
+    lines.push("KEY NUMBERS:");
+    document.querySelectorAll(".kpi-card").forEach((card) => {
+      const label = card.querySelector(".kpi-label")?.textContent || "";
+      const value = card.querySelector(".kpi-value")?.textContent || "";
+      const badge = card.querySelector(".live-badge, .sample-badge")?.textContent || "";
+      lines.push(`- ${label}: ${value} (${badge})`);
+    });
+    lines.push("");
+
+    lines.push("RECENT ACTIVITY:");
+    const activityItems = document.querySelectorAll("#activity-list .activity-item");
+    if (activityItems.length === 0) {
+      lines.push("- Nothing recorded.");
+    } else {
+      activityItems.forEach((item) => {
+        const time = item.querySelector(".activity-time")?.textContent || "";
+        const text = item.querySelector(".activity-text")?.textContent || "";
+        lines.push(`- [${time}] ${text}`);
+      });
+    }
+    lines.push("");
+
+    lines.push("NEEDS YOUR ATTENTION:");
+    const approvalCards = document.querySelectorAll("#approvals-list .approval-card");
+    if (approvalCards.length === 0) {
+      lines.push("- Nothing pending.");
+    } else {
+      approvalCards.forEach((c) => {
+        const title = c.querySelector(".approval-text strong")?.textContent || "";
+        lines.push(`- ${title}`);
+      });
+    }
+
+    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `mya-command-center-${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   /* ---------------- Init ---------------- */
   renderMyaMessage();
   renderKPIs();
@@ -481,6 +629,8 @@
   renderQuickActions();
   loadLiveDataIfAvailable();
   loadApprovalsIfAvailable();
+  loadFollowUpCountIfAvailable();
+  initFollowUpModal();
 
   document.getElementById("approvals-list").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-action]");
