@@ -82,6 +82,34 @@
       </svg>`;
   }
 
+  function setLiveBadge(contentElId, isLive) {
+    const content = document.getElementById(contentElId);
+    if (!content) return;
+    const panel = content.closest(".panel");
+    if (!panel) return;
+    const badge = panel.querySelector(".sample-badge, .live-badge");
+    if (!badge) return;
+    if (isLive) {
+      badge.textContent = "LIVE";
+      badge.className = "live-badge";
+    } else {
+      badge.textContent = "SAMPLE DATA";
+      badge.className = "sample-badge";
+    }
+  }
+
+  function formatRelative(iso) {
+    if (!iso) return "";
+    const diffMs = Date.now() - new Date(iso).getTime();
+    const mins = Math.round(diffMs / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins} min ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs} hr${hrs === 1 ? "" : "s"} ago`;
+    const days = Math.round(hrs / 24);
+    return `${days} day${days === 1 ? "" : "s"} ago`;
+  }
+
   /* ---------------- Mya message ---------------- */
   function renderMyaMessage() {
     const leads = SAMPLE_DATA.kpis.newLeads.value;
@@ -93,8 +121,10 @@
   }
 
   /* ---------------- KPI row ---------------- */
-  function renderKPIs() {
+  function renderKPIs(liveValues) {
+    liveValues = liveValues || {};
     const container = document.getElementById("kpi-row");
+    container.innerHTML = "";
     const items = [
       { label: "Today's Calls", key: "todaysCalls" },
       { label: "New Leads", key: "newLeads" },
@@ -102,18 +132,31 @@
       { label: "Open Projects", key: "openProjects" }
     ];
     items.forEach(({ label, key }) => {
-      const data = SAMPLE_DATA.kpis[key];
+      const sample = SAMPLE_DATA.kpis[key];
+      const live = liveValues[key];
       const card = el("div", "kpi-card");
-      card.innerHTML = `
-        <div class="kpi-top">
-          <span class="kpi-icon">${data.icon}</span>
-          <span class="sample-badge">SAMPLE DATA</span>
-        </div>
-        <div class="kpi-value">${data.value}</div>
-        <div class="kpi-label">${label}</div>
-        <div class="kpi-trend ${data.trendDirection}">${data.trendDirection === "up" ? "↑" : "↓"} ${data.trendText}</div>
-        ${sparkSVG(data.trend)}
-      `;
+      if (live && typeof live.value === "number") {
+        card.innerHTML = `
+          <div class="kpi-top">
+            <span class="kpi-icon">${sample.icon}</span>
+            <span class="live-badge">LIVE</span>
+          </div>
+          <div class="kpi-value">${live.value}</div>
+          <div class="kpi-label">${label}</div>
+          <div class="kpi-trend" style="color:var(--text-low);">Updated just now</div>
+        `;
+      } else {
+        card.innerHTML = `
+          <div class="kpi-top">
+            <span class="kpi-icon">${sample.icon}</span>
+            <span class="sample-badge">SAMPLE DATA</span>
+          </div>
+          <div class="kpi-value">${sample.value}</div>
+          <div class="kpi-label">${label}</div>
+          <div class="kpi-trend ${sample.trendDirection}">${sample.trendDirection === "up" ? "↑" : "↓"} ${sample.trendText}</div>
+          ${sparkSVG(sample.trend)}
+        `;
+      }
       container.appendChild(card);
     });
   }
@@ -132,16 +175,18 @@
   }
 
   /* ---------------- Activity feed ---------------- */
-  function renderActivity() {
+  function renderActivity(items, isLive) {
     const container = document.getElementById("activity-list");
-    SAMPLE_DATA.activityFeed.forEach((item) => {
-      const row = el("div", `activity-item sev-${item.severity}`);
+    container.innerHTML = "";
+    (items || SAMPLE_DATA.activityFeed).forEach((item) => {
+      const row = el("div", `activity-item sev-${item.severity || "info"}`);
       row.innerHTML = `
         <div class="activity-time">${item.time}</div>
         <div class="activity-text">${item.text}</div>
       `;
       container.appendChild(row);
     });
+    setLiveBadge("activity-list", Boolean(isLive));
   }
 
   /* ---------------- Approvals ---------------- */
@@ -175,19 +220,21 @@
   }
 
   /* ---------------- New leads ---------------- */
-  function renderLeads() {
+  function renderLeads(items, isLive) {
     const container = document.getElementById("leads-list");
-    SAMPLE_DATA.newLeads.forEach((l) => {
+    container.innerHTML = "";
+    (items || SAMPLE_DATA.newLeads).forEach((l) => {
       const row = el("div", "list-row");
       row.innerHTML = `
         <div class="list-row-main">
           <strong>${l.name}</strong>
-          <span>${l.interest} · ${l.source}</span>
+          <span>${l.interest || "—"} · ${l.source || "—"}</span>
         </div>
         <div class="list-row-side">${l.receivedAgo}</div>
       `;
       container.appendChild(row);
     });
+    setLiveBadge("leads-list", Boolean(isLive));
   }
 
   /* ---------------- Projects needing attention ---------------- */
@@ -207,9 +254,10 @@
   }
 
   /* ---------------- Memory insights ---------------- */
-  function renderMemory() {
+  function renderMemory(overrides, isLive) {
     const container = document.getElementById("memory-stats");
-    const m = SAMPLE_DATA.memoryInsights;
+    container.innerHTML = "";
+    const m = Object.assign({}, SAMPLE_DATA.memoryInsights, overrides || {});
     const rows = [
       { num: m.totalContactsRemembered, label: "Contacts remembered" },
       { num: m.recurringCustomers, label: "Recurring customers" },
@@ -217,9 +265,10 @@
     ];
     rows.forEach((r) => {
       const row = el("div", "memory-stat");
-      row.innerHTML = `<span class="num">${r.num}</span><span class="label">${r.label}</span>`;
+      row.innerHTML = `<span class="num">${r.num ?? "—"}</span><span class="label">${r.label}</span>`;
       container.appendChild(row);
     });
+    setLiveBadge("memory-stats", Boolean(isLive));
   }
 
   /* ---------------- Connected services ---------------- */
@@ -277,6 +326,59 @@
     });
   }
 
+  /* ---------------- Live data (Phase 2) ----------------
+     Only ever attempted when the page is served over http(s) from Vercel —
+     opening index.html directly as a local file (file://) cannot fetch a
+     relative /api/ path, so it always falls back to sample data untouched.
+     This endpoint has no password of its own — access is gated by Vercel's
+     own Deployment Protection on whichever environment this is deployed to.
+     Any failure (protection not yet passed, network error, etc.) just
+     leaves the dashboard on sample data, silently — nothing here is
+     required for the page to work. */
+  async function loadLiveDataIfAvailable() {
+    if (location.protocol === "file:") return;
+
+    try {
+      const res = await fetch("/api/command-center-data");
+      if (!res.ok) return;
+      const data = await res.json();
+
+      renderKPIs({
+        todaysCalls: data.todaysCalls,
+        newLeads: data.newLeads
+      });
+
+      if (data.newLeads && Array.isArray(data.newLeads.recent) && data.newLeads.recent.length) {
+        renderLeads(
+          data.newLeads.recent.map((l) => ({
+            name: l.name,
+            interest: l.interest,
+            source: l.source,
+            receivedAgo: formatRelative(l.receivedAt)
+          })),
+          true
+        );
+      }
+
+      if (Array.isArray(data.recentActivity) && data.recentActivity.length) {
+        renderActivity(
+          data.recentActivity.map((a) => ({
+            time: formatRelative(a.time),
+            text: a.text,
+            severity: "info"
+          })),
+          true
+        );
+      }
+
+      if (data.memoryInsights) {
+        renderMemory(data.memoryInsights, true);
+      }
+    } catch (e) {
+      /* silent fallback to sample data — no error UI, nothing required */
+    }
+  }
+
   /* ---------------- Init ---------------- */
   renderMyaMessage();
   renderKPIs();
@@ -290,4 +392,5 @@
   renderServices();
   renderDevices();
   renderQuickActions();
+  loadLiveDataIfAvailable();
 })();
