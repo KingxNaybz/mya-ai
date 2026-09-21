@@ -553,6 +553,31 @@ button{ font-family: inherit; cursor: pointer; }
   padding: 20px 10px;
 }
 
+.approval-type-tag{
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--accent-on-light);
+  background: rgba(47,178,255,0.12);
+  border: 1px solid var(--card-border);
+  padding: 2px 7px;
+  border-radius: 999px;
+  margin-top: 6px;
+}
+
+.approval-toast{
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(52,224,161,0.14);
+  border: 1px solid rgba(52,224,161,0.5);
+  color: var(--success-on-light);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.approval-toast[hidden]{ display: none; }
+
 /* ---------- Working now ---------- */
 .working-list{ list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .working-list li{

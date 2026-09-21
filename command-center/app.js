@@ -211,11 +211,13 @@
       const declineAttrs = isLive
         ? `data-id="${item.id}" data-action="decline"`
         : "disabled";
+      const typeLabel = approvalTypeLabel(item.actionType);
       card.innerHTML = `
         <div class="approval-text">
           <strong>${item.title}</strong>
           <span>${item.detail || ""}</span>
           <div class="approval-meta">${meta}</div>
+          ${typeLabel ? `<span class="approval-type-tag">${typeLabel}</span>` : ""}
         </div>
         <div class="approval-actions">
           <button class="btn-approve" type="button" ${actionAttrs}>Approve</button>
@@ -227,8 +229,24 @@
     setLiveBadge("approvals-list", Boolean(isLive));
   }
 
+  function approvalTypeLabel(actionType) {
+    if (actionType === "notify_owner") return "Notifies you when approved";
+    if (actionType === "send_to_customer") return "Needs manual follow-up";
+    return "";
+  }
+
+  function showApprovalToast(message) {
+    const toast = document.getElementById("approval-toast");
+    if (!toast) return;
+    toast.textContent = message;
+    toast.hidden = false;
+    clearTimeout(showApprovalToast._t);
+    showApprovalToast._t = setTimeout(() => { toast.hidden = true; }, 6000);
+  }
+
   async function handleApprovalAction(id, action, buttonEl) {
     const card = buttonEl.closest(".approval-card");
+    const title = card.querySelector(".approval-text strong")?.textContent || "Item";
     const buttons = card.querySelectorAll("button");
     buttons.forEach((b) => { b.disabled = true; });
     try {
@@ -238,6 +256,7 @@
         body: JSON.stringify({ id, action })
       });
       if (!res.ok) throw new Error("Request failed");
+      const result = await res.json();
       card.remove();
       const countEl = document.getElementById("approvals-count");
       const remaining = Math.max(0, parseInt(countEl.textContent, 10) - 1);
@@ -245,6 +264,9 @@
       if (remaining === 0) {
         document.getElementById("approvals-list").innerHTML =
           `<div class="approval-empty">Nothing needs your attention right now.</div>`;
+      }
+      if (result.manualFollowUpNeeded) {
+        showApprovalToast(`Approved "${title}" — this isn't automated yet, follow up with the customer manually.`);
       }
     } catch (e) {
       buttons.forEach((b) => { b.disabled = false; });
@@ -434,7 +456,8 @@
           id: a.id,
           title: a.title,
           detail: a.detail,
-          requestedAt: a.requested_at
+          requestedAt: a.requested_at,
+          actionType: a.action_type
         })),
         true
       );
