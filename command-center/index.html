@@ -140,6 +140,10 @@
       <div class="panel-header">
         <h2>Contractors &amp; Sub-Contractors</h2>
         <span class="sample-badge">SAMPLE DATA</span>
+        <span class="panel-add-wrap">
+          <button type="button" class="panel-add-btn" id="add-contractor-btn" disabled>+ Add</button>
+          <span class="tooltip">Not connected yet — display only.</span>
+        </span>
       </div>
       <div class="list-block list-block-scroll" id="contractors-list"></div>
     </section>
@@ -290,6 +294,47 @@
       <div class="modal-actions">
         <button type="button" class="modal-cancel" id="settings-cancel">Cancel</button>
         <button type="submit" class="modal-submit" id="settings-submit">Save Settings</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ ADD CONTRACTOR MODAL ============ -->
+<div class="modal-overlay" id="contractor-modal" hidden>
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3>Add a Contractor / Sub-Contractor</h3>
+      <button type="button" class="modal-close" id="contractor-modal-close">✕</button>
+    </div>
+    <form id="contractor-form">
+      <label class="modal-field">
+        <span>Category (e.g. Roofing, Electrician, Plumber)</span>
+        <input type="text" id="contractor-category" required autocomplete="off">
+      </label>
+      <label class="modal-field">
+        <span>Contact name / company</span>
+        <input type="text" id="contractor-name" required autocomplete="off">
+      </label>
+      <label class="modal-field">
+        <span>Phone number (optional)</span>
+        <input type="text" id="contractor-phone" autocomplete="off" placeholder="+15551234567">
+      </label>
+      <label class="modal-field">
+        <span>Pricing / rate (optional)</span>
+        <input type="text" id="contractor-rate" autocomplete="off" placeholder="By the Job">
+      </label>
+      <label class="modal-field">
+        <span>Additional skills &amp; notes (optional)</span>
+        <textarea id="contractor-notes" rows="2"></textarea>
+      </label>
+      <label class="modal-checkbox">
+        <input type="checkbox" id="contractor-added-crm">
+        <span>Already added in CRM</span>
+      </label>
+      <div class="modal-status" id="contractor-status"></div>
+      <div class="modal-actions">
+        <button type="button" class="modal-cancel" id="contractor-cancel">Cancel</button>
+        <button type="submit" class="modal-submit" id="contractor-submit">Add Contractor</button>
       </div>
     </form>
   </div>

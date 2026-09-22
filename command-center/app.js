@@ -341,18 +341,28 @@
   function renderContractors(items, isLive) {
     const container = document.getElementById("contractors-list");
     container.innerHTML = "";
-    (items || SAMPLE_DATA.contractors).forEach((c) => {
-      const row = el("div", "list-row");
-      row.innerHTML = `
-        <div class="list-row-main">
-          <strong>${c.name} <span class="approval-type-tag">${c.category || "—"}</span></strong>
-          <span>${c.notes || "—"}${c.rate ? " · " + c.rate : ""}</span>
-        </div>
-        <div class="list-row-side">${c.phone || "—"}</div>
-      `;
-      container.appendChild(row);
-    });
+    const list = items || SAMPLE_DATA.contractors;
+
+    if (isLive && list.length === 0) {
+      container.innerHTML = `<div class="approval-empty">No contractors added yet.</div>`;
+    } else {
+      list.forEach((c) => {
+        const row = el("div", "list-row");
+        row.innerHTML = `
+          <div class="list-row-main">
+            <strong>${c.name} <span class="approval-type-tag">${c.category || "—"}</span></strong>
+            <span>${c.notes || "—"}${c.rate ? " · " + c.rate : ""}</span>
+          </div>
+          <div class="list-row-side">${c.phone || "—"}</div>
+          ${isLive && c.id ? `<button type="button" class="list-row-remove" data-contractor-id="${c.id}" title="Remove">✕</button>` : ""}
+        `;
+        container.appendChild(row);
+      });
+    }
     setLiveBadge("contractors-list", Boolean(isLive));
+
+    const addBtn = document.getElementById("add-contractor-btn");
+    if (addBtn) addBtn.disabled = !isLive;
   }
 
   /* ---------------- Connected services ---------------- */
@@ -507,9 +517,10 @@
       const res = await fetch("/api/command-center-contractors");
       if (!res.ok) return;
       const data = await res.json();
-      if (!Array.isArray(data.contractors) || !data.contractors.length) return;
+      if (!Array.isArray(data.contractors)) return;
       renderContractors(
         data.contractors.map((c) => ({
+          id: c.id,
           category: c.category,
           name: c.name,
           phone: c.phone,
@@ -522,6 +533,88 @@
     } catch (e) {
       /* silent fallback to sample data */
     }
+  }
+
+  /* ---------------- Add / remove a contractor ---------------- */
+  function initContractorModal() {
+    const modal = document.getElementById("contractor-modal");
+    const form = document.getElementById("contractor-form");
+    const addBtn = document.getElementById("add-contractor-btn");
+    const closeBtn = document.getElementById("contractor-modal-close");
+    const cancelBtn = document.getElementById("contractor-cancel");
+    const submitBtn = document.getElementById("contractor-submit");
+    const statusEl = document.getElementById("contractor-status");
+
+    function openModal() {
+      form.reset();
+      statusEl.textContent = "";
+      statusEl.className = "modal-status";
+      modal.hidden = false;
+    }
+    function closeModal() {
+      modal.hidden = true;
+    }
+
+    addBtn.addEventListener("click", () => {
+      if (!addBtn.disabled) openModal();
+    });
+    closeBtn.addEventListener("click", closeModal);
+    cancelBtn.addEventListener("click", closeModal);
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) closeModal();
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      submitBtn.disabled = true;
+      statusEl.textContent = "Saving…";
+      statusEl.className = "modal-status";
+      try {
+        const res = await fetch("/api/command-center-contractors", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            category: document.getElementById("contractor-category").value.trim(),
+            name: document.getElementById("contractor-name").value.trim(),
+            phone: document.getElementById("contractor-phone").value.trim(),
+            pricingRate: document.getElementById("contractor-rate").value.trim(),
+            notes: document.getElementById("contractor-notes").value.trim(),
+            addedInCrm: document.getElementById("contractor-added-crm").checked
+          })
+        });
+        if (!res.ok) throw new Error("Request failed");
+        statusEl.textContent = "Contractor added.";
+        statusEl.className = "modal-status success";
+        loadContractorsIfAvailable();
+        setTimeout(closeModal, 900);
+      } catch (err) {
+        statusEl.textContent = "Couldn't save — try again.";
+        statusEl.className = "modal-status";
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    document.getElementById("contractors-list").addEventListener("click", async (e) => {
+      const btn = e.target.closest("button[data-contractor-id]");
+      if (!btn) return;
+      const id = btn.getAttribute("data-contractor-id");
+      const row = btn.closest(".list-row");
+      const name = row?.querySelector(".list-row-main strong")?.textContent || "this contractor";
+      if (!window.confirm(`Remove ${name.trim()} from the list?`)) return;
+
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/command-center-contractors?id=${encodeURIComponent(id)}`, {
+          method: "DELETE"
+        });
+        if (!res.ok) throw new Error("Request failed");
+        row.remove();
+      } catch (err) {
+        btn.disabled = false;
+        window.alert("Couldn't remove that contractor — try again.");
+      }
+    });
   }
 
   /* ---------------- Follow-ups (real count feeds the KPI card) ---------------- */
@@ -772,6 +865,7 @@
   loadSettingsIfAvailable();
   initFollowUpModal();
   initSettingsModal();
+  initContractorModal();
 
   document.getElementById("approvals-list").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-action]");

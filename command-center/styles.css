@@ -470,6 +470,37 @@ button{ font-family: inherit; cursor: pointer; }
 
 .list-block-scroll{ max-height: 420px; overflow-y: auto; padding-right: 4px; }
 
+.panel-add-wrap{ position: relative; flex-shrink: 0; margin-left: 10px; }
+.panel-add-wrap:hover .tooltip{ opacity: 1; transform: translateY(0); }
+.panel-add-wrap .tooltip{ top: calc(100% + 6px); right: 0; }
+.panel-add-btn{
+  background: rgba(47,178,255,0.14);
+  border: 1px solid var(--card-border);
+  color: var(--accent-on-light);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 999px;
+}
+.panel-add-btn:disabled{ opacity: 0.45; cursor: default; }
+.panel-add-btn:not(:disabled){ cursor: pointer; }
+.panel-add-btn:not(:disabled):hover{ background: rgba(47,178,255,0.24); border-color: var(--accent); }
+
+.list-row-remove{
+  background: transparent;
+  border: 1px solid var(--card-border);
+  color: var(--text-low);
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+.list-row-remove:hover{ background: rgba(255,90,90,0.14); border-color: rgba(255,90,90,0.5); color: #ff5a5a; }
+
 /* ---------- Timeline (Today's Schedule) ---------- */
 .timeline{ display: flex; flex-direction: column; gap: 0; position: relative; padding-left: 18px; }
 .timeline::before{
