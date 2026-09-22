@@ -157,11 +157,12 @@
         <button class="ask-tab" type="button" disabled>Analyze</button>
         <button class="ask-tab" type="button" disabled>More ▾</button>
       </div>
+      <div class="ask-mya-log" id="ask-mya-log" hidden></div>
       <div class="ask-mya-input-wrap">
-        <input type="text" placeholder="Type a message or give a command…" disabled>
-        <span class="tooltip">Not connected yet — display only.</span>
-        <button class="ask-send" type="button" disabled>➤</button>
+        <input type="text" id="ask-mya-input" placeholder="Type a message or give a command…">
+        <button class="ask-send" type="button" id="ask-mya-send">➤</button>
         <button class="ask-mic" type="button" disabled>🎙</button>
+        <span class="tooltip">Voice input isn't connected yet.</span>
       </div>
       <div class="ask-mya-chips">
         <button class="chip" type="button" disabled>What's going on today?</button>

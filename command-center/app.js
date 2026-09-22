@@ -844,6 +844,86 @@
     });
   }
 
+  /* ---------------- Ask Mya ---------------- */
+  function initAskMya() {
+    const input = document.getElementById("ask-mya-input");
+    const sendBtn = document.getElementById("ask-mya-send");
+    const log = document.getElementById("ask-mya-log");
+
+    function addMessage(text, role) {
+      log.hidden = false;
+      const msg = el("div", `ask-msg ask-msg-${role}`, escapeHtml(text));
+      log.appendChild(msg);
+      log.scrollTop = log.scrollHeight;
+      return msg;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    async function send() {
+      const message = input.value.trim();
+      if (!message) return;
+
+      if (location.protocol === "file:") {
+        addMessage(message, "user");
+        addMessage("Ask Mya only works on the live dashboard, not when opened as a local file.", "mya error");
+        input.value = "";
+        return;
+      }
+
+      addMessage(message, "user");
+      input.value = "";
+      input.disabled = true;
+      sendBtn.disabled = true;
+      const pending = addMessage("Thinking…", "mya pending");
+
+      try {
+        const res = await fetch("/api/command-center-ask-mya", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message }),
+        });
+        const data = await res.json().catch(() => ({}));
+
+        pending.remove();
+
+        if (!res.ok) {
+          addMessage(data.message || data.error || "Something went wrong — try again.", "mya error");
+          return;
+        }
+
+        addMessage(data.reply || "Done.", "mya");
+
+        const toolsUsed = Array.isArray(data.toolsUsed) ? data.toolsUsed : [];
+        if (toolsUsed.includes("add_contractor") || toolsUsed.includes("remove_contractor")) {
+          loadContractorsIfAvailable();
+        }
+        if (toolsUsed.includes("resolve_approval")) {
+          loadApprovalsIfAvailable();
+        }
+        if (toolsUsed.includes("create_followup")) {
+          loadFollowUpCountIfAvailable();
+        }
+      } catch (err) {
+        pending.remove();
+        addMessage("Couldn't reach Mya — check your connection and try again.", "mya error");
+      } finally {
+        input.disabled = false;
+        sendBtn.disabled = false;
+        input.focus();
+      }
+    }
+
+    sendBtn.addEventListener("click", send);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") send();
+    });
+  }
+
   /* ---------------- Init ---------------- */
   renderMyaMessage();
   renderKPIs();
@@ -866,6 +946,7 @@
   initFollowUpModal();
   initSettingsModal();
   initContractorModal();
+  initAskMya();
 
   document.getElementById("approvals-list").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-action]");
