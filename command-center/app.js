@@ -1045,7 +1045,7 @@
     async function checkProactiveAlerts() {
       if (location.protocol === "file:") return;
       try {
-        const res = await fetch("/api/command-center-proactive");
+        const res = await fetch("/api/command-center-projects?type=alerts");
         if (!res.ok) return;
         const data = await res.json();
         if (!Array.isArray(data.alerts)) return;
