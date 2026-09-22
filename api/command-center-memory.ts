@@ -26,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === "GET") {
     const { data, error } = await supabase
-      .from("mya_memory")
+      .from("mya_remembered_facts")
       .select("id,fact,created_at")
       .order("created_at", { ascending: false })
       .limit(50);
@@ -43,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!id) {
       return res.status(400).json({ error: "id is required" });
     }
-    const { error } = await supabase.from("mya_memory").delete().eq("id", id);
+    const { error } = await supabase.from("mya_remembered_facts").delete().eq("id", id);
     if (error) {
       console.error("command-center-memory DELETE error:", error);
       return res.status(500).json({ error: error.message });

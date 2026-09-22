@@ -331,7 +331,7 @@ const SKILLS: Skill[] = [
           break;
         }
         case "remember_fact": {
-          const { error } = await supabase.from("mya_memory").delete().eq("id", undoData.id);
+          const { error } = await supabase.from("mya_remembered_facts").delete().eq("id", undoData.id);
           if (error) undoError = error.message;
           break;
         }
@@ -357,7 +357,7 @@ const SKILLS: Skill[] = [
     execute: async (input) => {
       const fact = String(input.fact || "").trim();
       if (!fact) return { error: "fact is required" };
-      const { data, error } = await supabase.from("mya_memory").insert({ fact }).select("id,fact").single();
+      const { data, error } = await supabase.from("mya_remembered_facts").insert({ fact }).select("id,fact").single();
       if (error) return { error: error.message };
       if (data) {
         await logUndo("remember_fact", { id: data.id }, `Remembered: ${data.fact}`);
@@ -374,7 +374,7 @@ const SKILLS: Skill[] = [
       additionalProperties: false,
     },
     execute: async (input) => {
-      let query = supabase.from("mya_memory").select("id,fact,created_at").order("created_at", { ascending: false });
+      let query = supabase.from("mya_remembered_facts").select("id,fact,created_at").order("created_at", { ascending: false });
       if (input.query) query = query.ilike("fact", `%${input.query}%`);
       const { data, error } = await query.limit(20);
       if (error) return { error: error.message };
