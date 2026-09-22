@@ -119,6 +119,31 @@ function cleanText(value: unknown, maxLen = 140): string {
   return text;
 }
 
+// A first-time caller isn't automatically a real lead — a bill collector,
+// vendor, or job applicant also generates a brand-new mya_contacts row on
+// their first call. Cross-reference the separate Company Contacts
+// classification (by phone) and only exclude someone confidently
+// classified as something else. No classification found for a phone
+// (feature just turned on, or outside the classification lookback window)
+// still counts as a lead — never hide a possible real lead over a data gap.
+const NOT_A_REAL_LEAD_CATEGORIES = new Set([
+  "vendor",
+  "contractor",
+  "subcontractor",
+  "general_contractor",
+  "bill_collector",
+  "job_applicant",
+  "wrong_number_or_spam",
+  "existing_client",
+  "uncategorized",
+]);
+
+function isRealLead(phone: string | null | undefined, categoryByPhone: Map<string, string>): boolean {
+  if (!phone) return true;
+  const category = categoryByPhone.get(phone);
+  return !category || !NOT_A_REAL_LEAD_CATEGORIES.has(category);
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -160,14 +185,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .limit(6),
       supabase
         .from("mya_contacts")
-        .select("id", { count: "exact", head: true })
+        .select("id,phone")
         .eq("status", "new"),
       supabase
         .from("mya_contacts")
         .select("name,phone,project_type,lead_source,last_contact_at")
         .eq("status", "new")
         .order("last_contact_at", { ascending: false })
-        .limit(6),
+        .limit(20),
       supabase
         .from("mya_intakes")
         .select("full_name,project_type,lead_source,created_at")
@@ -206,6 +231,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .limit(500),
     ]);
 
+    const categoryByPhone = new Map<string, string>(
+      (callerDirectoryRows.data || [])
+        .filter((c: any) => c.phone)
+        .map((c: any) => [c.phone, c.category])
+    );
+    const realNewLeadRows = (newLeadsCount.data || []).filter((c: any) => isRealLead(c.phone, categoryByPhone));
+    const realRecentLeads = (recentLeads.data || []).filter((l: any) => isRealLead(l.phone, categoryByPhone)).slice(0, 6);
+
     return res.status(200).json({
       generatedAt: new Date().toISOString(),
       todaysCalls: {
@@ -219,9 +252,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })),
       },
       newLeads: {
-        value: newLeadsCount.count ?? null,
+        value: realNewLeadRows.length,
         error: newLeadsCount.error?.message || null,
-        recent: (recentLeads.data || []).map((l: any) => ({
+        recent: realRecentLeads.map((l: any) => ({
           name: cleanText(l.name, 60) || l.phone || "Unknown lead",
           interest: cleanText(l.project_type, 60),
           source: cleanText(l.lead_source, 40),

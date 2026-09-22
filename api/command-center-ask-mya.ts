@@ -73,6 +73,42 @@ function getServicesStatus() {
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || "";
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || "";
 
+// A first-time caller isn't automatically a real lead — a bill collector,
+// vendor, or job applicant also generates a brand-new mya_contacts row on
+// their first call. Cross-reference the separate Company Contacts
+// classification (by phone) and only exclude someone confidently
+// classified as something else. No classification found for a phone
+// (feature just turned on, or outside the classification lookback window)
+// still counts as a lead — never hide a possible real lead over a data gap.
+// Duplicated from command-center-data.ts on purpose, same reason as
+// getServicesStatus above.
+const NOT_A_REAL_LEAD_CATEGORIES = new Set([
+  "vendor",
+  "contractor",
+  "subcontractor",
+  "general_contractor",
+  "bill_collector",
+  "job_applicant",
+  "wrong_number_or_spam",
+  "existing_client",
+  "uncategorized",
+]);
+
+function isRealLead(phone: string | null | undefined, categoryByPhone: Map<string, string>): boolean {
+  if (!phone) return true;
+  const category = categoryByPhone.get(phone);
+  return !category || !NOT_A_REAL_LEAD_CATEGORIES.has(category);
+}
+
+async function getCategoryByPhoneMap(): Promise<Map<string, string>> {
+  const { data } = await supabase
+    .from("mya_caller_classifications")
+    .select("phone,category")
+    .order("created_at", { ascending: false })
+    .limit(500);
+  return new Map((data || []).filter((c: any) => c.phone).map((c: any) => [c.phone, c.category]));
+}
+
 const SYSTEM_PROMPT = `You are Mya, an AI operations assistant embedded in a dashboard for Elevate Construction, a construction company. The owner (Michael) talks to you here to check on the business and to make real changes using the tools you're given.
 
 Rules:
@@ -88,7 +124,7 @@ Rules:
 - Estimates are built from real cost line items, never guessed. Use add_estimate_item to log a real quantity x rate cost against a project, calculate_estimate to get its Direct Cost/True Cost/Floor Price/Target Price, and evaluate_bid_price for "what if we bid this at $X" questions. If a project has no line items yet, say so and offer to log some — never invent a price.
 - Keep replies brief and conversational — this can be read out loud or read at a glance on a dashboard, not a report.
 - You DO have a voice: replies can be spoken aloud in the same voice as the phone system, and there's an always-listen mic that wakes on your name. Neither is a tool you call — they run automatically in the dashboard. If asked whether you can talk or listen, say yes (unless list_capabilities' note says otherwise), don't claim you're text-only.
-- New leads (list_leads), recent activity (list_recent_activity), and aggregate memory stats (get_memory_insights, different from your own remembered facts) are all real, live tools — use them rather than only citing the count from get_dashboard_summary.
+- New leads (list_leads), recent activity (list_recent_activity), and aggregate memory stats (get_memory_insights, different from your own remembered facts) are all real, live tools — use them rather than only citing the count from get_dashboard_summary. "New Leads" only counts real prospective customers — vendors, bill collectors, job applicants, and other non-leads are filtered out and show up in Company Contacts instead.
 - Today's Schedule is real: use create_appointment for a site visit/walkthrough/meeting at a specific date+time, and list_schedule to see today's appointments plus any project whose next action is due today (set via update_project's nextActionDue).
 - get_recent_actions and get_services_status are also real, live tools now, matching the "Mya Working Now" and "Connected Services" dashboard panels. get_services_status checks whether each integration is configured, not whether it's live-reachable right now — say so if asked to be precise.
 - After every real phone call ends, it's automatically sorted into Company Contacts (a separate list from "New Leads," opened from its own nav item, not shown inline on the dashboard) as a lead, existing client, vendor, contractor, subcontractor, general contractor, bill collector, job applicant, wrong number/spam, or uncategorized. Bill collectors get flagged there but nothing is actually blocked yet — that's a manual step the owner does himself, later. Use list_caller_directory to answer questions about who's called (optionally filtered by category), and call open_contact_directory when asked to "pull up the contact spreadsheet," "show me company contacts," or similar — the dashboard itself handles opening that view and offering the Excel download.
@@ -180,15 +216,17 @@ const SKILLS: Skill[] = [
     input_schema: { type: "object", properties: {}, additionalProperties: false },
     execute: async () => {
       const todayIso = await startOfTodayIso();
-      const [calls, leads, followups, approvals] = await Promise.all([
+      const [calls, leadRows, followups, approvals, categoryByPhone] = await Promise.all([
         supabase.from("calls").select("id", { count: "exact", head: true }).gte("created_at", todayIso),
-        supabase.from("mya_contacts").select("id", { count: "exact", head: true }).eq("status", "new"),
+        supabase.from("mya_contacts").select("id,phone").eq("status", "new"),
         supabase.from("mya_followups").select("id", { count: "exact", head: true }).eq("status", "open"),
         supabase.from("mya_approvals").select("id", { count: "exact", head: true }).eq("status", "pending"),
+        getCategoryByPhoneMap(),
       ]);
+      const realLeadCount = (leadRows.data || []).filter((c: any) => isRealLead(c.phone, categoryByPhone)).length;
       return {
         callsToday: calls.count ?? 0,
-        newLeads: leads.count ?? 0,
+        newLeads: realLeadCount,
         openFollowUps: followups.count ?? 0,
         pendingApprovals: approvals.count ?? 0,
       };
@@ -196,17 +234,21 @@ const SKILLS: Skill[] = [
   },
   {
     name: "list_leads",
-    description: "List new leads with detail — name, what they're interested in, and how they found us. Same data the 'New Leads' dashboard panel shows.",
+    description: "List new leads with detail — name, what they're interested in, and how they found us. Same data the 'New Leads' dashboard panel shows. Vendors, bill collectors, job applicants, and other non-leads are excluded — use list_caller_directory for those.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
     execute: async () => {
-      const { data, error } = await supabase
-        .from("mya_contacts")
-        .select("name,phone,project_type,lead_source,last_contact_at")
-        .eq("status", "new")
-        .order("last_contact_at", { ascending: false })
-        .limit(20);
+      const [{ data, error }, categoryByPhone] = await Promise.all([
+        supabase
+          .from("mya_contacts")
+          .select("name,phone,project_type,lead_source,last_contact_at")
+          .eq("status", "new")
+          .order("last_contact_at", { ascending: false })
+          .limit(50),
+        getCategoryByPhoneMap(),
+      ]);
       if (error) return { error: error.message };
-      return { leads: data || [] };
+      const realLeads = (data || []).filter((l: any) => isRealLead(l.phone, categoryByPhone)).slice(0, 20);
+      return { leads: realLeads };
     },
   },
   {
