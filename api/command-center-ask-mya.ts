@@ -42,7 +42,24 @@ Rules:
 - If a tool returns zero matches, say so plainly rather than assuming.
 - After taking an action, confirm in one short sentence what you did.
 - If asked what you can do, what your capabilities are, or what you can't do yet, call list_capabilities rather than describing yourself from memory — that list is the real, current one.
+- If the user says "undo", "undo that", or asks to reverse the last thing you did, call undo_last_action. Don't guess which action they mean — that skill always reverses the single most recent reversible action.
 - Keep replies brief and conversational — this is read out loud / read at a glance on a dashboard, not a report.`;
+
+/**
+ * UNDO: reversible skills log how to reverse themselves to mya_undo_log
+ * (a Supabase table) right after they succeed. Serverless functions have no
+ * memory between requests, so this log — not an in-memory stack — is what
+ * makes "undo that" work even a few requests later. undo_last_action always
+ * reverses the single most recent not-yet-undone entry.
+ */
+async function logUndo(actionType: string, undoData: any, description: string): Promise<void> {
+  await supabase.from("mya_undo_log").insert({
+    action_type: actionType,
+    undo_data: undoData,
+    description,
+    undone: false,
+  });
+}
 
 type Skill = {
   name: string;
@@ -142,6 +159,9 @@ const SKILLS: Skill[] = [
         .select("id,category,name")
         .single();
       if (error) return { error: error.message };
+      if (data) {
+        await logUndo("add_contractor", { id: data.id }, `Added contractor ${data.name}`);
+      }
       return { added: data };
     },
   },
@@ -168,6 +188,7 @@ const SKILLS: Skill[] = [
       }
       const { error: deleteError } = await supabase.from("mya_contractors").delete().eq("id", matches[0].id);
       if (deleteError) return { error: deleteError.message };
+      await logUndo("remove_contractor", { contractor: matches[0] }, `Removed contractor ${matches[0].name}`);
       return { removed: true, contractor: matches[0] };
     },
   },
@@ -196,6 +217,9 @@ const SKILLS: Skill[] = [
         .select("id,customer_name")
         .single();
       if (error) return { error: error.message };
+      if (data) {
+        await logUndo("create_followup", { id: data.id }, `Created follow-up for ${data.customer_name}`);
+      }
       return { created: data };
     },
   },
@@ -246,7 +270,73 @@ const SKILLS: Skill[] = [
         .eq("id", matches[0].id)
         .eq("status", "pending");
       if (updateError) return { error: updateError.message };
+      await logUndo(
+        "resolve_approval",
+        { id: matches[0].id },
+        `${status === "approved" ? "Approved" : "Declined"} "${matches[0].title}"`
+      );
       return { resolved: true, title: matches[0].title, status };
+    },
+  },
+  {
+    name: "undo_last_action",
+    description: "Reverse the single most recent reversible action Mya took (adding/removing a contractor, creating a follow-up, or resolving an approval). Call this when the user says \"undo\" or asks to take back the last thing you did.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+    execute: async () => {
+      const { data: entry, error: findError } = await supabase
+        .from("mya_undo_log")
+        .select("id,action_type,undo_data,description")
+        .eq("undone", false)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (findError) return { error: findError.message };
+      if (!entry) return { undone: false, reason: "There's nothing to undo." };
+
+      const undoData = entry.undo_data as any;
+      let undoError: string | null = null;
+
+      switch (entry.action_type) {
+        case "add_contractor": {
+          const { error } = await supabase.from("mya_contractors").delete().eq("id", undoData.id);
+          if (error) undoError = error.message;
+          break;
+        }
+        case "remove_contractor": {
+          const c = undoData.contractor;
+          const { error } = await supabase.from("mya_contractors").insert({
+            id: c.id,
+            category: c.category,
+            name: c.name,
+            phone: c.phone,
+            pricing_rate: c.pricing_rate,
+            notes: c.notes,
+            added_in_crm: c.added_in_crm,
+          });
+          if (error) undoError = error.message;
+          break;
+        }
+        case "create_followup": {
+          const { error } = await supabase.from("mya_followups").delete().eq("id", undoData.id);
+          if (error) undoError = error.message;
+          break;
+        }
+        case "resolve_approval": {
+          const { error } = await supabase
+            .from("mya_approvals")
+            .update({ status: "pending", resolved_at: null })
+            .eq("id", undoData.id);
+          if (error) undoError = error.message;
+          break;
+        }
+        default:
+          undoError = `Don't know how to undo action type "${entry.action_type}".`;
+      }
+
+      if (undoError) return { error: undoError };
+
+      await supabase.from("mya_undo_log").update({ undone: true }).eq("id", entry.id);
+      return { undone: true, reversed: entry.description };
     },
   },
 ];
