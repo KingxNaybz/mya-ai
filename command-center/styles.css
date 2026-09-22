@@ -236,14 +236,11 @@ button{ font-family: inherit; cursor: pointer; }
 }
 
 .sidenav-footer{ margin-top: auto; padding-top: 20px; }
-.logo-slot{
-  border: 1px dashed var(--border-soft);
+.logo-slot-img{
+  display: block;
+  width: 100%;
   border-radius: 10px;
-  padding: 14px 10px;
-  text-align: center;
-  font-size: 11px;
-  color: var(--text-low);
-  line-height: 1.4;
+  border: 1px solid var(--border-soft);
 }
 
 /* ---------- MAIN CONTENT ---------- */
