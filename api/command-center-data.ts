@@ -50,6 +50,43 @@ function sevenDaysAgoIso(): string {
   return d.toISOString();
 }
 
+function startOfTomorrowAtlanta(): string {
+  return new Date(new Date(startOfTodayAtlanta()).getTime() + 24 * 60 * 60 * 1000).toISOString();
+}
+
+function todayDateString(): string {
+  return startOfTodayAtlanta().slice(0, 10);
+}
+
+// Checks whether each integration is CONFIGURED, not whether it's live-
+// reachable right now. Duplicated (not shared) from command-center-ask-mya.ts
+// on purpose — Vercel's Hobby plan caps functions at 12, already maxed out
+// by this project's file count, so no new file gets added for this.
+function getServicesStatus() {
+  return [
+    {
+      name: "Phone system (Twilio)",
+      detail: "Inbound/outbound calling",
+      connected: Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER),
+    },
+    {
+      name: "Voice (ElevenLabs)",
+      detail: "Phone agent voice",
+      connected: Boolean(process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_AGENT_ID),
+    },
+    {
+      name: "Database (Supabase)",
+      detail: "Business data storage",
+      connected: Boolean(SUPABASE_URL && SUPABASE_KEY),
+    },
+    {
+      name: "Mya's brain (Anthropic)",
+      detail: "Claude Sonnet 5",
+      connected: Boolean(process.env.ANTHROPIC_API_KEY),
+    },
+  ];
+}
+
 /**
  * Some ElevenLabs "collected data" fields (e.g. calls.caller_intent) can end
  * up stored as a raw internal object — { data_collection_id, json_schema,
@@ -93,6 +130,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const todayIso = startOfTodayAtlanta();
+  const tomorrowIso = startOfTomorrowAtlanta();
+  const todayDate = todayDateString();
   const weekAgoIso = sevenDaysAgoIso();
 
   try {
@@ -105,6 +144,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       contactsCount,
       recurringCount,
       updatedThisWeekCount,
+      todaysAppointments,
+      projectsDueToday,
+      recentActions,
     ] = await Promise.all([
       supabase
         .from("calls")
@@ -141,6 +183,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from("mya_customer_profiles")
         .select("id", { count: "exact", head: true })
         .gte("updated_at", weekAgoIso),
+      supabase
+        .from("mya_appointments")
+        .select("title,scheduled_at,notes")
+        .gte("scheduled_at", todayIso)
+        .lt("scheduled_at", tomorrowIso)
+        .order("scheduled_at"),
+      supabase
+        .from("mya_projects")
+        .select("project_name,client_name,next_action")
+        .eq("next_action_due", todayDate),
+      supabase
+        .from("mya_undo_log")
+        .select("description,created_at")
+        .order("created_at", { ascending: false })
+        .limit(5),
     ]);
 
     return res.status(200).json({
@@ -190,6 +247,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         recurringCustomers: recurringCount.count ?? null,
         notesLoggedThisWeek: updatedThisWeekCount.count ?? null,
       },
+      schedule: [
+        ...(todaysAppointments.data || []).map((a: any) => ({
+          time: new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", timeStyle: "short" }).format(new Date(a.scheduled_at)),
+          label: a.title,
+        })),
+        ...(projectsDueToday.data || []).map((p: any) => ({
+          time: "Today",
+          label: `${cleanText(p.next_action, 100) || "Next action due"} — ${cleanText(p.project_name, 60) || cleanText(p.client_name, 60)}`,
+        })),
+      ],
+      workingNow: (recentActions.data || []).map((r: any) => r.description),
+      services: getServicesStatus(),
     });
   } catch (err: any) {
     console.error("command-center-data error:", err);

@@ -163,16 +163,23 @@
   }
 
   /* ---------------- Today's schedule ---------------- */
-  function renderSchedule() {
+  function renderSchedule(items, isLive) {
     const container = document.getElementById("schedule-list");
-    SAMPLE_DATA.todaysSchedule.forEach((s) => {
-      const item = el("div", "timeline-item");
-      item.innerHTML = `
-        <div class="timeline-when">${s.time}</div>
-        <div class="timeline-name">${s.label}</div>
-      `;
-      container.appendChild(item);
-    });
+    container.innerHTML = "";
+    const list = items || SAMPLE_DATA.todaysSchedule;
+    if (isLive && list.length === 0) {
+      container.innerHTML = '<div class="timeline-item"><div class="timeline-name">Nothing scheduled for today.</div></div>';
+    } else {
+      list.forEach((s) => {
+        const item = el("div", "timeline-item");
+        item.innerHTML = `
+          <div class="timeline-when">${s.time}</div>
+          <div class="timeline-name">${s.label}</div>
+        `;
+        container.appendChild(item);
+      });
+    }
+    setLiveBadge("schedule-list", Boolean(isLive));
   }
 
   /* ---------------- Activity feed ---------------- */
@@ -277,12 +284,18 @@
   }
 
   /* ---------------- Working now ---------------- */
-  function renderWorkingNow() {
+  function renderWorkingNow(items, isLive) {
     const container = document.getElementById("working-list");
-    SAMPLE_DATA.workingNow.forEach((text) => {
-      const li = el("li", null, text);
-      container.appendChild(li);
-    });
+    container.innerHTML = "";
+    const list = items || SAMPLE_DATA.workingNow;
+    if (isLive && list.length === 0) {
+      container.appendChild(el("li", null, "No actions taken yet."));
+    } else {
+      list.forEach((text) => {
+        container.appendChild(el("li", null, text));
+      });
+    }
+    setLiveBadge("working-list", Boolean(isLive));
   }
 
   /* ---------------- New leads ---------------- */
@@ -408,9 +421,10 @@
   }
 
   /* ---------------- Connected services ---------------- */
-  function renderServices() {
+  function renderServices(items, isLive) {
     const container = document.getElementById("services-list");
-    SAMPLE_DATA.connectedServices.forEach((s) => {
+    container.innerHTML = "";
+    (items || SAMPLE_DATA.connectedServices).forEach((s) => {
       const row = el("div", "service-row");
       const statusClass = s.connected ? "on" : "off";
       row.innerHTML = `
@@ -425,6 +439,7 @@
       `;
       container.appendChild(row);
     });
+    setLiveBadge("services-list", Boolean(isLive));
   }
 
   /* ---------------- Devices ---------------- */
@@ -524,6 +539,18 @@
 
       if (data.memoryInsights) {
         renderMemory(data.memoryInsights, true);
+      }
+
+      if (Array.isArray(data.schedule)) {
+        renderSchedule(data.schedule, true);
+      }
+
+      if (Array.isArray(data.workingNow)) {
+        renderWorkingNow(data.workingNow, true);
+      }
+
+      if (Array.isArray(data.services)) {
+        renderServices(data.services, true);
       }
     } catch (e) {
       /* silent fallback to sample data — no error UI, nothing required */
@@ -1026,6 +1053,10 @@
         }
         if (toolsUsed.includes("create_project") || toolsUsed.includes("update_project")) {
           loadProjectsIfAvailable();
+          loadLiveDataIfAvailable(); // update_project can set nextActionDue, changing Today's Schedule
+        }
+        if (toolsUsed.includes("create_appointment")) {
+          loadLiveDataIfAvailable(); // refreshes Today's Schedule and Mya Working Now
         }
         if (toolsUsed.includes("undo_last_action")) {
           // Undo can reverse any reversible skill — refresh everything it could have touched.
@@ -1034,6 +1065,7 @@
           loadFollowUpCountIfAvailable();
           loadMemoryFactsIfAvailable();
           loadProjectsIfAvailable();
+          loadLiveDataIfAvailable();
         }
       } catch (err) {
         pending.remove();

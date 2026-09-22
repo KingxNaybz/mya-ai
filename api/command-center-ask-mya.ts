@@ -34,6 +34,37 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
 const ANTHROPIC_MODEL = "claude-sonnet-5";
 const MAX_TOOL_ITERATIONS = 5;
 
+// Checks whether each integration is CONFIGURED (required env vars present),
+// not whether it's actually reachable right now — a live ping on every
+// dashboard load/chat message would add latency and cost for little real
+// benefit. Duplicated (not shared) in command-center-data.ts on purpose:
+// Vercel's Hobby plan caps serverless functions at 12, already maxed out by
+// this project's file count, so no new files get added for a small helper.
+function getServicesStatus() {
+  return [
+    {
+      name: "Phone system (Twilio)",
+      detail: "Inbound/outbound calling",
+      connected: Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER),
+    },
+    {
+      name: "Voice (ElevenLabs)",
+      detail: "Phone agent voice",
+      connected: Boolean(process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_AGENT_ID),
+    },
+    {
+      name: "Database (Supabase)",
+      detail: "Business data storage",
+      connected: Boolean(SUPABASE_URL && SUPABASE_KEY),
+    },
+    {
+      name: "Mya's brain (Anthropic)",
+      detail: "Claude Sonnet 5",
+      connected: Boolean(ANTHROPIC_API_KEY),
+    },
+  ];
+}
+
 // Same ElevenLabs key the phone system (outbound-call.ts) already uses.
 // ELEVENLABS_VOICE_ID is new — the Voice ID of the Conversational AI agent
 // callers hear, from ElevenLabs' dashboard, so dashboard replies can be
@@ -58,7 +89,9 @@ Rules:
 - Keep replies brief and conversational — this can be read out loud or read at a glance on a dashboard, not a report.
 - You DO have a voice: replies can be spoken aloud in the same voice as the phone system, and there's an always-listen mic that wakes on your name. Neither is a tool you call — they run automatically in the dashboard. If asked whether you can talk or listen, say yes (unless list_capabilities' note says otherwise), don't claim you're text-only.
 - New leads (list_leads), recent activity (list_recent_activity), and aggregate memory stats (get_memory_insights, different from your own remembered facts) are all real, live tools — use them rather than only citing the count from get_dashboard_summary.
-- A few dashboard panels are still placeholder sample data with no tool behind them yet: Today's Schedule, Mya Working Now, Connected Services, and Devices. If asked about any of these, say plainly you don't have that connected yet — never invent a plausible-sounding schedule or status to sound complete.`;
+- Today's Schedule is real: use create_appointment for a site visit/walkthrough/meeting at a specific date+time, and list_schedule to see today's appointments plus any project whose next action is due today (set via update_project's nextActionDue).
+- get_recent_actions and get_services_status are also real, live tools now, matching the "Mya Working Now" and "Connected Services" dashboard panels. get_services_status checks whether each integration is configured, not whether it's live-reachable right now — say so if asked to be precise.
+- Devices is the one dashboard panel still placeholder sample data with no tool behind it. If asked about it, say plainly you don't have that connected yet — never invent a plausible-sounding status to sound complete.`;
 
 /**
  * UNDO: reversible skills log how to reverse themselves to mya_undo_log
@@ -116,6 +149,15 @@ async function startOfTodayIso(): Promise<string> {
   const m = parts.find((p) => p.type === "month")?.value;
   const d = parts.find((p) => p.type === "day")?.value;
   return `${y}-${m}-${d}T00:00:00-05:00`;
+}
+
+async function startOfTomorrowIso(): Promise<string> {
+  const start = new Date(await startOfTodayIso());
+  return new Date(start.getTime() + 24 * 60 * 60 * 1000).toISOString();
+}
+
+async function todayDateString(): Promise<string> {
+  return (await startOfTodayIso()).slice(0, 10);
 }
 
 const SKILLS: Skill[] = [
@@ -207,6 +249,26 @@ const SKILLS: Skill[] = [
         notesLoggedThisWeek: updatedThisWeek.count ?? 0,
       };
     },
+  },
+  {
+    name: "get_recent_actions",
+    description: "List the real actions you've recently taken (added a contractor, resolved an approval, updated a project, etc.). Same data the 'Mya Working Now' dashboard panel shows.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+    execute: async () => {
+      const { data, error } = await supabase
+        .from("mya_undo_log")
+        .select("description,created_at")
+        .order("created_at", { ascending: false })
+        .limit(8);
+      if (error) return { error: error.message };
+      return { recentActions: (data || []).map((r: any) => r.description) };
+    },
+  },
+  {
+    name: "get_services_status",
+    description: "Check whether the connected services (phone system, voice, database, AI) are configured. Same data the 'Connected Services' dashboard panel shows. This checks configuration, not live reachability.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+    execute: async () => ({ services: getServicesStatus() }),
   },
   {
     name: "list_contractors",
@@ -448,6 +510,11 @@ const SKILLS: Skill[] = [
           if (error) undoError = error.message;
           break;
         }
+        case "create_appointment": {
+          const { error } = await supabase.from("mya_appointments").delete().eq("id", undoData.id);
+          if (error) undoError = error.message;
+          break;
+        }
         case "remove_estimate_item": {
           const it = undoData.item;
           const { error } = await supabase.from("mya_estimate_items").insert({
@@ -678,6 +745,7 @@ const SKILLS: Skill[] = [
         nextAction: { type: "string" },
         notes: { type: "string" },
         contingencyPercent: { type: "number", description: "Risk/contingency percent applied on top of direct cost when calculating this project's estimate" },
+        nextActionDue: { type: "string", description: "Date (YYYY-MM-DD) the next action is due — shows up on Today's Schedule when it matches today" },
       },
       required: ["query"],
       additionalProperties: false,
@@ -695,6 +763,7 @@ const SKILLS: Skill[] = [
         nextAction: "next_action",
         notes: "notes",
         contingencyPercent: "contingency_percent",
+        nextActionDue: "next_action_due",
       };
       const columns = Object.keys(input)
         .filter((k) => fieldMap[k] !== undefined)
@@ -731,6 +800,70 @@ const SKILLS: Skill[] = [
         `Updated ${before.project_name}: ${columns.join(", ")}`
       );
       return { updated: true, project: before.project_name, fields: columns };
+    },
+  },
+  {
+    name: "create_appointment",
+    description: "Schedule a real appointment or site visit — a walkthrough, inspection, or meeting at a specific date/time. Optionally tied to a project.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "e.g. 'Site walkthrough' or 'Permit pickup at city hall'" },
+        scheduledAt: { type: "string", description: "ISO date-time (e.g. 2026-09-25T14:00:00) of the appointment" },
+        projectQuery: { type: "string", description: "Optional project name/client to tie this appointment to" },
+        notes: { type: "string" },
+      },
+      required: ["title", "scheduledAt"],
+      additionalProperties: false,
+    },
+    execute: async (input) => {
+      let projectId: string | null = null;
+      let projectName: string | null = null;
+      if (input.projectQuery) {
+        const found = await findOneProject(input.projectQuery, "id,project_name");
+        if (found.error) return { error: found.error };
+        if (found.matches) return { created: false, matches: found.matches };
+        projectId = found.project.id;
+        projectName = found.project.project_name;
+      }
+      const { data, error } = await supabase
+        .from("mya_appointments")
+        .insert({ project_id: projectId, title: input.title, scheduled_at: input.scheduledAt, notes: input.notes || null })
+        .select("id,title,scheduled_at")
+        .single();
+      if (error) return { error: error.message };
+      if (data) await logUndo("create_appointment", { id: data.id }, `Scheduled "${data.title}"${projectName ? ` for ${projectName}` : ""}`);
+      return { created: data };
+    },
+  },
+  {
+    name: "list_schedule",
+    description: "List what's on today's schedule — appointments/site visits happening today, plus any project whose next action is due today. Same data Today's Schedule shows.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+    execute: async () => {
+      const [todayIso, tomorrowIso, todayDate] = await Promise.all([startOfTodayIso(), startOfTomorrowIso(), todayDateString()]);
+      const [appointments, dueProjects] = await Promise.all([
+        supabase
+          .from("mya_appointments")
+          .select("id,title,scheduled_at,notes,project_id")
+          .gte("scheduled_at", todayIso)
+          .lt("scheduled_at", tomorrowIso)
+          .order("scheduled_at"),
+        supabase
+          .from("mya_projects")
+          .select("id,project_name,client_name,next_action")
+          .eq("next_action_due", todayDate),
+      ]);
+      if (appointments.error) return { error: appointments.error.message };
+      if (dueProjects.error) return { error: dueProjects.error.message };
+      return {
+        appointments: appointments.data || [],
+        projectActionsToday: (dueProjects.data || []).map((p: any) => ({
+          project: p.project_name,
+          client: p.client_name,
+          action: p.next_action,
+        })),
+      };
     },
   },
   {
