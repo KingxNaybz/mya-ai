@@ -337,6 +337,24 @@
     setLiveBadge("memory-stats", Boolean(isLive));
   }
 
+  /* ---------------- Contractors & Sub-Contractors ---------------- */
+  function renderContractors(items, isLive) {
+    const container = document.getElementById("contractors-list");
+    container.innerHTML = "";
+    (items || SAMPLE_DATA.contractors).forEach((c) => {
+      const row = el("div", "list-row");
+      row.innerHTML = `
+        <div class="list-row-main">
+          <strong>${c.name} <span class="approval-type-tag">${c.category || "—"}</span></strong>
+          <span>${c.notes || "—"}${c.rate ? " · " + c.rate : ""}</span>
+        </div>
+        <div class="list-row-side">${c.phone || "—"}</div>
+      `;
+      container.appendChild(row);
+    });
+    setLiveBadge("contractors-list", Boolean(isLive));
+  }
+
   /* ---------------- Connected services ---------------- */
   function renderServices() {
     const container = document.getElementById("services-list");
@@ -474,6 +492,30 @@
           detail: a.detail,
           requestedAt: a.requested_at,
           actionType: a.action_type
+        })),
+        true
+      );
+    } catch (e) {
+      /* silent fallback to sample data */
+    }
+  }
+
+  /* ---------------- Contractors (live) ---------------- */
+  async function loadContractorsIfAvailable() {
+    if (location.protocol === "file:") return;
+    try {
+      const res = await fetch("/api/command-center-contractors");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!Array.isArray(data.contractors) || !data.contractors.length) return;
+      renderContractors(
+        data.contractors.map((c) => ({
+          category: c.category,
+          name: c.name,
+          phone: c.phone,
+          rate: c.pricing_rate,
+          notes: c.notes,
+          addedInCrm: c.added_in_crm
         })),
         true
       );
@@ -721,10 +763,12 @@
   renderMemory();
   renderServices();
   renderDevices();
+  renderContractors();
   renderQuickActions();
   loadLiveDataIfAvailable();
   loadApprovalsIfAvailable();
   loadFollowUpCountIfAvailable();
+  loadContractorsIfAvailable();
   loadSettingsIfAvailable();
   initFollowUpModal();
   initSettingsModal();

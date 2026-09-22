@@ -89,6 +89,12 @@ const SAMPLE_DATA = {
     { name: "Mya Cloud",            status: "online" }
   ],
 
+  contractors: [
+    { category: "General/Builder", name: "Sample Builder Co.", phone: "555-010-0001", rate: "By the Job", notes: "New construction, general trades", addedInCrm: true },
+    { category: "Electrician", name: "Sample Electric LLC", phone: "555-010-0002", rate: "By the Job", notes: "General electrical", addedInCrm: false },
+    { category: "Plumber", name: "Sample Plumbing Co.", phone: "555-010-0003", rate: "By the Job", notes: "Plumbing repairs and installs", addedInCrm: true }
+  ],
+
   quickActions: [
     { icon: "🖥",  label: "Take a Screenshot" },
     { icon: "↻",  label: "Create a Follow-Up" },

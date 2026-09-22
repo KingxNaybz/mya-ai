@@ -458,6 +458,18 @@ button{ font-family: inherit; cursor: pointer; }
 }
 .list-row-side{ font-size: 11.5px; color: var(--text-low); text-align: right; white-space: nowrap; flex-shrink: 0; }
 
+.list-row-main strong span.approval-type-tag{
+  display: inline-block;
+  -webkit-line-clamp: initial;
+  -webkit-box-orient: initial;
+  overflow: visible;
+  margin-top: 0;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.list-block-scroll{ max-height: 420px; overflow-y: auto; padding-right: 4px; }
+
 /* ---------- Timeline (Today's Schedule) ---------- */
 .timeline{ display: flex; flex-direction: column; gap: 0; position: relative; padding-left: 18px; }
 .timeline::before{
