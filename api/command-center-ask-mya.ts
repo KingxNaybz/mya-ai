@@ -46,6 +46,7 @@ Rules:
 - If the user tells you to remember something, or shares a fact/preference/detail worth keeping for later ("remember that...", "the Rivers project needs..."), call remember_fact. If asked what you remember or know about something, call recall_memory rather than guessing.
 - Projects are the company's real jobs (e.g. "3941 Briar Glen Ct" / "Courtney Vonwalsung"). When asked about a specific project, call get_project rather than guessing at details — it returns everything on file for that job. Use create_project when a new job should be tracked, update_project to record scope/status/pricing/decision changes, and list_projects to see what's open or in a given status.
 - The Company Brain holds standing business info (margin targets, payment terms, warranty language, estimating standards, insurance procedures, lessons learned) — call get_company_brain when asked about company policy/standards, and update_company_brain when told to change one.
+- Estimates are built from real cost line items, never guessed. Use add_estimate_item to log a real quantity x rate cost against a project, calculate_estimate to get its Direct Cost/True Cost/Floor Price/Target Price, and evaluate_bid_price for "what if we bid this at $X" questions. If a project has no line items yet, say so and offer to log some — never invent a price.
 - Keep replies brief and conversational — this is read out loud / read at a glance on a dashboard, not a report.`;
 
 /**
@@ -70,6 +71,28 @@ type Skill = {
   input_schema: Record<string, unknown>;
   execute: (input: any) => Promise<any>;
 };
+
+/** Shared project lookup for the estimating skills — same
+ * find-one-or-return-matches pattern used by get_project/update_project. */
+async function findOneProject(
+  query: string,
+  columns: string
+): Promise<{ project?: any; error?: string; matches?: any[] }> {
+  const { data: matches, error } = await supabase
+    .from("mya_projects")
+    .select(columns)
+    .or(`project_name.ilike.%${query}%,client_name.ilike.%${query}%`);
+  if (error) return { error: error.message };
+  if (!matches || matches.length === 0) return { error: "No project found matching that." };
+  if (matches.length > 1) {
+    return { matches: matches.map((m: any) => ({ id: m.id, project_name: m.project_name, client_name: m.client_name })) };
+  }
+  return { project: matches[0] };
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
 
 async function startOfTodayIso(): Promise<string> {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -352,6 +375,25 @@ const SKILLS: Skill[] = [
           if (error) undoError = error.message;
           break;
         }
+        case "add_estimate_item": {
+          const { error } = await supabase.from("mya_estimate_items").delete().eq("id", undoData.id);
+          if (error) undoError = error.message;
+          break;
+        }
+        case "remove_estimate_item": {
+          const it = undoData.item;
+          const { error } = await supabase.from("mya_estimate_items").insert({
+            id: it.id,
+            project_id: it.project_id,
+            category: it.category,
+            description: it.description,
+            quantity: it.quantity,
+            unit: it.unit,
+            unit_cost: it.unit_cost,
+          });
+          if (error) undoError = error.message;
+          break;
+        }
         default:
           undoError = `Don't know how to undo action type "${entry.action_type}".`;
       }
@@ -567,6 +609,7 @@ const SKILLS: Skill[] = [
         outstandingDecisions: { type: "string" },
         nextAction: { type: "string" },
         notes: { type: "string" },
+        contingencyPercent: { type: "number", description: "Risk/contingency percent applied on top of direct cost when calculating this project's estimate" },
       },
       required: ["query"],
       additionalProperties: false,
@@ -583,6 +626,7 @@ const SKILLS: Skill[] = [
         outstandingDecisions: "outstanding_decisions",
         nextAction: "next_action",
         notes: "notes",
+        contingencyPercent: "contingency_percent",
       };
       const columns = Object.keys(input)
         .filter((k) => fieldMap[k] !== undefined)
@@ -619,6 +663,233 @@ const SKILLS: Skill[] = [
         `Updated ${before.project_name}: ${columns.join(", ")}`
       );
       return { updated: true, project: before.project_name, fields: columns };
+    },
+  },
+  {
+    name: "add_estimate_item",
+    description: "Add a real cost line item to a project's estimate (e.g. material, labor, equipment, subcontractor, mobilization, disposal, permit, insurance_bond). Cost = quantity x unitCost — never a guessed lump sum.",
+    input_schema: {
+      type: "object",
+      properties: {
+        projectQuery: { type: "string", description: "Project name or client name to find the project" },
+        category: { type: "string", enum: ["material", "labor", "equipment", "subcontractor", "mobilization", "disposal", "permit", "insurance_bond"] },
+        description: { type: "string" },
+        quantity: { type: "number" },
+        unit: { type: "string", description: "e.g. SF, LF, CY, EA, hours" },
+        unitCost: { type: "number" },
+      },
+      required: ["projectQuery", "category", "description", "quantity", "unitCost"],
+      additionalProperties: false,
+    },
+    execute: async (input) => {
+      const found = await findOneProject(input.projectQuery, "id,project_name,client_name,contingency_percent");
+      if (found.error) return { error: found.error };
+      if (found.matches) return { added: false, matches: found.matches };
+
+      const { data, error } = await supabase
+        .from("mya_estimate_items")
+        .insert({
+          project_id: found.project.id,
+          category: input.category,
+          description: input.description,
+          quantity: input.quantity,
+          unit: input.unit || null,
+          unit_cost: input.unitCost,
+        })
+        .select("id,category,description,quantity,unit,unit_cost,line_total")
+        .single();
+      if (error) return { error: error.message };
+      if (data) {
+        await logUndo("add_estimate_item", { id: data.id }, `Added estimate item "${data.description}" to ${found.project.project_name}`);
+      }
+      return { added: data };
+    },
+  },
+  {
+    name: "list_estimate_items",
+    description: "List every cost line item logged for a project's estimate, with the running direct cost total.",
+    input_schema: {
+      type: "object",
+      properties: { projectQuery: { type: "string" } },
+      required: ["projectQuery"],
+      additionalProperties: false,
+    },
+    execute: async (input) => {
+      const found = await findOneProject(input.projectQuery, "id,project_name,client_name");
+      if (found.error) return { error: found.error };
+      if (found.matches) return { matches: found.matches };
+
+      const { data, error } = await supabase
+        .from("mya_estimate_items")
+        .select("id,category,description,quantity,unit,unit_cost,line_total")
+        .eq("project_id", found.project.id)
+        .order("category", { ascending: true });
+      if (error) return { error: error.message };
+
+      const items = data || [];
+      const directCost = items.reduce((sum: number, i: any) => sum + Number(i.line_total || 0), 0);
+      return { project: found.project.project_name, items, directCost };
+    },
+  },
+  {
+    name: "remove_estimate_item",
+    description: "Remove a cost line item from a project's estimate by matching its description. If more than one item matches, this returns the matches instead of guessing.",
+    input_schema: {
+      type: "object",
+      properties: {
+        projectQuery: { type: "string" },
+        description: { type: "string", description: "Text to search for in the item's description" },
+      },
+      required: ["projectQuery", "description"],
+      additionalProperties: false,
+    },
+    execute: async (input) => {
+      const found = await findOneProject(input.projectQuery, "id,project_name,client_name");
+      if (found.error) return { error: found.error };
+      if (found.matches) return { removed: false, matches: found.matches };
+
+      const { data: items, error: findError } = await supabase
+        .from("mya_estimate_items")
+        .select("id,category,description,quantity,unit,unit_cost")
+        .eq("project_id", found.project.id)
+        .ilike("description", `%${input.description}%`);
+      if (findError) return { error: findError.message };
+      if (!items || items.length === 0) return { removed: false, reason: "No matching estimate item found." };
+      if (items.length > 1) {
+        return { removed: false, matches: items.map((i: any) => ({ id: i.id, description: i.description })) };
+      }
+
+      const { error: deleteError } = await supabase.from("mya_estimate_items").delete().eq("id", items[0].id);
+      if (deleteError) return { error: deleteError.message };
+      await logUndo(
+        "remove_estimate_item",
+        { item: { ...items[0], project_id: found.project.id } },
+        `Removed estimate item "${items[0].description}" from ${found.project.project_name}`
+      );
+      return { removed: true, item: items[0] };
+    },
+  },
+  {
+    name: "calculate_estimate",
+    description: "Calculate a project's real estimate from its logged cost line items: Direct Cost -> True Cost (with contingency) -> Floor Price and Target Price (from the company's margin floor/target). Never fabricates a number — flags anything missing (no line items, no contingency percent set, no company margin set) instead of guessing.",
+    input_schema: {
+      type: "object",
+      properties: { projectQuery: { type: "string" } },
+      required: ["projectQuery"],
+      additionalProperties: false,
+    },
+    execute: async (input) => {
+      const found = await findOneProject(input.projectQuery, "id,project_name,client_name,contingency_percent");
+      if (found.error) return { error: found.error };
+      if (found.matches) return { matches: found.matches };
+
+      const { data: items, error: itemsError } = await supabase
+        .from("mya_estimate_items")
+        .select("category,line_total")
+        .eq("project_id", found.project.id);
+      if (itemsError) return { error: itemsError.message };
+      if (!items || items.length === 0) {
+        return { project: found.project.project_name, reason: "No estimate line items logged yet — add costs with add_estimate_item first." };
+      }
+
+      const byCategory: Record<string, number> = {};
+      let directCost = 0;
+      for (const i of items as any[]) {
+        const total = Number(i.line_total || 0);
+        directCost += total;
+        byCategory[i.category] = (byCategory[i.category] || 0) + total;
+      }
+
+      const contingencyPercentSet = found.project.contingency_percent !== null && found.project.contingency_percent !== undefined;
+      const contingencyPercent = contingencyPercentSet ? Number(found.project.contingency_percent) : 0;
+      const contingencyAmount = directCost * (contingencyPercent / 100);
+      const trueCost = directCost + contingencyAmount;
+
+      const { data: brain } = await supabase.from("mya_company_brain").select("margin_target,margin_floor").eq("id", 1).maybeSingle();
+      const marginTarget = brain?.margin_target;
+      const marginFloor = brain?.margin_floor;
+
+      const result: Record<string, any> = {
+        project: found.project.project_name,
+        directCostByCategory: byCategory,
+        directCost: round2(directCost),
+        contingencyPercent,
+        contingencyPercentWasSet: contingencyPercentSet,
+        contingencyAmount: round2(contingencyAmount),
+        trueCost: round2(trueCost),
+      };
+      if (marginFloor === null || marginFloor === undefined) {
+        result.note = "Company margin floor isn't set — can't compute floor/target price. Set it with update_company_brain.";
+        return result;
+      }
+      result.marginFloor = marginFloor;
+      result.floorPrice = round2(trueCost / (1 - Number(marginFloor) / 100));
+      if (marginTarget !== null && marginTarget !== undefined) {
+        result.marginTarget = marginTarget;
+        result.targetPrice = round2(trueCost / (1 - Number(marginTarget) / 100));
+        result.recommendedBid = result.targetPrice;
+      } else {
+        result.note = "Company margin target isn't set — floor price only. Set a target with update_company_brain for a recommended bid.";
+      }
+      return result;
+    },
+  },
+  {
+    name: "evaluate_bid_price",
+    description: "Show what a specific bid price actually means for a project: direct cost, true cost, gross profit, gross margin percent, markup percent, and whether it falls below the company's minimum margin. Use for \"what happens if we bid this at $X\" questions.",
+    input_schema: {
+      type: "object",
+      properties: {
+        projectQuery: { type: "string" },
+        bidPrice: { type: "number" },
+      },
+      required: ["projectQuery", "bidPrice"],
+      additionalProperties: false,
+    },
+    execute: async (input) => {
+      const found = await findOneProject(input.projectQuery, "id,project_name,client_name,contingency_percent");
+      if (found.error) return { error: found.error };
+      if (found.matches) return { matches: found.matches };
+
+      const { data: items, error: itemsError } = await supabase
+        .from("mya_estimate_items")
+        .select("line_total")
+        .eq("project_id", found.project.id);
+      if (itemsError) return { error: itemsError.message };
+      if (!items || items.length === 0) {
+        return { project: found.project.project_name, reason: "No estimate line items logged yet — add costs with add_estimate_item first." };
+      }
+
+      const directCost = (items as any[]).reduce((sum, i) => sum + Number(i.line_total || 0), 0);
+      const contingencyPercentSet = found.project.contingency_percent !== null && found.project.contingency_percent !== undefined;
+      const contingencyPercent = contingencyPercentSet ? Number(found.project.contingency_percent) : 0;
+      const trueCost = directCost * (1 + contingencyPercent / 100);
+
+      const bidPrice = Number(input.bidPrice);
+      const grossProfit = bidPrice - trueCost;
+      const grossMarginPercent = bidPrice !== 0 ? (grossProfit / bidPrice) * 100 : null;
+      const markupPercent = trueCost !== 0 ? (grossProfit / trueCost) * 100 : null;
+
+      const { data: brain } = await supabase.from("mya_company_brain").select("margin_floor").eq("id", 1).maybeSingle();
+      const marginFloor = brain?.margin_floor;
+
+      const result: Record<string, any> = {
+        project: found.project.project_name,
+        directCost: round2(directCost),
+        contingencyPercentWasSet: contingencyPercentSet,
+        trueCost: round2(trueCost),
+        bidPrice: round2(bidPrice),
+        grossProfit: round2(grossProfit),
+        grossMarginPercent: grossMarginPercent !== null ? round2(grossMarginPercent) : null,
+        markupPercent: markupPercent !== null ? round2(markupPercent) : null,
+      };
+      if (marginFloor === null || marginFloor === undefined) {
+        result.note = "Company margin floor isn't set, so I can't say whether this is below your minimum acceptable margin. Set it with update_company_brain.";
+      } else {
+        result.marginFloor = marginFloor;
+        result.belowMarginFloor = grossMarginPercent !== null && grossMarginPercent < Number(marginFloor);
+      }
+      return result;
     },
   },
 ];
