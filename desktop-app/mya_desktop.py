@@ -18,6 +18,7 @@ this folder for setup instructions.
 
 import base64
 import io
+import json
 import os
 import time
 import traceback
@@ -113,6 +114,160 @@ def describe_screen(question: str, image_bytes: bytes) -> str:
     if not res.ok:
         raise RuntimeError(f"Anthropic API error {res.status_code}: {res.text[:300]}")
     return extract_reply_text(res.json())
+
+
+# ---------------------------------------------------------------------------
+# Screen ACTIONS (click/type) — a deliberately separate, more cautious path
+# from plain Q&A. She only acts when explicitly told to, always describes
+# the target and asks for a clear "yes" first, and never guesses a click
+# location she isn't confident about. There is no undo for a wrong click in
+# another program, unlike everything else this session built (which all has
+# a real undo log) — so failing safe here matters more than anywhere else.
+# ---------------------------------------------------------------------------
+
+ACTION_KEYWORDS = ("click", "press", "select", "type", "enter", "tap", "check the box", "toggle")
+
+AFFIRMATIVE_WORDS = ("yes", "yeah", "yep", "yup", "go ahead", "do it", "confirm", "confirmed", "sure", "okay", "ok")
+
+
+def is_action_request(question: str) -> bool:
+    """Pure function: does this sound like an instruction to interact with
+    the screen, rather than a question about it? Deliberately simple and
+    keyword-based rather than another LLM call — deterministic and
+    auditable for something this safety-sensitive."""
+    q = question.lower()
+    return any(kw in q for kw in ACTION_KEYWORDS)
+
+
+def is_affirmative(text: str) -> bool:
+    """Pure function: fails SAFE. Only a clear, known affirmative phrase
+    counts as yes — anything unclear, empty, off-topic, or negative is
+    treated as no. This is the actual safety gate before a click happens,
+    so it deliberately does not try to be clever about interpreting intent."""
+    t = text.strip().lower()
+    return any(t == w or t.startswith(w + " ") for w in AFFIRMATIVE_WORDS)
+
+
+LOCATE_SYSTEM_PROMPT = (
+    "You are looking at a screenshot of the user's screen and an instruction "
+    "to click, type into, or otherwise interact with something on it. "
+    "Respond with ONLY a single JSON object and nothing else — no markdown, "
+    "no explanation — in exactly this shape: "
+    '{"found": true, "target_description": "plain description of the '
+    'element and where it is", "x": <pixel x coordinate of its center>, '
+    '"y": <pixel y coordinate of its center>, "action_type": "click" or '
+    '"type", "text_to_type": "<text to type, or null if action_type is '
+    'click>"}. '
+    "If you cannot confidently identify one specific, clearly-visible "
+    "element matching the instruction, instead respond with exactly "
+    '{"found": false, "target_description": "<plainly say what you could '
+    'not find and why>"}. Never guess coordinates for something you are '
+    "not genuinely confident you can see."
+)
+
+
+def build_locate_payload(instruction: str, image_base64: str, media_type: str = "image/png") -> dict:
+    """Pure function: builds the request asking Claude to locate a specific
+    on-screen element to interact with, as structured JSON."""
+    return {
+        "model": ANTHROPIC_MODEL,
+        "max_tokens": 300,
+        "output_config": {"effort": "low"},
+        "system": LOCATE_SYSTEM_PROMPT,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": media_type, "data": image_base64},
+                    },
+                    {"type": "text", "text": instruction},
+                ],
+            }
+        ],
+    }
+
+
+def parse_locate_response(anthropic_response: dict) -> dict:
+    """Pure function: parses Claude's structured click-target JSON. Fails
+    SAFE on any problem — malformed JSON, not a dict, missing/non-numeric
+    coordinates all become {"found": False} rather than ever passing through
+    a guessed or malformed location to something that will actually move
+    the mouse and click."""
+    blocks = anthropic_response.get("content", [])
+    text = "\n".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return {"found": False, "target_description": "Couldn't understand what I was looking at."}
+    if not isinstance(data, dict) or not data.get("found"):
+        description = data.get("target_description") if isinstance(data, dict) else None
+        return {"found": False, "target_description": description or "I couldn't find that on screen."}
+    if not isinstance(data.get("x"), (int, float)) or not isinstance(data.get("y"), (int, float)):
+        return {"found": False, "target_description": "I found something like that, but couldn't pin down exactly where."}
+    return data
+
+
+def locate_target(instruction: str, image_bytes: bytes) -> dict:
+    if not ANTHROPIC_API_KEY:
+        return {"found": False, "target_description": "ANTHROPIC_API_KEY isn't set — check your .env file."}
+    image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+    payload = build_locate_payload(instruction, image_base64)
+    res = requests.post(
+        "https://api.anthropic.com/v1/messages",
+        headers={
+            "x-api-key": ANTHROPIC_API_KEY,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+        json=payload,
+        timeout=30,
+    )
+    if not res.ok:
+        raise RuntimeError(f"Anthropic API error {res.status_code}: {res.text[:300]}")
+    return parse_locate_response(res.json())
+
+
+def perform_action(action: dict) -> None:
+    import pyautogui
+
+    x, y = int(action["x"]), int(action["y"])
+    pyautogui.moveTo(x, y, duration=0.3)
+    pyautogui.click()
+    if action.get("action_type") == "type" and action.get("text_to_type"):
+        pyautogui.typewrite(action["text_to_type"], interval=0.02)
+
+
+def handle_action_request(instruction: str, screenshot_bytes: bytes) -> None:
+    try:
+        target = locate_target(instruction, screenshot_bytes)
+    except Exception as e:
+        print(f"[Mya] Couldn't read the screen: {e}")
+        return
+
+    if not target.get("found"):
+        not_found_message = target.get("target_description") or "I couldn't find that on screen."
+        print(f"[Mya] {not_found_message}")
+        return
+
+    action_type = target.get("action_type", "click")
+    print(f"[Mya] I see {target['target_description']}. Should I {action_type} it? (say yes or no)")
+    try:
+        confirmation = listen_for_question(timeout=5, phrase_time_limit=5)
+    except Exception:
+        print("[Mya] Didn't hear a confirmation — not touching anything.")
+        return
+
+    if not is_affirmative(confirmation):
+        print(f'[Mya] Okay, not doing that (heard: "{confirmation}").')
+        return
+
+    try:
+        perform_action(target)
+        print(f"[Mya] Done — {action_type}ed {target['target_description']}.")
+    except Exception as e:
+        print(f"[Mya] Tried to act but something went wrong: {e}")
 
 
 def build_combined_message(question: str, screen_description: str) -> str:
@@ -211,6 +366,10 @@ def handle_activation() -> None:
             print("[Mya] Didn't catch anything — try again.")
             return
         print(f"[Mya] You said: {question}")
+
+        if is_action_request(question):
+            handle_action_request(question, screenshot_bytes)
+            return
 
         try:
             screen_description = describe_screen(question, screenshot_bytes)

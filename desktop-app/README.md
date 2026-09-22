@@ -15,12 +15,19 @@ This is a separate project from the web dashboard (`command-center/`) —
 no code is shared between them, only the same deployed API and database
 over the internet.
 
+She can also click or type on screen when you tell her to — say
+something like "click the Save button" or "type my email in that field"
+and she'll describe exactly what she found and ask you to confirm
+before touching anything. **There is no undo for this** — unlike
+everything else in this project (which all has a real undo log), a
+click in another program is permanent the moment it happens, so she
+never acts without you saying a clear "yes" first, and never guesses at
+a location she isn't confident about.
+
 **Honest limits of this v1:**
 - Manual activation only (press the hotkey) — she does not watch your
-  screen continuously in the background.
-- She can only *see* your screen and talk about it — she cannot click,
-  type, or take any action in other programs. That's a deliberately
-  separate, bigger, and riskier capability not built here.
+  screen continuously in the background, and she never clicks anything
+  without an explicit instruction and your confirmation in that moment.
 - Windows only.
 - Runs as a Python script in a visible console window (not a packaged
   `.exe` yet) — you'll see her status/errors printed there as she works,
@@ -85,6 +92,14 @@ Press **Ctrl+Alt+M** anywhere (any app, any window) to activate her:
    real brain (the same one the web dashboard uses), and speaks the
    answer back — remembering it for real if that's what you asked.
 
+**To have her click or type something**, use a clear action word —
+"click the Save button," "press the X to close this," "type
+john@example.com into that field." She'll describe exactly what she
+found (printed to the console — not spoken for this specific step) and
+ask you to say "yes" to confirm before doing anything. Say anything
+other than a clear yes and she won't touch it. If she can't confidently
+find what you described, she'll say so instead of guessing.
+
 You can also right-click the tray icon:
 - **"Ask Mya now"** — same as the hotkey.
 - **"Open Dashboard"** — opens the real web dashboard in its own window.
@@ -121,3 +136,14 @@ MYA_HOTKEY=ctrl+alt+j
 - **Microphone doesn't seem to pick anything up** — check Windows'
   microphone privacy settings (Settings → Privacy & security →
   Microphone) allow desktop apps to use it.
+- **She says she can't find what you asked her to click** — try being
+  more specific about color, text, or position ("the blue button in the
+  top right"). She's deliberately built to say she can't find something
+  rather than guess at a location.
+- **The click lands in the wrong place** — the coordinates Claude
+  identifies from a screenshot aren't always pixel-perfect, especially
+  on high-resolution or scaled displays. This is a real, known
+  limitation of asking an AI to point at a location in an image, not a
+  bug to "fix" outright — if it's consistently off, tell me the details
+  (screen resolution, Windows display scaling %) and we'll see what can
+  be tightened up.
