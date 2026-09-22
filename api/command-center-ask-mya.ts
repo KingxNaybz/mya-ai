@@ -1001,7 +1001,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   const wantsVoice = (req.body || {}).voice === true;
 
-  const messages: any[] = [{ role: "user", content: userMessage }];
+  // Serverless functions have no memory between requests, so without this
+  // the dashboard's chat forgets everything the instant one request ends —
+  // fine for a one-off command, but it means a direct follow-up answer to
+  // something Mya just asked lands with zero context. The dashboard sends
+  // back its own recent turns; validated and capped defensively here since
+  // it's client-supplied.
+  const rawHistory = Array.isArray((req.body || {}).history) ? req.body.history : [];
+  const history = rawHistory
+    .filter((m: any) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
+    .slice(-20)
+    .map((m: any) => ({ role: m.role, content: m.content }));
+
+  const messages: any[] = [...history, { role: "user", content: userMessage }];
   const toolsUsed: string[] = [];
 
   try {

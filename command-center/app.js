@@ -965,6 +965,12 @@
       return div.innerHTML;
     }
 
+    // Resets on page reload (a fresh conversation each time you open the
+    // dashboard) — without this, every message is a brand-new request with
+    // no memory of what was just said, so a direct follow-up answer to
+    // something Mya just asked has nothing to go on.
+    let conversationHistory = [];
+
     async function send() {
       const message = input.value.trim();
       if (!message) return;
@@ -986,7 +992,7 @@
         const res = await fetch("/api/command-center-ask-mya", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message, voice: voiceEnabled }),
+          body: JSON.stringify({ message, voice: voiceEnabled, history: conversationHistory }),
         });
         const data = await res.json().catch(() => ({}));
 
@@ -997,8 +1003,13 @@
           return;
         }
 
-        addMessage(data.reply || "Done.", "mya");
+        const reply = data.reply || "Done.";
+        addMessage(reply, "mya");
         playReplyAudio(data.audioBase64);
+
+        conversationHistory.push({ role: "user", content: message });
+        conversationHistory.push({ role: "assistant", content: reply });
+        if (conversationHistory.length > 20) conversationHistory = conversationHistory.slice(-20);
 
         const toolsUsed = Array.isArray(data.toolsUsed) ? data.toolsUsed : [];
         if (toolsUsed.includes("add_contractor") || toolsUsed.includes("remove_contractor")) {
