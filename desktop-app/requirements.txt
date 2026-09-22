@@ -1,0 +1,8 @@
+pystray==0.19.5
+Pillow==10.4.0
+keyboard==0.13.5
+SpeechRecognition==3.10.4
+PyAudio==0.2.14
+requests==2.32.3
+python-dotenv==1.0.1
+pygame==2.6.0
