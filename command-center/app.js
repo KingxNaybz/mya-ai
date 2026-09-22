@@ -1156,16 +1156,26 @@
       }
     }
 
-    function enterAwakeMode() {
-      awake = true;
-      setMicUI();
-      setVoiceStatus("Yes? I'm listening…");
+    // How long to keep listening for a follow-up without requiring the
+    // wake word again. 7s proved too short for a real back-and-forth —
+    // reading a multi-point rundown and then framing a follow-up question
+    // easily takes longer than that.
+    const AWAKE_TIMEOUT_MS = 20000;
+
+    function resetAwakeTimer() {
       clearTimeout(awakeTimeout);
       awakeTimeout = setTimeout(() => {
         awake = false;
         setMicUI();
         setVoiceStatus('Listening for "Mya"…');
-      }, 7000);
+      }, AWAKE_TIMEOUT_MS);
+    }
+
+    function enterAwakeMode() {
+      awake = true;
+      setMicUI();
+      setVoiceStatus("Yes? I'm listening…");
+      resetAwakeTimer();
     }
 
     function wakeAndSend(text) {
@@ -1202,6 +1212,10 @@
           // the recognizer in that gap.
           enterAwakeMode();
           if (!result.isFinal) return;
+        } else {
+          // Already in conversation mode and hearing something — extend
+          // the window instead of letting it expire mid-thought.
+          resetAwakeTimer();
         }
 
         if (!result.isFinal) return; // don't act on a still-changing transcript
