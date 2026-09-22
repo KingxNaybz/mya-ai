@@ -92,6 +92,10 @@ MYA_HOTKEY=ctrl+alt+j
   Prompt as administrator too.
 - **"Didn't catch a question in time"** — you have about 10 seconds
   after the hotkey to speak; try again and start talking right away.
+- **`ModuleNotFoundError: No module named 'distutils'`** — a known
+  incompatibility between older SpeechRecognition releases and
+  Python 3.12+ (which removed `distutils` entirely). Run
+  `pip install --upgrade SpeechRecognition` and try again.
 - **She responds but with no voice** — check the console for an
   `ElevenLabs TTS failed` line; that'll show the real error (usually a
   missing/wrong key in `.env`).
