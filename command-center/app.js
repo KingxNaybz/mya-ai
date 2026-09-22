@@ -1178,13 +1178,21 @@
       };
 
       recognition.onerror = (event) => {
+        console.error("Mya mic error:", event.error);
         if (event.error === "not-allowed" || event.error === "service-not-allowed") {
           micEnabled = false;
           localStorage.setItem("mya-mic-enabled", "off");
           setMicUI();
-          setVoiceStatus("Mic permission denied — allow microphone access to use always-listen.");
+          setVoiceStatus('Mic permission denied — click the icon left of the address bar, allow microphone access, then click 🎙 again.');
+        } else if (event.error === "audio-capture") {
+          micEnabled = false;
+          localStorage.setItem("mya-mic-enabled", "off");
+          setMicUI();
+          setVoiceStatus("No microphone found — check that one is connected and try again.");
+        } else if (event.error === "network") {
+          setVoiceStatus("Having trouble reaching the speech recognition service — check your internet connection.");
         }
-        /* other errors (no-speech, network, aborted): onend will retry */
+        /* other errors (no-speech, aborted): normal during continuous listening — onend will retry silently */
       };
 
       recognition.onend = () => {
@@ -1201,7 +1209,12 @@
         recognition.start();
         setVoiceStatus(awake ? "Yes? I'm listening…" : 'Listening for "Mya"…');
       } catch (e) {
-        /* recognition already running — ignore */
+        if (e && e.name === "InvalidStateError") return; // already running — harmless
+        console.error("Mya mic failed to start:", e);
+        micEnabled = false;
+        localStorage.setItem("mya-mic-enabled", "off");
+        setMicUI();
+        setVoiceStatus("Couldn't start the microphone — check Chrome's site permissions (click the icon left of the address bar) and try again.");
       }
     }
 
