@@ -76,6 +76,11 @@ const SAMPLE_DATA = {
     notesLoggedThisWeek: 19
   },
 
+  memoryFacts: [
+    { fact: "Sample Customer A prefers text messages over phone calls.", agoText: "2 days ago" },
+    { fact: "Sample Project #204 needs city permit renewal in March.", agoText: "5 days ago" }
+  ],
+
   connectedServices: [
     { name: "Phone Line",   detail: "Twilio",     connected: true },
     { name: "Database",     detail: "Supabase",   connected: true },

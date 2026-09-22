@@ -365,6 +365,30 @@
     if (addBtn) addBtn.disabled = !isLive;
   }
 
+  /* ---------------- Mya's Memory ---------------- */
+  function renderMemoryFacts(items, isLive) {
+    const container = document.getElementById("memory-facts-list");
+    container.innerHTML = "";
+    const list = items || SAMPLE_DATA.memoryFacts;
+
+    if (isLive && list.length === 0) {
+      container.innerHTML = `<div class="approval-empty">Nothing remembered yet — tell Mya "remember that..." to teach her something.</div>`;
+    } else {
+      list.forEach((f) => {
+        const row = el("div", "list-row");
+        row.innerHTML = `
+          <div class="list-row-main">
+            <span>${f.fact}</span>
+          </div>
+          <div class="list-row-side">${f.agoText || ""}</div>
+          ${isLive && f.id ? `<button type="button" class="list-row-remove" data-memory-id="${f.id}" title="Forget">✕</button>` : ""}
+        `;
+        container.appendChild(row);
+      });
+    }
+    setLiveBadge("memory-facts-list", Boolean(isLive));
+  }
+
   /* ---------------- Connected services ---------------- */
   function renderServices() {
     const container = document.getElementById("services-list");
@@ -533,6 +557,44 @@
     } catch (e) {
       /* silent fallback to sample data */
     }
+  }
+
+  /* ---------------- Memory facts (live) ---------------- */
+  async function loadMemoryFactsIfAvailable() {
+    if (location.protocol === "file:") return;
+    try {
+      const res = await fetch("/api/command-center-memory");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!Array.isArray(data.facts)) return;
+      renderMemoryFacts(
+        data.facts.map((f) => ({ id: f.id, fact: f.fact, agoText: formatRelative(f.created_at) })),
+        true
+      );
+    } catch (e) {
+      /* silent fallback to sample data */
+    }
+  }
+
+  function initMemoryPanel() {
+    document.getElementById("memory-facts-list").addEventListener("click", async (e) => {
+      const btn = e.target.closest("button[data-memory-id]");
+      if (!btn) return;
+      const id = btn.getAttribute("data-memory-id");
+      const row = btn.closest(".list-row");
+      const factText = row?.querySelector(".list-row-main span")?.textContent || "this";
+      if (!window.confirm(`Forget "${factText.trim()}"?`)) return;
+
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/command-center-memory?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+        if (!res.ok) throw new Error("Request failed");
+        row.remove();
+      } catch (err) {
+        btn.disabled = false;
+        window.alert("Couldn't forget that — try again.");
+      }
+    });
   }
 
   /* ---------------- Add / remove a contractor ---------------- */
@@ -908,6 +970,16 @@
         if (toolsUsed.includes("create_followup")) {
           loadFollowUpCountIfAvailable();
         }
+        if (toolsUsed.includes("remember_fact")) {
+          loadMemoryFactsIfAvailable();
+        }
+        if (toolsUsed.includes("undo_last_action")) {
+          // Undo can reverse any reversible skill — refresh everything it could have touched.
+          loadContractorsIfAvailable();
+          loadApprovalsIfAvailable();
+          loadFollowUpCountIfAvailable();
+          loadMemoryFactsIfAvailable();
+        }
       } catch (err) {
         pending.remove();
         addMessage("Couldn't reach Mya — check your connection and try again.", "mya error");
@@ -937,15 +1009,18 @@
   renderServices();
   renderDevices();
   renderContractors();
+  renderMemoryFacts();
   renderQuickActions();
   loadLiveDataIfAvailable();
   loadApprovalsIfAvailable();
   loadFollowUpCountIfAvailable();
   loadContractorsIfAvailable();
+  loadMemoryFactsIfAvailable();
   loadSettingsIfAvailable();
   initFollowUpModal();
   initSettingsModal();
   initContractorModal();
+  initMemoryPanel();
   initAskMya();
 
   document.getElementById("approvals-list").addEventListener("click", (e) => {

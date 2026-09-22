@@ -43,6 +43,7 @@ Rules:
 - After taking an action, confirm in one short sentence what you did.
 - If asked what you can do, what your capabilities are, or what you can't do yet, call list_capabilities rather than describing yourself from memory — that list is the real, current one.
 - If the user says "undo", "undo that", or asks to reverse the last thing you did, call undo_last_action. Don't guess which action they mean — that skill always reverses the single most recent reversible action.
+- If the user tells you to remember something, or shares a fact/preference/detail worth keeping for later ("remember that...", "the Rivers project needs..."), call remember_fact. If asked what you remember or know about something, call recall_memory rather than guessing.
 - Keep replies brief and conversational — this is read out loud / read at a glance on a dashboard, not a report.`;
 
 /**
@@ -329,6 +330,11 @@ const SKILLS: Skill[] = [
           if (error) undoError = error.message;
           break;
         }
+        case "remember_fact": {
+          const { error } = await supabase.from("mya_memory").delete().eq("id", undoData.id);
+          if (error) undoError = error.message;
+          break;
+        }
         default:
           undoError = `Don't know how to undo action type "${entry.action_type}".`;
       }
@@ -337,6 +343,42 @@ const SKILLS: Skill[] = [
 
       await supabase.from("mya_undo_log").update({ undone: true }).eq("id", entry.id);
       return { undone: true, reversed: entry.description };
+    },
+  },
+  {
+    name: "remember_fact",
+    description: "Store a fact for later recall — a preference, a detail about a project or contact, anything worth remembering. Use when the user says \"remember that...\" or shares something worth keeping.",
+    input_schema: {
+      type: "object",
+      properties: { fact: { type: "string", description: "The fact to remember, in plain language" } },
+      required: ["fact"],
+      additionalProperties: false,
+    },
+    execute: async (input) => {
+      const fact = String(input.fact || "").trim();
+      if (!fact) return { error: "fact is required" };
+      const { data, error } = await supabase.from("mya_memory").insert({ fact }).select("id,fact").single();
+      if (error) return { error: error.message };
+      if (data) {
+        await logUndo("remember_fact", { id: data.id }, `Remembered: ${data.fact}`);
+      }
+      return { remembered: data };
+    },
+  },
+  {
+    name: "recall_memory",
+    description: "Look up facts Mya has been told to remember, optionally filtered by keyword. Use when asked what you remember or know about something.",
+    input_schema: {
+      type: "object",
+      properties: { query: { type: "string", description: "Optional keyword to search for within remembered facts" } },
+      additionalProperties: false,
+    },
+    execute: async (input) => {
+      let query = supabase.from("mya_memory").select("id,fact,created_at").order("created_at", { ascending: false });
+      if (input.query) query = query.ilike("fact", `%${input.query}%`);
+      const { data, error } = await query.limit(20);
+      if (error) return { error: error.message };
+      return { facts: data || [] };
     },
   },
 ];
