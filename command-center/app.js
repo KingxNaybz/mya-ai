@@ -1164,8 +1164,12 @@
         if (!transcript) return;
 
         if (!awake) {
-          if (/\bmya\b/i.test(transcript)) {
-            const after = transcript.replace(/^.*\bmya\b[,:]?\s*/i, "").trim();
+          // Chrome's speech recognition often mishears "Mya" (not a common
+          // dictionary word) as a near-homophone — match those too, since a
+          // wake word that only matches its exact spelling barely works.
+          const WAKE_WORD = /\b(mya|maya|mia|nia)\b/i;
+          if (WAKE_WORD.test(transcript)) {
+            const after = transcript.replace(new RegExp(`^.*${WAKE_WORD.source}[,:]?\\s*`, "i"), "").trim();
             if (after) {
               wakeAndSend(after);
             } else {
