@@ -95,7 +95,7 @@
   function setLiveBadge(contentElId, isLive) {
     const content = document.getElementById(contentElId);
     if (!content) return;
-    const panel = content.closest(".panel");
+    const panel = content.closest(".panel, .modal-card");
     if (!panel) return;
     const badge = panel.querySelector(".sample-badge, .live-badge");
     if (!badge) return;
@@ -581,10 +581,35 @@
     XLSX.writeFile(wb, "Elevate-Construction-Caller-Directory.xlsx");
   }
 
-  function revealCallerDirectory() {
-    const panel = document.getElementById("caller-directory-panel");
-    if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
-    downloadCallerDirectoryXlsx();
+  // Lives in its own modal (opened from the "Company Contacts" nav item)
+  // rather than taking up permanent space on the dashboard itself.
+  function openCompanyContactsModal() {
+    const modal = document.getElementById("company-contacts-modal");
+    if (modal) modal.hidden = false;
+  }
+
+  function closeCompanyContactsModal() {
+    const modal = document.getElementById("company-contacts-modal");
+    if (modal) modal.hidden = true;
+  }
+
+  function initCompanyContactsModal() {
+    const modal = document.getElementById("company-contacts-modal");
+    const navItem = document.getElementById("nav-company-contacts");
+    const closeBtn = document.getElementById("company-contacts-modal-close");
+    if (!modal) return;
+
+    if (navItem) {
+      navItem.addEventListener("click", (e) => {
+        e.preventDefault();
+        openCompanyContactsModal();
+      });
+    }
+    if (closeBtn) closeBtn.addEventListener("click", closeCompanyContactsModal);
+    modal.addEventListener("click", (e) => { if (e.target === modal) closeCompanyContactsModal(); });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !modal.hidden) closeCompanyContactsModal();
+    });
   }
 
   const callerDirectoryDownloadBtn = document.getElementById("caller-directory-download-btn");
@@ -1213,7 +1238,7 @@
           loadLiveDataIfAvailable(); // refreshes Today's Schedule and Mya Working Now
         }
         if (toolsUsed.includes("open_contact_directory")) {
-          revealCallerDirectory(); // scrolls to the Caller Directory panel and downloads the spreadsheet
+          openCompanyContactsModal(); // opens the Company Contacts spreadsheet view
         }
         if (toolsUsed.includes("undo_last_action")) {
           // Undo can reverse any reversible skill — refresh everything it could have touched.
@@ -1573,6 +1598,7 @@
   initSettingsModal();
   initContractorModal();
   initMemoryPanel();
+  initCompanyContactsModal();
   initAskMya();
 
   document.getElementById("approvals-list").addEventListener("click", (e) => {

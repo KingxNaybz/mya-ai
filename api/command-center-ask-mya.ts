@@ -91,7 +91,7 @@ Rules:
 - New leads (list_leads), recent activity (list_recent_activity), and aggregate memory stats (get_memory_insights, different from your own remembered facts) are all real, live tools — use them rather than only citing the count from get_dashboard_summary.
 - Today's Schedule is real: use create_appointment for a site visit/walkthrough/meeting at a specific date+time, and list_schedule to see today's appointments plus any project whose next action is due today (set via update_project's nextActionDue).
 - get_recent_actions and get_services_status are also real, live tools now, matching the "Mya Working Now" and "Connected Services" dashboard panels. get_services_status checks whether each integration is configured, not whether it's live-reachable right now — say so if asked to be precise.
-- After every real phone call ends, it's automatically sorted into the Caller Directory (a separate list from "New Leads") as a lead, existing client, vendor, contractor, subcontractor, general contractor, bill collector, job applicant, wrong number/spam, or uncategorized. Bill collectors get flagged there but nothing is actually blocked yet — that's a manual step the owner does himself, later. Use list_caller_directory to answer questions about who's called (optionally filtered by category), and call open_contact_directory when asked to "pull up the contact spreadsheet" or similar — the dashboard itself handles showing it and offering the Excel download.
+- After every real phone call ends, it's automatically sorted into Company Contacts (a separate list from "New Leads," opened from its own nav item, not shown inline on the dashboard) as a lead, existing client, vendor, contractor, subcontractor, general contractor, bill collector, job applicant, wrong number/spam, or uncategorized. Bill collectors get flagged there but nothing is actually blocked yet — that's a manual step the owner does himself, later. Use list_caller_directory to answer questions about who's called (optionally filtered by category), and call open_contact_directory when asked to "pull up the contact spreadsheet," "show me company contacts," or similar — the dashboard itself handles opening that view and offering the Excel download.
 - Devices is the one dashboard panel still placeholder sample data with no tool behind it. If asked about it, say plainly you don't have that connected yet — never invent a plausible-sounding status to sound complete.`;
 
 /**
@@ -273,7 +273,7 @@ const SKILLS: Skill[] = [
   },
   {
     name: "list_caller_directory",
-    description: "List callers Mya has automatically classified after their call ended — leads, existing clients, vendors, contractors, subcontractors, general contractors, bill collectors, job applicants, wrong numbers/spam, etc. Optionally filter by category. Same data the 'Caller Directory' dashboard panel shows. Bill collectors are flagged for blocking here but nothing is actually blocked yet — that's a manual step the owner does separately.",
+    description: "List callers Mya has automatically classified after their call ended — leads, existing clients, vendors, contractors, subcontractors, general contractors, bill collectors, job applicants, wrong numbers/spam, etc. Optionally filter by category. Same data the 'Company Contacts' view shows. Bill collectors are flagged for blocking here but nothing is actually blocked yet — that's a manual step the owner does separately.",
     input_schema: {
       type: "object",
       properties: {
@@ -297,7 +297,7 @@ const SKILLS: Skill[] = [
   },
   {
     name: "open_contact_directory",
-    description: "Open/pull up the Caller Directory spreadsheet view in the dashboard — use this when asked to 'pull up the contact spreadsheet', 'show me the caller directory', 'open the contacts list', or similar. The dashboard itself handles actually displaying it and offering the Excel download; this just signals that intent.",
+    description: "Open/pull up the Company Contacts spreadsheet view in the dashboard — use this when asked to 'pull up the contact spreadsheet', 'show me company contacts', 'open the contacts list', or similar. The dashboard itself handles actually displaying it and offering the Excel download; this just signals that intent.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
     execute: async () => ({ opened: true }),
   },

@@ -435,13 +435,13 @@ button{ font-family: inherit; cursor: pointer; }
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 18px;
-  align-items: start;
+  align-items: stretch;
 }
 .quad-row{
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 18px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .list-block{ display: flex; flex-direction: column; gap: 10px; }
@@ -1020,9 +1020,18 @@ button{ font-family: inherit; cursor: pointer; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   margin-bottom: 16px;
 }
-.modal-header h3{ margin: 0; font-size: 17px; color: var(--text-hi); }
+.modal-header h3{ margin: 0; font-size: 17px; color: var(--text-hi); flex: 1; }
+
+.modal-card-wide{
+  max-width: 960px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+.modal-card-wide .list-block-scroll{ max-height: none; overflow-y: auto; flex: 1; }
 .modal-close{
   background: transparent;
   border: none;

@@ -22,6 +22,7 @@
       <a href="#" class="nav-item active"><span class="nav-icon">◆</span> Command Center</a>
       <a href="#" class="nav-item"><span class="nav-icon">☎</span> Calls</a>
       <a href="#" class="nav-item"><span class="nav-icon">✦</span> Leads</a>
+      <a href="#" class="nav-item" id="nav-company-contacts"><span class="nav-icon">📇</span> Company Contacts</a>
       <a href="#" class="nav-item"><span class="nav-icon">↻</span> Follow-Ups</a>
       <a href="#" class="nav-item"><span class="nav-icon">▣</span> Projects</a>
       <a href="#" class="nav-item"><span class="nav-icon">✓</span> Approvals</a>
@@ -133,19 +134,6 @@
         </div>
         <ul class="working-list" id="working-list"></ul>
       </div>
-    </section>
-
-    <!-- Caller Directory -->
-    <section class="panel" id="caller-directory-panel">
-      <div class="panel-header">
-        <h2>Caller Directory</h2>
-        <span class="sample-badge">SAMPLE DATA</span>
-        <span class="panel-add-wrap">
-          <button type="button" class="panel-add-btn" id="caller-directory-download-btn">⬇ Download Spreadsheet</button>
-        </span>
-      </div>
-      <div class="directory-tabs" id="caller-directory-tabs"></div>
-      <div class="list-block list-block-scroll" id="caller-directory-list"></div>
     </section>
 
     <!-- Contractors & Sub-Contractors -->
@@ -260,6 +248,22 @@
   <span class="safety-mode"><span class="dot dot-online"></span> Mya is ready. &nbsp;·&nbsp; 🔒 Safety Mode: Computer Access OFF</span>
   <span class="tagline">Elevate Construction &nbsp;—&nbsp; <span id="footer-tagline-text">Building Excellence. Elevating Standards.</span></span>
 </footer>
+
+<!-- ============ COMPANY CONTACTS MODAL ============ -->
+<div class="modal-overlay" id="company-contacts-modal" hidden>
+  <div class="modal-card modal-card-wide">
+    <div class="modal-header">
+      <h3>Company Contacts</h3>
+      <span class="sample-badge">SAMPLE DATA</span>
+      <span class="panel-add-wrap">
+        <button type="button" class="panel-add-btn" id="caller-directory-download-btn">⬇ Download Spreadsheet</button>
+      </span>
+      <button type="button" class="modal-close" id="company-contacts-modal-close">✕</button>
+    </div>
+    <div class="directory-tabs" id="caller-directory-tabs"></div>
+    <div class="list-block list-block-scroll" id="caller-directory-list"></div>
+  </div>
+</div>
 
 <!-- ============ CREATE FOLLOW-UP MODAL ============ -->
 <div class="modal-overlay" id="followup-modal" hidden>
