@@ -297,7 +297,18 @@ button{ font-family: inherit; cursor: pointer; }
   width: 116px;
   height: 116px;
   flex-shrink: 0;
+  cursor: pointer;
 }
+.mya-orb:focus-visible{ outline: 2px solid var(--accent-bright); outline-offset: 6px; border-radius: 50%; }
+
+.mya-orb.is-listening .mya-orb-ring{ border-color: rgba(52,199,89,0.65); }
+.mya-orb.is-listening .mya-orb-glow{ background: radial-gradient(circle, rgba(52,199,89,0.45), transparent 70%); }
+
+.mya-orb.is-speaking .mya-orb-core{ animation: orbSpeakCore 0.5s ease-in-out infinite; }
+.mya-orb.is-speaking .mya-orb-glow{ animation: orbSpeakGlow 0.5s ease-in-out infinite; }
+.mya-orb.is-speaking .mya-orb-ring{ animation-duration: 1.2s; }
+@keyframes orbSpeakCore{ 0%,100%{ transform: scale(1); filter: brightness(1); } 50%{ transform: scale(1.13); filter: brightness(1.3); } }
+@keyframes orbSpeakGlow{ 0%,100%{ opacity: 0.6; } 50%{ opacity: 1; } }
 
 .mya-orb-glow{
   position: absolute;

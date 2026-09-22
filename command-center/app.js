@@ -1075,6 +1075,13 @@
       if (!voiceEnabled && currentAudio) currentAudio.pause();
     });
 
+    const myaOrb = document.getElementById("mya-orb");
+
+    function stopSpeakingAnimation() {
+      if (myaOrb) myaOrb.classList.remove("is-speaking");
+      resumeWakeListeningIfEnabled();
+    }
+
     function playReplyAudio(audioBase64) {
       if (!audioBase64 || !voiceEnabled) return;
       try {
@@ -1084,11 +1091,12 @@
         }
         currentAudio = new Audio(`data:audio/mpeg;base64,${audioBase64}`);
         pauseWakeListening();
-        currentAudio.addEventListener("ended", resumeWakeListeningIfEnabled);
-        currentAudio.addEventListener("error", resumeWakeListeningIfEnabled);
-        currentAudio.play().catch(() => resumeWakeListeningIfEnabled());
+        if (myaOrb) myaOrb.classList.add("is-speaking");
+        currentAudio.addEventListener("ended", stopSpeakingAnimation);
+        currentAudio.addEventListener("error", stopSpeakingAnimation);
+        currentAudio.play().catch(() => stopSpeakingAnimation());
       } catch (e) {
-        resumeWakeListeningIfEnabled();
+        stopSpeakingAnimation();
       }
     }
 
@@ -1110,11 +1118,16 @@
       if (!SpeechRecognitionCtor) {
         micBtn.disabled = true;
         micBtn.title = "Voice input isn't supported in this browser — try Chrome or Edge.";
+        if (myaOrb) myaOrb.title = "Voice input isn't supported in this browser — try Chrome or Edge.";
         return;
       }
       micBtn.classList.toggle("is-on", micEnabled);
       micBtn.classList.toggle("is-listening", micEnabled && !awake);
       micBtn.title = micEnabled ? 'Always listening for "Mya" — click to turn off' : 'Click to always listen for "Mya"';
+      if (myaOrb) {
+        myaOrb.classList.toggle("is-listening", micEnabled && !awake);
+        myaOrb.title = micEnabled ? 'Always listening for "Mya" — click to turn off' : 'Click, then say "Mya" to talk to her';
+      }
     }
 
     function pauseWakeListening() {
@@ -1222,7 +1235,7 @@
       }
     }
 
-    micBtn.addEventListener("click", () => {
+    function toggleMicListening() {
       if (!SpeechRecognitionCtor) return;
       micEnabled = !micEnabled;
       localStorage.setItem("mya-mic-enabled", micEnabled ? "on" : "off");
@@ -1238,7 +1251,21 @@
         }
         setVoiceStatus("");
       }
-    });
+    }
+
+    micBtn.addEventListener("click", toggleMicListening);
+
+    // The orb is a second way to reach the exact same always-listen mic —
+    // same state, same wake word, not a separate feature to keep in sync.
+    if (myaOrb) {
+      myaOrb.addEventListener("click", toggleMicListening);
+      myaOrb.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          toggleMicListening();
+        }
+      });
+    }
 
     setMicUI();
     if (micEnabled) startRecognition();
