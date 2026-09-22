@@ -52,6 +52,15 @@
     return node;
   }
 
+  // Caller-supplied text (names/emails/etc. said out loud on real calls)
+  // ends up in innerHTML for the Caller Directory below — escape it so a
+  // caller can never inject markup into the dashboard.
+  function escapeHtmlText(text) {
+    const div = document.createElement("div");
+    div.textContent = text == null ? "" : String(text);
+    return div.innerHTML;
+  }
+
   function sparklinePath(values, width, height) {
     const max = Math.max(...values);
     const min = Math.min(...values);
@@ -442,6 +451,147 @@
     setLiveBadge("services-list", Boolean(isLive));
   }
 
+  /* ---------------- Caller Directory ---------------- */
+  const CALLER_CATEGORY_LABELS = {
+    lead: "Leads",
+    existing_client: "Existing Clients",
+    vendor: "Vendors",
+    contractor: "Contractors",
+    subcontractor: "Subcontractors",
+    general_contractor: "General Contractors",
+    bill_collector: "Bill Collectors",
+    job_applicant: "Job Applicants",
+    wrong_number_or_spam: "Wrong Number / Spam",
+    uncategorized: "Uncategorized",
+  };
+
+  let callerDirectoryData = [];
+  let callerDirectoryActiveTab = "all";
+
+  function callerDirectoryLabel(category) {
+    return CALLER_CATEGORY_LABELS[category] || "Uncategorized";
+  }
+
+  function renderCallerDirectoryTabs() {
+    const tabsEl = document.getElementById("caller-directory-tabs");
+    if (!tabsEl) return;
+    const present = new Set(callerDirectoryData.map((c) => c.category || "uncategorized"));
+    const categories = Object.keys(CALLER_CATEGORY_LABELS).filter((c) => present.has(c));
+    tabsEl.innerHTML = "";
+
+    const makeTab = (key, label, count) => {
+      const btn = el("button", "directory-tab" + (callerDirectoryActiveTab === key ? " active" : ""));
+      btn.type = "button";
+      btn.textContent = count === null ? label : `${label} (${count})`;
+      btn.addEventListener("click", () => {
+        callerDirectoryActiveTab = key;
+        renderCallerDirectoryTabs();
+        renderCallerDirectoryRows();
+      });
+      tabsEl.appendChild(btn);
+    };
+
+    makeTab("all", "All", callerDirectoryData.length);
+    categories.forEach((c) => {
+      const count = callerDirectoryData.filter((row) => (row.category || "uncategorized") === c).length;
+      makeTab(c, callerDirectoryLabel(c), count);
+    });
+  }
+
+  function renderCallerDirectoryRows() {
+    const container = document.getElementById("caller-directory-list");
+    if (!container) return;
+    container.innerHTML = "";
+
+    const rows = callerDirectoryActiveTab === "all"
+      ? callerDirectoryData
+      : callerDirectoryData.filter((row) => (row.category || "uncategorized") === callerDirectoryActiveTab);
+
+    if (rows.length === 0) {
+      container.innerHTML = '<div class="directory-empty">No calls classified yet — this fills in automatically as calls come in.</div>';
+      return;
+    }
+
+    rows.forEach((row) => {
+      const item = el("div", "directory-row");
+      const tagClass = row.flagForBlock ? "directory-category-tag flagged" : "directory-category-tag";
+      item.innerHTML = `
+        <div class="directory-cell"><strong>${escapeHtmlText(row.name || "Unknown")}</strong>${row.company ? `<span>${escapeHtmlText(row.company)}</span>` : ""}</div>
+        <div class="directory-cell${row.phone ? "" : " directory-muted"}">${escapeHtmlText(row.phone || "—")}</div>
+        <div class="directory-cell${row.email ? "" : " directory-muted"}">${escapeHtmlText(row.email || "—")}</div>
+        <div class="directory-cell${row.website ? "" : " directory-muted"}">${escapeHtmlText(row.website || "—")}</div>
+        <div class="directory-cell"><span class="${tagClass}">${escapeHtmlText(callerDirectoryLabel(row.category))}${row.flagForBlock ? " 🚫" : ""}</span></div>
+      `;
+      container.appendChild(item);
+    });
+  }
+
+  function renderCallerDirectory(items, isLive) {
+    callerDirectoryData = Array.isArray(items) ? items : [];
+    callerDirectoryActiveTab = "all";
+    renderCallerDirectoryTabs();
+    renderCallerDirectoryRows();
+    setLiveBadge("caller-directory-list", Boolean(isLive));
+  }
+
+  // Builds a real multi-tab .xlsx (one sheet per category) client-side via
+  // the SheetJS library loaded in index.html — no backend involved, so this
+  // always exports whatever's currently loaded in the dashboard.
+  function downloadCallerDirectoryXlsx() {
+    if (typeof XLSX === "undefined") {
+      alert("Spreadsheet export isn't available right now — try refreshing the page.");
+      return;
+    }
+    if (callerDirectoryData.length === 0) {
+      alert("No classified callers yet — nothing to export.");
+      return;
+    }
+
+    const wb = XLSX.utils.book_new();
+    const usedSheetNames = new Set();
+
+    const toSheetRows = (rows) =>
+      rows.map((r) => ({
+        Name: r.name || "",
+        Phone: r.phone || "",
+        Email: r.email || "",
+        Website: r.website || "",
+        Company: r.company || "",
+        Category: callerDirectoryLabel(r.category),
+        "Flagged For Block": r.flagForBlock ? "Yes" : "",
+        Notes: r.reasoning || "",
+        "Call Date": r.createdAt ? new Date(r.createdAt).toLocaleString("en-US") : "",
+      }));
+
+    const allSheet = XLSX.utils.json_to_sheet(toSheetRows(callerDirectoryData));
+    XLSX.utils.book_append_sheet(wb, allSheet, "All Contacts");
+    usedSheetNames.add("All Contacts");
+
+    Object.keys(CALLER_CATEGORY_LABELS).forEach((category) => {
+      const rows = callerDirectoryData.filter((r) => (r.category || "uncategorized") === category);
+      if (rows.length === 0) return;
+      // Excel sheet names: max 31 chars, no \ / ? * [ ] :
+      let name = CALLER_CATEGORY_LABELS[category].replace(/[\\/?*[\]:]/g, "").slice(0, 31);
+      while (usedSheetNames.has(name)) name = `${name.slice(0, 28)}_2`;
+      usedSheetNames.add(name);
+      const sheet = XLSX.utils.json_to_sheet(toSheetRows(rows));
+      XLSX.utils.book_append_sheet(wb, sheet, name);
+    });
+
+    XLSX.writeFile(wb, "Elevate-Construction-Caller-Directory.xlsx");
+  }
+
+  function revealCallerDirectory() {
+    const panel = document.getElementById("caller-directory-panel");
+    if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    downloadCallerDirectoryXlsx();
+  }
+
+  const callerDirectoryDownloadBtn = document.getElementById("caller-directory-download-btn");
+  if (callerDirectoryDownloadBtn) {
+    callerDirectoryDownloadBtn.addEventListener("click", downloadCallerDirectoryXlsx);
+  }
+
   /* ---------------- Devices ---------------- */
   function renderDevices() {
     const container = document.getElementById("devices-list");
@@ -551,6 +701,10 @@
 
       if (Array.isArray(data.services)) {
         renderServices(data.services, true);
+      }
+
+      if (Array.isArray(data.callerDirectory)) {
+        renderCallerDirectory(data.callerDirectory, true);
       }
     } catch (e) {
       /* silent fallback to sample data — no error UI, nothing required */
@@ -1058,6 +1212,9 @@
         if (toolsUsed.includes("create_appointment")) {
           loadLiveDataIfAvailable(); // refreshes Today's Schedule and Mya Working Now
         }
+        if (toolsUsed.includes("open_contact_directory")) {
+          revealCallerDirectory(); // scrolls to the Caller Directory panel and downloads the spreadsheet
+        }
         if (toolsUsed.includes("undo_last_action")) {
           // Undo can reverse any reversible skill — refresh everything it could have touched.
           loadContractorsIfAvailable();
@@ -1400,6 +1557,7 @@
   renderProjects();
   renderMemory();
   renderServices();
+  renderCallerDirectory();
   renderDevices();
   renderContractors();
   renderMemoryFacts();

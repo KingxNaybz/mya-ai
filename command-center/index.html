@@ -135,6 +135,19 @@
       </div>
     </section>
 
+    <!-- Caller Directory -->
+    <section class="panel" id="caller-directory-panel">
+      <div class="panel-header">
+        <h2>Caller Directory</h2>
+        <span class="sample-badge">SAMPLE DATA</span>
+        <span class="panel-add-wrap">
+          <button type="button" class="panel-add-btn" id="caller-directory-download-btn">⬇ Download Spreadsheet</button>
+        </span>
+      </div>
+      <div class="directory-tabs" id="caller-directory-tabs"></div>
+      <div class="list-block list-block-scroll" id="caller-directory-list"></div>
+    </section>
+
     <!-- Contractors & Sub-Contractors -->
     <section class="panel">
       <div class="panel-header">
@@ -351,6 +364,8 @@
   </div>
 </div>
 
+<!-- Generates real multi-tab .xlsx files client-side for the Caller Directory download — no backend, no build step. -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="sample-data.js"></script>
 <script src="app.js"></script>
 </body>
