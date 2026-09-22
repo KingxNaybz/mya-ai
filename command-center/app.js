@@ -994,6 +994,24 @@
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") send();
     });
+
+    /* Proactive check-ins: Mya notices something without being asked
+       (a stale approval, an overdue follow-up) and mentions it here as
+       soon as the dashboard loads — a deterministic check, not an LLM
+       call, so it's instant and never hallucinates. */
+    async function checkProactiveAlerts() {
+      if (location.protocol === "file:") return;
+      try {
+        const res = await fetch("/api/command-center-proactive");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!Array.isArray(data.alerts)) return;
+        data.alerts.forEach((a) => addMessage(a.message, "mya proactive"));
+      } catch (e) {
+        /* silent — proactive check-ins are a nice-to-have, never block the page */
+      }
+    }
+    checkProactiveAlerts();
   }
 
   /* ---------------- Init ---------------- */

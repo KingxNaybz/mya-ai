@@ -743,6 +743,8 @@ button{ font-family: inherit; cursor: pointer; }
 }
 .ask-msg-mya.pending{ color: var(--text-low); font-style: italic; }
 .ask-msg-mya.error{ color: #ff5a5a; }
+.ask-msg-mya.proactive{ background: rgba(255,184,77,0.14); border-color: rgba(255,184,77,0.4); }
+.ask-msg-mya.proactive::before{ content: "\26A0  "; opacity: 0.8; }
 
 .ask-mya-chips{ display: flex; gap: 8px; flex-wrap: wrap; }
 .chip{
