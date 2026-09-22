@@ -100,6 +100,21 @@ function isRealLead(phone: string | null | undefined, categoryByPhone: Map<strin
   return !category || !NOT_A_REAL_LEAD_CATEGORIES.has(category);
 }
 
+// Every category Company Contacts sorts a caller into. Duplicated from
+// mya-call-ended.ts on purpose, same reason as getServicesStatus above.
+const CALLER_CATEGORIES = [
+  "lead",
+  "existing_client",
+  "vendor",
+  "contractor",
+  "subcontractor",
+  "general_contractor",
+  "bill_collector",
+  "job_applicant",
+  "wrong_number_or_spam",
+  "uncategorized",
+];
+
 async function getCategoryByPhoneMap(): Promise<Map<string, string>> {
   const { data } = await supabase
     .from("mya_caller_classifications")
@@ -127,7 +142,7 @@ Rules:
 - New leads (list_leads), recent activity (list_recent_activity), and aggregate memory stats (get_memory_insights, different from your own remembered facts) are all real, live tools — use them rather than only citing the count from get_dashboard_summary. "New Leads" only counts real prospective customers — vendors, bill collectors, job applicants, and other non-leads are filtered out and show up in Company Contacts instead.
 - Today's Schedule is real: use create_appointment for a site visit/walkthrough/meeting at a specific date+time, and list_schedule to see today's appointments plus any project whose next action is due today (set via update_project's nextActionDue).
 - get_recent_actions and get_services_status are also real, live tools now, matching the "Mya Working Now" and "Connected Services" dashboard panels. get_services_status checks whether each integration is configured, not whether it's live-reachable right now — say so if asked to be precise.
-- After every real phone call ends, it's automatically sorted into Company Contacts (a separate list from "New Leads," opened from its own nav item, not shown inline on the dashboard) as a lead, existing client, vendor, contractor, subcontractor, general contractor, bill collector, job applicant, wrong number/spam, or uncategorized. Bill collectors get flagged there but nothing is actually blocked yet — that's a manual step the owner does himself, later. Use list_caller_directory to answer questions about who's called (optionally filtered by category), and call open_contact_directory when asked to "pull up the contact spreadsheet," "show me company contacts," or similar — the dashboard itself handles opening that view and offering the Excel download.
+- After every real phone call ends, it's automatically sorted into Company Contacts (a separate list from "New Leads," opened from its own nav item, not shown inline on the dashboard) as a lead, existing client, vendor, contractor, subcontractor, general contractor, bill collector, job applicant, wrong number/spam, or uncategorized. Bill collectors get flagged there but nothing is actually blocked yet — that's a manual step the owner does himself, later. Use list_caller_directory to answer questions about who's called (optionally filtered by category), and call open_contact_directory when asked to "pull up the contact spreadsheet," "show me company contacts," or similar — the dashboard itself handles opening that view and offering the Excel download. If told a caller was sorted into the wrong category, call reclassify_caller — same disambiguation rule as everything else: if the name/phone matches more than one caller, list them and ask which one instead of guessing.
 - Devices is the one dashboard panel still placeholder sample data with no tool behind it. If asked about it, say plainly you don't have that connected yet — never invent a plausible-sounding status to sound complete.`;
 
 /**
@@ -342,6 +357,58 @@ const SKILLS: Skill[] = [
     description: "Open/pull up the Company Contacts spreadsheet view in the dashboard — use this when asked to 'pull up the contact spreadsheet', 'show me company contacts', 'open the contacts list', or similar. The dashboard itself handles actually displaying it and offering the Excel download; this just signals that intent.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
     execute: async () => ({ opened: true }),
+  },
+  {
+    name: "reclassify_caller",
+    description: "Manually correct which Company Contacts category a caller was sorted into — use this when told a caller was misclassified (e.g. \"move John Smith to vendors\" or \"that wasn't a bill collector, that was a real lead\"). Look up by name or phone; if more than one caller matches, list the matches and ask which one rather than guessing.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The caller's name or phone number to find." },
+        category: {
+          type: "string",
+          description: "The correct category to move them to.",
+          enum: CALLER_CATEGORIES,
+        },
+      },
+      required: ["query", "category"],
+      additionalProperties: false,
+    },
+    execute: async (input) => {
+      const query = String(input.query || "").trim();
+      const category = String(input.category || "").trim();
+      if (!query) return { error: "Need a name or phone number to look up." };
+      if (!CALLER_CATEGORIES.includes(category)) return { error: `Unknown category "${category}".` };
+
+      const { data: matches, error } = await supabase
+        .from("mya_caller_classifications")
+        .select("id,name,phone,category")
+        .or(`name.ilike.%${query}%,phone.ilike.%${query}%`);
+      if (error) return { error: error.message };
+      if (!matches || matches.length === 0) return { error: `No caller found matching "${query}".` };
+      if (matches.length > 1) {
+        return { matches: matches.map((m: any) => ({ id: m.id, name: m.name, phone: m.phone, category: m.category })) };
+      }
+
+      const match = matches[0] as any;
+      const previousCategory = match.category;
+      const previousFlagForBlock = previousCategory === "bill_collector";
+      const flagForBlock = category === "bill_collector";
+
+      const { error: updateErr } = await supabase
+        .from("mya_caller_classifications")
+        .update({ category, flag_for_block: flagForBlock })
+        .eq("id", match.id);
+      if (updateErr) return { error: updateErr.message };
+
+      await logUndo(
+        "reclassify_caller",
+        { id: match.id, previousCategory, previousFlagForBlock },
+        `Reclassified ${match.name || match.phone || "a caller"} from ${previousCategory} to ${category}`
+      );
+
+      return { reclassified: true, name: match.name || null, phone: match.phone || null, from: previousCategory, to: category };
+    },
   },
   {
     name: "list_contractors",
@@ -585,6 +652,14 @@ const SKILLS: Skill[] = [
         }
         case "create_appointment": {
           const { error } = await supabase.from("mya_appointments").delete().eq("id", undoData.id);
+          if (error) undoError = error.message;
+          break;
+        }
+        case "reclassify_caller": {
+          const { error } = await supabase
+            .from("mya_caller_classifications")
+            .update({ category: undoData.previousCategory, flag_for_block: undoData.previousFlagForBlock })
+            .eq("id", undoData.id);
           if (error) undoError = error.message;
           break;
         }
@@ -1254,6 +1329,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  // Fast path for the dashboard's own UI controls (the Company Contacts
+  // category dropdown) that already know exactly which tool to call —
+  // skips Claude entirely so a plain UI action doesn't cost a wasted API
+  // call or need ANTHROPIC_API_KEY at all. Chat/voice always goes through
+  // Claude below. Allowlisted to the one tool meant for direct UI use.
+  const DIRECT_TOOL_ALLOWLIST = new Set(["reclassify_caller", "undo_last_action"]);
+  const directTool = (req.body || {}).directTool;
+  if (typeof directTool === "string") {
+    if (!DIRECT_TOOL_ALLOWLIST.has(directTool)) {
+      return res.status(400).json({ error: `"${directTool}" isn't available as a direct action.` });
+    }
+    const { result } = await executeTool(directTool, (req.body || {}).input || {});
+    return res.status(200).json({ result });
   }
 
   if (!ANTHROPIC_API_KEY) {

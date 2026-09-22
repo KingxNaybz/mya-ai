@@ -519,7 +519,7 @@ button{ font-family: inherit; cursor: pointer; }
 .directory-empty{ font-size: 12.5px; color: var(--text-low); padding: 10px 2px; }
 .directory-row{
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1.3fr 1fr 0.9fr;
+  grid-template-columns: 1.2fr 1fr 1.3fr 1fr 1.2fr;
   gap: 10px;
   align-items: center;
   padding: 11px 13px;
@@ -542,6 +542,22 @@ button{ font-family: inherit; cursor: pointer; }
   white-space: nowrap;
 }
 .directory-category-tag.flagged{
+  background: rgba(255, 90, 90, 0.18);
+  color: #ff8a8a;
+}
+.directory-category-select{
+  width: 100%;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: rgba(47,178,255,0.14);
+  border: 1px solid var(--card-border);
+  color: var(--accent-on-light);
+  cursor: pointer;
+}
+.directory-category-select:disabled{ opacity: 0.5; cursor: default; }
+.directory-category-select.flagged{
   background: rgba(255, 90, 90, 0.18);
   color: #ff8a8a;
 }

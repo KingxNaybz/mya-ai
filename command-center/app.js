@@ -514,16 +514,65 @@
 
     rows.forEach((row) => {
       const item = el("div", "directory-row");
-      const tagClass = row.flagForBlock ? "directory-category-tag flagged" : "directory-category-tag";
+      const canReclassify = Boolean(row.phone || row.name);
+      const selectId = `dir-cat-${Math.random().toString(36).slice(2)}`;
+      const options = Object.keys(CALLER_CATEGORY_LABELS)
+        .map((key) => `<option value="${key}"${key === (row.category || "uncategorized") ? " selected" : ""}>${escapeHtmlText(CALLER_CATEGORY_LABELS[key])}</option>`)
+        .join("");
       item.innerHTML = `
         <div class="directory-cell"><strong>${escapeHtmlText(row.name || "Unknown")}</strong>${row.company ? `<span>${escapeHtmlText(row.company)}</span>` : ""}</div>
         <div class="directory-cell${row.phone ? "" : " directory-muted"}">${escapeHtmlText(row.phone || "—")}</div>
         <div class="directory-cell${row.email ? "" : " directory-muted"}">${escapeHtmlText(row.email || "—")}</div>
         <div class="directory-cell${row.website ? "" : " directory-muted"}">${escapeHtmlText(row.website || "—")}</div>
-        <div class="directory-cell"><span class="${tagClass}">${escapeHtmlText(callerDirectoryLabel(row.category))}${row.flagForBlock ? " 🚫" : ""}</span></div>
+        <div class="directory-cell">
+          <select class="directory-category-select${row.flagForBlock ? " flagged" : ""}" id="${selectId}" ${canReclassify ? "" : "disabled"} title="${canReclassify ? "Move to a different category" : "Missing name/phone — can't identify this caller to reclassify"}">
+            ${options}
+          </select>
+        </div>
       `;
+      const select = item.querySelector("select");
+      if (canReclassify) {
+        select.addEventListener("change", () => reclassifyCallerRow(row, select.value, select));
+      }
       container.appendChild(item);
     });
+  }
+
+  // Lets the owner correct a misclassified caller straight from the
+  // dropdown, without needing to ask Mya — uses the same reclassify_caller
+  // skill Mya uses when told in chat/voice, via a direct (non-Claude) call
+  // so a plain dropdown change doesn't cost an AI request.
+  async function reclassifyCallerRow(row, newCategory, selectEl) {
+    const previousCategory = row.category;
+    selectEl.disabled = true;
+    try {
+      const res = await fetch("/api/command-center-ask-mya", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          directTool: "reclassify_caller",
+          input: { query: row.phone || row.name, category: newCategory },
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.result || data.result.error || data.result.matches) {
+        alert(
+          (data.result && data.result.error) ||
+          (data.result && data.result.matches ? "More than one caller matched — ask Mya to reclassify by name instead so you can pick." : "Couldn't reclassify that caller — try again.")
+        );
+        renderCallerDirectoryRows(); // revert the dropdown to the real current value
+        return;
+      }
+      row.category = newCategory;
+      row.flagForBlock = newCategory === "bill_collector";
+      renderCallerDirectoryTabs();
+      renderCallerDirectoryRows();
+    } catch (e) {
+      alert("Couldn't reach the dashboard to reclassify that caller — check your connection and try again.");
+      renderCallerDirectoryRows();
+    } finally {
+      selectEl.disabled = false;
+    }
   }
 
   function renderCallerDirectory(items, isLive) {
