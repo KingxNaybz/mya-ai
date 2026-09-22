@@ -1079,7 +1079,14 @@
 
     function stopSpeakingAnimation() {
       if (myaOrb) myaOrb.classList.remove("is-speaking");
-      resumeWakeListeningIfEnabled();
+      pausedForPlayback = false;
+      if (!micEnabled) return;
+      // She just finished replying — stay in "listening for your answer"
+      // mode for a few seconds instead of requiring the wake word again,
+      // so answering a question she just asked works like a real
+      // back-and-forth conversation, not a fresh command each time.
+      enterAwakeMode();
+      startRecognition();
     }
 
     function playReplyAudio(audioBase64) {
@@ -1136,11 +1143,6 @@
         intentionalStop = true;
         try { recognition.stop(); } catch (e) { /* ignore */ }
       }
-    }
-
-    function resumeWakeListeningIfEnabled() {
-      pausedForPlayback = false;
-      if (micEnabled) startRecognition();
     }
 
     function enterAwakeMode() {
