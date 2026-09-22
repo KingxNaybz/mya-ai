@@ -170,9 +170,10 @@
       <div class="ask-mya-input-wrap">
         <input type="text" id="ask-mya-input" placeholder="Type a message or give a command…">
         <button class="ask-send" type="button" id="ask-mya-send">➤</button>
-        <button class="ask-mic" type="button" disabled>🎙</button>
-        <span class="tooltip">Voice input isn't connected yet.</span>
+        <button class="ask-voice-toggle" type="button" id="ask-mya-voice-toggle" title="Mya speaks her replies out loud">🔊</button>
+        <button class="ask-mic" type="button" id="ask-mya-mic" title="Always listen for &quot;Mya&quot;">🎙</button>
       </div>
+      <div class="ask-mya-status" id="ask-mya-voice-status" hidden></div>
       <div class="ask-mya-chips">
         <button class="chip" type="button" disabled>What's going on today?</button>
         <button class="chip" type="button" disabled>Follow up with last week's estimates</button>

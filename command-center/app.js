@@ -986,7 +986,7 @@
         const res = await fetch("/api/command-center-ask-mya", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message }),
+          body: JSON.stringify({ message, voice: voiceEnabled }),
         });
         const data = await res.json().catch(() => ({}));
 
@@ -998,6 +998,7 @@
         }
 
         addMessage(data.reply || "Done.", "mya");
+        playReplyAudio(data.audioBase64);
 
         const toolsUsed = Array.isArray(data.toolsUsed) ? data.toolsUsed : [];
         if (toolsUsed.includes("add_contractor") || toolsUsed.includes("remove_contractor")) {
@@ -1037,6 +1038,193 @@
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") send();
     });
+
+    /* ---- Voice replies (ElevenLabs, matches the phone system's voice) ----
+       Backend only returns audio when we ask for it (voice:true) and both
+       ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID are set server-side — if
+       either is missing, audioBase64 is just null and nothing plays. */
+    const voiceToggleBtn = document.getElementById("ask-mya-voice-toggle");
+    const micBtn = document.getElementById("ask-mya-mic");
+    const voiceStatusEl = document.getElementById("ask-mya-voice-status");
+    let voiceEnabled = localStorage.getItem("mya-voice-enabled") !== "off";
+    let currentAudio = null;
+
+    function setVoiceStatus(text) {
+      if (!text) {
+        voiceStatusEl.hidden = true;
+        voiceStatusEl.textContent = "";
+        return;
+      }
+      voiceStatusEl.hidden = false;
+      voiceStatusEl.textContent = text;
+    }
+
+    function applyVoiceToggleUI() {
+      voiceToggleBtn.textContent = voiceEnabled ? "🔊" : "🔇";
+      voiceToggleBtn.classList.toggle("is-muted", !voiceEnabled);
+      voiceToggleBtn.title = voiceEnabled
+        ? "Mya speaks her replies out loud (click to mute)"
+        : "Mya's voice is muted (click to unmute)";
+    }
+    applyVoiceToggleUI();
+
+    voiceToggleBtn.addEventListener("click", () => {
+      voiceEnabled = !voiceEnabled;
+      localStorage.setItem("mya-voice-enabled", voiceEnabled ? "on" : "off");
+      applyVoiceToggleUI();
+      if (!voiceEnabled && currentAudio) currentAudio.pause();
+    });
+
+    function playReplyAudio(audioBase64) {
+      if (!audioBase64 || !voiceEnabled) return;
+      try {
+        if (currentAudio) {
+          currentAudio.pause();
+          currentAudio.src = "";
+        }
+        currentAudio = new Audio(`data:audio/mpeg;base64,${audioBase64}`);
+        pauseWakeListening();
+        currentAudio.addEventListener("ended", resumeWakeListeningIfEnabled);
+        currentAudio.addEventListener("error", resumeWakeListeningIfEnabled);
+        currentAudio.play().catch(() => resumeWakeListeningIfEnabled());
+      } catch (e) {
+        resumeWakeListeningIfEnabled();
+      }
+    }
+
+    /* ---- Always-listen wake word ("Mya") ----
+       Uses the browser's free built-in speech recognition — no new
+       dependency, but it only runs while this tab is open and focused, and
+       quality varies by browser (best in Chrome/Edge). Recognition is
+       paused while Mya's own voice is playing so she can't hear herself
+       and re-trigger. */
+    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let micEnabled = localStorage.getItem("mya-mic-enabled") === "on";
+    let awake = false;
+    let awakeTimeout = null;
+    let pausedForPlayback = false;
+    let intentionalStop = false;
+
+    function setMicUI() {
+      if (!SpeechRecognitionCtor) {
+        micBtn.disabled = true;
+        micBtn.title = "Voice input isn't supported in this browser — try Chrome or Edge.";
+        return;
+      }
+      micBtn.classList.toggle("is-on", micEnabled);
+      micBtn.classList.toggle("is-listening", micEnabled && !awake);
+      micBtn.title = micEnabled ? 'Always listening for "Mya" — click to turn off' : 'Click to always listen for "Mya"';
+    }
+
+    function pauseWakeListening() {
+      pausedForPlayback = true;
+      if (recognition) {
+        intentionalStop = true;
+        try { recognition.stop(); } catch (e) { /* ignore */ }
+      }
+    }
+
+    function resumeWakeListeningIfEnabled() {
+      pausedForPlayback = false;
+      if (micEnabled) startRecognition();
+    }
+
+    function enterAwakeMode() {
+      awake = true;
+      setMicUI();
+      setVoiceStatus("Yes? I'm listening…");
+      clearTimeout(awakeTimeout);
+      awakeTimeout = setTimeout(() => {
+        awake = false;
+        setMicUI();
+        setVoiceStatus('Listening for "Mya"…');
+      }, 7000);
+    }
+
+    function wakeAndSend(text) {
+      awake = false;
+      clearTimeout(awakeTimeout);
+      setMicUI();
+      input.value = text;
+      send();
+    }
+
+    function startRecognition() {
+      if (!SpeechRecognitionCtor || pausedForPlayback || !micEnabled) return;
+      recognition = new SpeechRecognitionCtor();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+
+      recognition.onresult = (event) => {
+        const result = event.results[event.results.length - 1];
+        if (!result.isFinal) return;
+        const transcript = result[0].transcript.trim();
+        if (!transcript) return;
+
+        if (!awake) {
+          if (/\bmya\b/i.test(transcript)) {
+            const after = transcript.replace(/^.*\bmya\b[,:]?\s*/i, "").trim();
+            if (after) {
+              wakeAndSend(after);
+            } else {
+              enterAwakeMode();
+            }
+          }
+        } else {
+          wakeAndSend(transcript);
+        }
+      };
+
+      recognition.onerror = (event) => {
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+          micEnabled = false;
+          localStorage.setItem("mya-mic-enabled", "off");
+          setMicUI();
+          setVoiceStatus("Mic permission denied — allow microphone access to use always-listen.");
+        }
+        /* other errors (no-speech, network, aborted): onend will retry */
+      };
+
+      recognition.onend = () => {
+        if (intentionalStop) {
+          intentionalStop = false;
+          return;
+        }
+        if (micEnabled && !pausedForPlayback) {
+          setTimeout(startRecognition, 300);
+        }
+      };
+
+      try {
+        recognition.start();
+        setVoiceStatus(awake ? "Yes? I'm listening…" : 'Listening for "Mya"…');
+      } catch (e) {
+        /* recognition already running — ignore */
+      }
+    }
+
+    micBtn.addEventListener("click", () => {
+      if (!SpeechRecognitionCtor) return;
+      micEnabled = !micEnabled;
+      localStorage.setItem("mya-mic-enabled", micEnabled ? "on" : "off");
+      setMicUI();
+      if (micEnabled) {
+        startRecognition();
+      } else {
+        awake = false;
+        clearTimeout(awakeTimeout);
+        intentionalStop = true;
+        if (recognition) {
+          try { recognition.stop(); } catch (e) { /* ignore */ }
+        }
+        setVoiceStatus("");
+      }
+    });
+
+    setMicUI();
+    if (micEnabled) startRecognition();
 
     /* Proactive check-ins: Mya notices something without being asked
        (a stale approval, an overdue follow-up) and mentions it here as

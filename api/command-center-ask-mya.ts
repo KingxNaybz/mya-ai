@@ -34,6 +34,14 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
 const ANTHROPIC_MODEL = "claude-sonnet-5";
 const MAX_TOOL_ITERATIONS = 5;
 
+// Same ElevenLabs key the phone system (outbound-call.ts) already uses.
+// ELEVENLABS_VOICE_ID is new — the Voice ID of the Conversational AI agent
+// callers hear, from ElevenLabs' dashboard, so dashboard replies can be
+// spoken in the same voice. Both are optional: if either is missing, voice
+// replies are silently skipped and the dashboard just shows text as before.
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || "";
+const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || "";
+
 const SYSTEM_PROMPT = `You are Mya, an AI operations assistant embedded in a dashboard for Elevate Construction, a construction company. The owner (Michael) talks to you here to check on the business and to make real changes using the tools you're given.
 
 Rules:
@@ -911,6 +919,39 @@ async function executeTool(name: string, input: any): Promise<{ result: any; too
   }
 }
 
+// Turns reply text into speech using the same ElevenLabs voice as the phone
+// system. Returns null (never throws) if not configured or the call fails —
+// voice is a nice-to-have, it should never break the text reply.
+async function synthesizeSpeech(text: string): Promise<string | null> {
+  if (!ELEVENLABS_API_KEY || !ELEVENLABS_VOICE_ID || !text) return null;
+  try {
+    const res = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": ELEVENLABS_API_KEY,
+          "content-type": "application/json",
+          accept: "audio/mpeg",
+        },
+        body: JSON.stringify({
+          text,
+          model_id: "eleven_turbo_v2_5",
+        }),
+      }
+    );
+    if (!res.ok) {
+      console.error("ElevenLabs TTS failed:", res.status, await res.text().catch(() => ""));
+      return null;
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
+    return buffer.toString("base64");
+  } catch (err) {
+    console.error("ElevenLabs TTS error:", err);
+    return null;
+  }
+}
+
 async function callAnthropic(messages: any[]): Promise<any> {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -954,6 +995,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!userMessage) {
     return res.status(400).json({ error: "message is required" });
   }
+  const wantsVoice = (req.body || {}).voice === true;
 
   const messages: any[] = [{ role: "user", content: userMessage }];
   const toolsUsed: string[] = [];
@@ -968,8 +1010,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .filter((b: any) => b.type === "text")
           .map((b: any) => b.text)
           .join("\n")
-          .trim();
-        return res.status(200).json({ reply: reply || "Done.", toolsUsed });
+          .trim() || "Done.";
+        const audioBase64 = wantsVoice ? await synthesizeSpeech(reply) : null;
+        return res.status(200).json({ reply, toolsUsed, audioBase64 });
       }
 
       const toolResults = await Promise.all(
@@ -984,9 +1027,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       messages.push({ role: "user", content: toolResults });
     }
 
+    const tooManySteps = "That request took too many steps — try breaking it into something simpler.";
     return res.status(200).json({
-      reply: "That request took too many steps — try breaking it into something simpler.",
+      reply: tooManySteps,
       toolsUsed,
+      audioBase64: wantsVoice ? await synthesizeSpeech(tooManySteps) : null,
     });
   } catch (err: any) {
     console.error("command-center-ask-mya error:", err);

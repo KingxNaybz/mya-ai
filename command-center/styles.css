@@ -703,7 +703,7 @@ button{ font-family: inherit; cursor: pointer; }
 .ask-mya-input-wrap:hover .tooltip{ opacity: 1; transform: translateY(0); }
 .ask-mya-input-wrap .tooltip{ top: auto; bottom: calc(100% + 8px); right: 10px; }
 
-.ask-send, .ask-mic{
+.ask-send, .ask-mic, .ask-voice-toggle{
   width: 38px; height: 38px;
   border-radius: 9px;
   border: 1px solid var(--card-border);
@@ -712,6 +712,19 @@ button{ font-family: inherit; cursor: pointer; }
   font-size: 15px;
   flex-shrink: 0;
 }
+.ask-voice-toggle.is-muted{ background: rgba(255,255,255,0.04); color: var(--text-low); opacity: 0.6; }
+.ask-mic.is-on{ background: rgba(52,199,89,0.18); border-color: rgba(52,199,89,0.4); color: #34c759; }
+.ask-mic.is-listening{ animation: mic-pulse 1.4s ease-in-out infinite; }
+@keyframes mic-pulse{
+  0%, 100%{ box-shadow: 0 0 0 0 rgba(52,199,89,0.45); }
+  50%{ box-shadow: 0 0 0 6px rgba(52,199,89,0); }
+}
+.ask-mya-status{
+  font-size: 12px;
+  color: var(--text-low);
+  padding: 2px 4px 0;
+}
+.ask-mya-status[hidden]{ display: none; }
 
 .ask-mya-log{
   display: flex;
