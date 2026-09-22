@@ -1,20 +1,33 @@
 # Mya Desktop (Windows)
 
-A screen-aware voice assistant: press a hotkey, ask a question out loud,
-and Mya looks at your current screen and answers back in the same voice
-as the phone system and web dashboard.
+A screen-aware, conversational voice assistant that shares her real
+brain with the web dashboard: press a hotkey, tell her something, and
+she looks at your current screen, combines that with what you said, and
+sends it to the SAME Ask Mya endpoint the web dashboard uses — same
+skills, same memory, same voice. That's what makes "look at my CRM and
+remember these leads" actually work: what she learns gets saved for
+real, and shows up later even in the web dashboard.
 
-This is a completely separate project from the web dashboard
-(`command-center/`) — nothing is shared between them except that they
-use the same Anthropic and ElevenLabs accounts.
+Right-click the tray icon → **Open Dashboard** to see the real web
+dashboard in its own window, any time.
+
+This is a separate project from the web dashboard (`command-center/`) —
+no code is shared between them, only the same deployed API and database
+over the internet.
 
 **Honest limits of this v1:**
 - Manual activation only (press the hotkey) — she does not watch your
   screen continuously in the background.
+- She can only *see* your screen and talk about it — she cannot click,
+  type, or take any action in other programs. That's a deliberately
+  separate, bigger, and riskier capability not built here.
 - Windows only.
 - Runs as a Python script in a visible console window (not a packaged
   `.exe` yet) — you'll see her status/errors printed there as she works,
   which is intentional for now so problems are easy to diagnose together.
+- Needs an internet connection at every step (screen understanding,
+  talking to her brain, and her voice all happen over the network) —
+  nothing runs offline.
 
 ## 1. Install Python
 
@@ -40,15 +53,16 @@ pipwin install pyaudio
 pip install -r requirements.txt
 ```
 
-## 3. Add your API keys
+## 3. Add your API key
 
 Copy `.env.example` to a new file named `.env` in this same folder, and
-fill in the three values. These are the **same** values already set in
-Vercel for the web dashboard (`ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`,
-`ELEVENLABS_VOICE_ID`) — copy them from there, don't generate new ones.
+fill in `ANTHROPIC_API_KEY`. This is the **same** value already set in
+Vercel for the web dashboard — copy it from there, don't generate a new
+one. (Voice and everything else is handled by the dashboard's own brain
+now, so no ElevenLabs key is needed here.)
 
 Never share this `.env` file or paste its contents anywhere — it holds
-real API keys.
+a real API key.
 
 ## 4. Run it
 
@@ -65,12 +79,15 @@ window open — that's where Mya's status and any errors show up.
 Press **Ctrl+Alt+M** anywhere (any app, any window) to activate her:
 
 1. She captures whatever's currently on your screen.
-2. Speak your question — you have about 10 seconds.
-3. She reads the screenshot + your question, thinks, and speaks the
-   answer back through your speakers.
+2. Speak what you want — a question, or an instruction like "remember
+   these leads." You have about 10 seconds.
+3. She reads the screen, sends what she saw plus what you said to her
+   real brain (the same one the web dashboard uses), and speaks the
+   answer back — remembering it for real if that's what you asked.
 
-You can also right-click the tray icon → **"Ask Mya now"** as an
-alternative to the hotkey.
+You can also right-click the tray icon:
+- **"Ask Mya now"** — same as the hotkey.
+- **"Open Dashboard"** — opens the real web dashboard in its own window.
 
 To quit: right-click the tray icon → **Quit**.
 
@@ -90,15 +107,17 @@ MYA_HOTKEY=ctrl+alt+j
   window for errors. Some games/apps that run "as administrator" can
   block global hotkeys from non-admin programs; try running your Command
   Prompt as administrator too.
-- **"Didn't catch a question in time"** — you have about 10 seconds
-  after the hotkey to speak; try again and start talking right away.
+- **"Didn't catch anything"** — you have about 10 seconds after the
+  hotkey to speak; try again and start talking right away.
 - **`ModuleNotFoundError: No module named 'distutils'`** — a known
   incompatibility between older SpeechRecognition releases and
   Python 3.12+ (which removed `distutils` entirely). Run
   `pip install --upgrade SpeechRecognition` and try again.
-- **She responds but with no voice** — check the console for an
-  `ElevenLabs TTS failed` line; that'll show the real error (usually a
-  missing/wrong key in `.env`).
+- **"Couldn't reach her brain" / mentions being blocked by Vercel** —
+  the dashboard's deployment protection may be blocking a request that
+  doesn't come from a logged-in browser. Tell me the exact message
+  printed and we'll sort it out together — this is genuinely something
+  I can't test myself from here.
 - **Microphone doesn't seem to pick anything up** — check Windows'
   microphone privacy settings (Settings → Privacy & security →
   Microphone) allow desktop apps to use it.

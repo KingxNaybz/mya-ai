@@ -1,12 +1,18 @@
 """
-Mya Desktop — a screen-aware voice assistant for Windows.
+Mya Desktop — a screen-aware, conversational voice assistant for Windows
+that shares her real brain (skills, memory, voice) with the web dashboard.
 
-Press the hotkey (default: ctrl+alt+m), ask your question out loud, and
-Mya looks at your current screen and answers by voice, in the same
-ElevenLabs voice as the phone system and web dashboard.
+Press the hotkey (default: ctrl+alt+m), ask or tell her something, and
+Mya looks at your current screen, combines that with what you said, and
+sends it to the SAME Ask Mya endpoint the web dashboard uses — so she can
+remember facts, look things up, and talk back in the same voice, all
+from a screen she has no direct data access to (like a CRM). The
+"Open Dashboard" tray option shows the real web dashboard in its own
+window.
 
 This is a separate, self-contained project from the web dashboard —
-nothing here is shared with command-center/ or api/. See README.md in
+nothing here is shared in code with command-center/ or api/, only the
+same deployed API and Supabase-backed brain over HTTPS. See README.md in
 this folder for setup instructions.
 """
 
@@ -15,7 +21,7 @@ import io
 import os
 import time
 import traceback
-from typing import Optional
+from typing import List, Optional
 
 import requests
 from dotenv import load_dotenv
@@ -24,29 +30,45 @@ load_dotenv()
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = "claude-sonnet-5"
-ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
-ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "")
 HOTKEY = os.environ.get("MYA_HOTKEY", "ctrl+alt+m")
 
-SYSTEM_PROMPT = (
-    "You are Mya, looking at a screenshot of the user's computer screen. "
-    "Answer their spoken question about what's on screen clearly and "
-    "concisely, in a way that sounds natural when read aloud. If you "
-    "can't tell what they're asking about from the screenshot, say so "
-    "plainly instead of guessing."
+# The deployed web dashboard's own Ask Mya endpoint — same brain, same
+# skills, same memory, same voice as the browser version. Override in
+# .env if the dashboard ever moves to a different URL (e.g. once merged
+# to a production domain).
+DASHBOARD_BASE_URL = os.environ.get(
+    "DASHBOARD_BASE_URL",
+    "https://mya-ai-git-claude-mya-command-b9a13e-kingxnaybz-5385s-projects.vercel.app",
+).rstrip("/")
+
+MAX_HISTORY = 20
+
+# This is a PERCEPTION prompt, not an answering prompt — it only reports
+# what's visible, factually, and hands off the actual thinking (deciding
+# what to do, whether to remember something, how to answer) to the real
+# Ask Mya brain via the dashboard API. This is what lets "remember these
+# leads" while looking at a CRM actually persist as a real memory, the
+# same way it would from the web dashboard's chat.
+VISION_SYSTEM_PROMPT = (
+    "You are looking at a screenshot of the user's computer screen. "
+    "Factually describe whatever is relevant to their question or "
+    "instruction below — concrete details (names, numbers, statuses, "
+    "text you can actually read), not a summary or your own opinion. "
+    "Someone else will decide what to do with what you report. If "
+    "nothing relevant is visible, say so plainly."
 )
 
 
 def build_anthropic_payload(question: str, image_base64: str, media_type: str = "image/png") -> dict:
     """Pure function: builds the request body for Anthropic's Messages API
-    with a screenshot + spoken question. Kept separate from the network
-    call itself so it can be tested without hitting the real API or
-    needing a real screenshot/microphone."""
+    with a screenshot + spoken question, used for the perception step
+    only. Kept separate from the network call so it's testable without a
+    real screenshot or microphone."""
     return {
         "model": ANTHROPIC_MODEL,
         "max_tokens": 500,
         "output_config": {"effort": "low"},
-        "system": SYSTEM_PROMPT,
+        "system": VISION_SYSTEM_PROMPT,
         "messages": [
             {
                 "role": "user",
@@ -67,12 +89,15 @@ def extract_reply_text(anthropic_response: dict) -> str:
     Messages API response."""
     blocks = anthropic_response.get("content", [])
     text = "\n".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
-    return text or "I couldn't come up with an answer for that."
+    return text or "I couldn't make out anything relevant on screen."
 
 
-def ask_claude_about_screen(question: str, image_bytes: bytes) -> str:
+def describe_screen(question: str, image_bytes: bytes) -> str:
+    """The perception step: what does the screen actually show, relevant
+    to what the user said? This does NOT decide what to do about it —
+    that's the dashboard brain's job."""
     if not ANTHROPIC_API_KEY:
-        return "ANTHROPIC_API_KEY isn't set — check your .env file."
+        raise RuntimeError("ANTHROPIC_API_KEY isn't set — check your .env file.")
     image_base64 = base64.b64encode(image_bytes).decode("utf-8")
     payload = build_anthropic_payload(question, image_base64)
     res = requests.post(
@@ -90,29 +115,45 @@ def ask_claude_about_screen(question: str, image_bytes: bytes) -> str:
     return extract_reply_text(res.json())
 
 
-def synthesize_speech(text: str) -> Optional[bytes]:
-    """Returns MP3 bytes, or None if voice isn't configured or the call
-    fails — voice is a nice-to-have, it should never crash the whole flow."""
-    if not ELEVENLABS_API_KEY or not ELEVENLABS_VOICE_ID or not text:
-        return None
+def build_combined_message(question: str, screen_description: str) -> str:
+    """Pure function: combines what the user said with what's actually on
+    screen into the single text message sent to the dashboard brain."""
+    return f"{question}\n\n[What I can currently see on my screen]: {screen_description}"
+
+
+def build_dashboard_payload(message: str, history: List[dict], voice: bool = True) -> dict:
+    """Pure function: builds the request body for the dashboard's Ask Mya
+    endpoint — the exact same shape the web dashboard's own chat sends."""
+    return {"message": message, "voice": voice, "history": history}
+
+
+def append_turn(history: List[dict], user_message: str, assistant_reply: str, max_len: int = MAX_HISTORY) -> List[dict]:
+    """Pure function: appends a user/assistant turn to the rolling
+    conversation history and trims it, matching the same windowing the
+    web dashboard's chat uses."""
+    updated = history + [
+        {"role": "user", "content": user_message},
+        {"role": "assistant", "content": assistant_reply},
+    ]
+    return updated[-max_len:] if len(updated) > max_len else updated
+
+
+def ask_dashboard_brain(message: str, history: List[dict]) -> dict:
+    """Sends a message (with rolling history) to the SAME Ask Mya endpoint
+    the web dashboard uses — same skills, same memory, same voice. Raises
+    with a clear diagnostic if the response isn't valid JSON (most likely
+    cause: Vercel's deployment protection blocking a non-browser request,
+    which shows up as an HTML login page instead of JSON)."""
+    url = f"{DASHBOARD_BASE_URL}/api/command-center-ask-mya"
+    payload = build_dashboard_payload(message, history, voice=True)
+    res = requests.post(url, json=payload, timeout=45)
     try:
-        res = requests.post(
-            f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}",
-            headers={
-                "xi-api-key": ELEVENLABS_API_KEY,
-                "content-type": "application/json",
-                "accept": "audio/mpeg",
-            },
-            json={"text": text, "model_id": "eleven_v3"},
-            timeout=30,
+        return res.json()
+    except ValueError:
+        raise RuntimeError(
+            f"Dashboard didn't return JSON (status {res.status_code}) — likely blocked by Vercel's "
+            f"deployment protection rather than a real API error. Response started with: {res.text[:200]!r}"
         )
-        if not res.ok:
-            print(f"[Mya] ElevenLabs TTS failed: {res.status_code} {res.text[:300]}")
-            return None
-        return res.content
-    except Exception as e:
-        print(f"[Mya] ElevenLabs TTS error: {e}")
-        return None
 
 
 def capture_screen() -> bytes:
@@ -147,29 +188,71 @@ def play_audio(mp3_bytes: bytes) -> None:
         time.sleep(0.1)
 
 
+# Conversation memory for THIS desktop session — resets on restart, same
+# as the web dashboard's own chat history. Not persisted to disk; what
+# gets persisted PERMANENTLY (across sessions and into the web dashboard
+# too) is whatever the dashboard brain itself decides to remember via
+# its own remember_fact/create_project/etc. skills.
+conversation_history: List[dict] = []
+
+
 def handle_activation() -> None:
+    global conversation_history
     try:
-        print("\n[Mya] Hotkey pressed — capturing your screen and listening for your question...")
+        print("\n[Mya] Hotkey pressed — capturing your screen and listening...")
         screenshot_bytes = capture_screen()
 
         try:
             question = listen_for_question()
-        except Exception:
-            print("[Mya] Didn't catch a question in time — try again.")
+        except Exception as e:
+            print(f"[Mya] Didn't catch anything ({type(e).__name__}: {e}) — try again.")
             return
         if not question.strip():
             print("[Mya] Didn't catch anything — try again.")
             return
-        print(f"[Mya] You asked: {question}")
+        print(f"[Mya] You said: {question}")
 
-        reply = ask_claude_about_screen(question, screenshot_bytes)
+        try:
+            screen_description = describe_screen(question, screenshot_bytes)
+        except Exception as e:
+            print(f"[Mya] Couldn't read the screen: {e}")
+            return
+        print(f"[Mya] What's on screen: {screen_description}")
+
+        combined_message = build_combined_message(question, screen_description)
+
+        try:
+            data = ask_dashboard_brain(combined_message, conversation_history)
+        except Exception as e:
+            print(f"[Mya] Couldn't reach her brain: {e}")
+            return
+
+        reply = data.get("reply") or "Done."
         print(f"[Mya] {reply}")
 
-        audio_bytes = synthesize_speech(reply)
-        if audio_bytes:
-            play_audio(audio_bytes)
+        conversation_history = append_turn(conversation_history, combined_message, reply)
+
+        audio_base64 = data.get("audioBase64")
+        if audio_base64:
+            try:
+                play_audio(base64.b64decode(audio_base64))
+            except Exception as e:
+                print(f"[Mya] Got a reply but couldn't play the voice: {e}")
     except Exception:
         print("[Mya] Something went wrong:")
+        traceback.print_exc()
+
+
+def open_dashboard_window() -> None:
+    """Opens the real web dashboard (same data, same everything) in its
+    own native-feeling window instead of a browser tab."""
+    try:
+        import webview
+
+        webview.create_window("Mya — Elevate Construction", DASHBOARD_BASE_URL, width=1440, height=900)
+        webview.start()
+    except Exception:
+        print("[Mya] Couldn't open the dashboard window:")
         traceback.print_exc()
 
 
@@ -190,8 +273,12 @@ def run_tray_icon() -> None:
     def on_ask_now(_icon, _item):
         handle_activation()
 
+    def on_open_dashboard(_icon, _item):
+        open_dashboard_window()
+
     menu = pystray.Menu(
         pystray.MenuItem("Ask Mya now", on_ask_now),
+        pystray.MenuItem("Open Dashboard", on_open_dashboard),
         pystray.MenuItem("Quit", on_quit),
     )
     icon = pystray.Icon("mya-desktop", make_icon_image(), "Mya Desktop", menu)
@@ -200,14 +287,13 @@ def run_tray_icon() -> None:
 
 def main() -> None:
     if not ANTHROPIC_API_KEY:
-        print("[Mya] Warning: ANTHROPIC_API_KEY isn't set — check your .env file. Mya can't think without it.")
-    if not ELEVENLABS_API_KEY or not ELEVENLABS_VOICE_ID:
-        print("[Mya] Note: ElevenLabs isn't configured — Mya will still work, but replies will only show in this console, not out loud.")
+        print("[Mya] Warning: ANTHROPIC_API_KEY isn't set — check your .env file. Mya can't see without it.")
 
     import keyboard
 
     print(f"[Mya] Ready. Press {HOTKEY} anywhere to ask Mya about your screen.")
-    print("[Mya] Right-click the tray icon (or use 'Ask Mya now' there) as an alternative to the hotkey.")
+    print("[Mya] Right-click the tray icon for 'Ask Mya now' or 'Open Dashboard'.")
+    print(f"[Mya] Talking to the dashboard brain at: {DASHBOARD_BASE_URL}")
     keyboard.add_hotkey(HOTKEY, handle_activation)
 
     run_tray_icon()
