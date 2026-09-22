@@ -1143,8 +1143,14 @@
         pauseWakeListening();
         if (myaOrb) myaOrb.classList.add("is-speaking");
         currentAudio.addEventListener("ended", stopSpeakingAnimation);
-        currentAudio.addEventListener("error", stopSpeakingAnimation);
-        currentAudio.play().catch(() => stopSpeakingAnimation());
+        currentAudio.addEventListener("error", () => {
+          console.error("Mya voice playback error:", currentAudio && currentAudio.error);
+          stopSpeakingAnimation();
+        });
+        currentAudio.play().catch((err) => {
+          console.error("Mya voice play() failed:", err);
+          stopSpeakingAnimation();
+        });
       } catch (e) {
         stopSpeakingAnimation();
       }
