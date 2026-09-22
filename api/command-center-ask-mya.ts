@@ -57,7 +57,8 @@ Rules:
 - Estimates are built from real cost line items, never guessed. Use add_estimate_item to log a real quantity x rate cost against a project, calculate_estimate to get its Direct Cost/True Cost/Floor Price/Target Price, and evaluate_bid_price for "what if we bid this at $X" questions. If a project has no line items yet, say so and offer to log some — never invent a price.
 - Keep replies brief and conversational — this can be read out loud or read at a glance on a dashboard, not a report.
 - You DO have a voice: replies can be spoken aloud in the same voice as the phone system, and there's an always-listen mic that wakes on your name. Neither is a tool you call — they run automatically in the dashboard. If asked whether you can talk or listen, say yes (unless list_capabilities' note says otherwise), don't claim you're text-only.
-- Several dashboard panels are still placeholder sample data with no tool behind them yet: Today's Schedule, Recent Activity, the detail behind New Leads (you only have the count, not who they are), Memory Insights (different from your own remembered facts), Mya Working Now, Connected Services, and Devices. If asked about any of these, say plainly you don't have that connected yet — never invent a plausible-sounding schedule, activity, or lead detail to sound complete.`;
+- New leads (list_leads), recent activity (list_recent_activity), and aggregate memory stats (get_memory_insights, different from your own remembered facts) are all real, live tools — use them rather than only citing the count from get_dashboard_summary.
+- A few dashboard panels are still placeholder sample data with no tool behind them yet: Today's Schedule, Mya Working Now, Connected Services, and Devices. If asked about any of these, say plainly you don't have that connected yet — never invent a plausible-sounding schedule or status to sound complete.`;
 
 /**
  * UNDO: reversible skills log how to reverse themselves to mya_undo_log
@@ -147,6 +148,63 @@ const SKILLS: Skill[] = [
         newLeads: leads.count ?? 0,
         openFollowUps: followups.count ?? 0,
         pendingApprovals: approvals.count ?? 0,
+      };
+    },
+  },
+  {
+    name: "list_leads",
+    description: "List new leads with detail — name, what they're interested in, and how they found us. Same data the 'New Leads' dashboard panel shows.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+    execute: async () => {
+      const { data, error } = await supabase
+        .from("mya_contacts")
+        .select("name,phone,project_type,lead_source,last_contact_at")
+        .eq("status", "new")
+        .order("last_contact_at", { ascending: false })
+        .limit(20);
+      if (error) return { error: error.message };
+      return { leads: data || [] };
+    },
+  },
+  {
+    name: "list_recent_activity",
+    description: "List the most recent business activity — recent calls and new project intakes, most recent first. Same data the 'Recent Activity' dashboard panel shows.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+    execute: async () => {
+      const [calls, intakes] = await Promise.all([
+        supabase.from("calls").select("caller_name,caller_number,caller_intent,call_outcome,created_at").order("created_at", { ascending: false }).limit(10),
+        supabase.from("mya_intakes").select("full_name,project_type,lead_source,created_at").order("created_at", { ascending: false }).limit(10),
+      ]);
+      const activity = [
+        ...(calls.data || []).map((c: any) => ({
+          time: c.created_at,
+          text: `${c.caller_name || c.caller_number || "Someone"} called${c.caller_intent ? ` about ${c.caller_intent}` : ""}.`,
+        })),
+        ...(intakes.data || []).map((i: any) => ({
+          time: i.created_at,
+          text: `New project intake: ${i.full_name || "Unknown"}${i.project_type ? ` (${i.project_type})` : ""}.`,
+        })),
+      ]
+        .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+        .slice(0, 10);
+      return { activity };
+    },
+  },
+  {
+    name: "get_memory_insights",
+    description: "Get aggregate customer-memory stats: total contacts remembered, how many are recurring customers, and how many notes were logged this week. Same data the 'Memory Insights' dashboard panel shows.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+    execute: async () => {
+      const weekAgoIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const [contacts, recurring, updatedThisWeek] = await Promise.all([
+        supabase.from("mya_contacts").select("id", { count: "exact", head: true }),
+        supabase.from("mya_customer_profiles").select("id", { count: "exact", head: true }).gt("lifetime_calls", 1),
+        supabase.from("mya_customer_profiles").select("id", { count: "exact", head: true }).gte("updated_at", weekAgoIso),
+      ]);
+      return {
+        totalContactsRemembered: contacts.count ?? 0,
+        recurringCustomers: recurring.count ?? 0,
+        notesLoggedThisWeek: updatedThisWeek.count ?? 0,
       };
     },
   },
