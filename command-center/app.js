@@ -1170,28 +1170,33 @@
       recognition.interimResults = true;
       recognition.lang = "en-US";
 
+      // Chrome's speech recognition often mishears "Mya" (not a common
+      // dictionary word) as a near-homophone — match those too, since a
+      // wake word that only matches its exact spelling barely works.
+      const WAKE_WORD = /\b(mya|maya|mia|nia)\b/i;
+
       recognition.onresult = (event) => {
         const result = event.results[event.results.length - 1];
-        if (!result.isFinal) return;
         const transcript = result[0].transcript.trim();
         if (!transcript) return;
 
         if (!awake) {
-          // Chrome's speech recognition often mishears "Mya" (not a common
-          // dictionary word) as a near-homophone — match those too, since a
-          // wake word that only matches its exact spelling barely works.
-          const WAKE_WORD = /\b(mya|maya|mia|nia)\b/i;
-          if (WAKE_WORD.test(transcript)) {
-            const after = transcript.replace(new RegExp(`^.*${WAKE_WORD.source}[,:]?\\s*`, "i"), "").trim();
-            if (after) {
-              wakeAndSend(after);
-            } else {
-              enterAwakeMode();
-            }
-          }
-        } else {
-          wakeAndSend(transcript);
+          if (!WAKE_WORD.test(transcript)) return;
+          // Flip into awake mode the instant the wake word shows up, even
+          // in an interim (not-yet-final) result — waiting for Chrome to
+          // finalize the segment risks losing the next few words if the
+          // speaker pauses right after saying "Mya" and Chrome restarts
+          // the recognizer in that gap.
+          enterAwakeMode();
+          if (!result.isFinal) return;
         }
+
+        if (!result.isFinal) return; // don't act on a still-changing transcript
+
+        const after = transcript.replace(new RegExp(`^.*${WAKE_WORD.source}[,:]?\\s*`, "i"), "").trim();
+        if (after) wakeAndSend(after);
+        // else: this segment was just the wake word alone — already awake
+        // and waiting, the actual request will arrive as the next result.
       };
 
       recognition.onerror = (event) => {
