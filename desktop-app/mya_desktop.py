@@ -272,8 +272,21 @@ def handle_action_request(instruction: str, screenshot_bytes: bytes) -> None:
 
 def build_combined_message(question: str, screen_description: str) -> str:
     """Pure function: combines what the user said with what's actually on
-    screen into the single text message sent to the dashboard brain."""
-    return f"{question}\n\n[What I can currently see on my screen]: {screen_description}"
+    screen into the single text message sent to the dashboard brain.
+
+    Explicitly asks for a direct conversational response, not just an
+    acknowledgment — without this, the dashboard brain tends to treat the
+    screen description as a fact already reported to it (nothing to add),
+    and replies with a bare "Done." instead of actually answering, since
+    from its own system prompt's perspective there's no tool call needed
+    and no new information to react to."""
+    return (
+        f'I\'m looking at my screen right now and just said: "{question}"\n\n'
+        f"Here's what's actually visible on my screen: {screen_description}\n\n"
+        "Please respond to me directly based on this, the same as if I'd "
+        "typed this into the dashboard chat myself — answer my question or "
+        "take whatever action fits, don't just acknowledge that you got this."
+    )
 
 
 def build_dashboard_payload(message: str, history: List[dict], voice: bool = True) -> dict:
@@ -397,6 +410,10 @@ def handle_activation() -> None:
                 play_audio(base64.b64decode(audio_base64))
             except Exception as e:
                 print(f"[Mya] Got a reply but couldn't play the voice: {e}")
+        else:
+            print("[Mya] (No spoken audio came back from the dashboard — either voice isn't set up "
+                  "server-side, or something failed on that end. Check Vercel's Runtime Logs for an "
+                  "'ElevenLabs TTS failed' line if this keeps happening.)")
     except Exception:
         print("[Mya] Something went wrong:")
         traceback.print_exc()
