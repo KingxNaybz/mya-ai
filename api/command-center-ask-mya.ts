@@ -44,6 +44,8 @@ Rules:
 - If asked what you can do, what your capabilities are, or what you can't do yet, call list_capabilities rather than describing yourself from memory — that list is the real, current one.
 - If the user says "undo", "undo that", or asks to reverse the last thing you did, call undo_last_action. Don't guess which action they mean — that skill always reverses the single most recent reversible action.
 - If the user tells you to remember something, or shares a fact/preference/detail worth keeping for later ("remember that...", "the Rivers project needs..."), call remember_fact. If asked what you remember or know about something, call recall_memory rather than guessing.
+- Projects are the company's real jobs (e.g. "3941 Briar Glen Ct" / "Courtney Vonwalsung"). When asked about a specific project, call get_project rather than guessing at details — it returns everything on file for that job. Use create_project when a new job should be tracked, update_project to record scope/status/pricing/decision changes, and list_projects to see what's open or in a given status.
+- The Company Brain holds standing business info (margin targets, payment terms, warranty language, estimating standards, insurance procedures, lessons learned) — call get_company_brain when asked about company policy/standards, and update_company_brain when told to change one.
 - Keep replies brief and conversational — this is read out loud / read at a glance on a dashboard, not a report.`;
 
 /**
@@ -335,6 +337,21 @@ const SKILLS: Skill[] = [
           if (error) undoError = error.message;
           break;
         }
+        case "create_project": {
+          const { error } = await supabase.from("mya_projects").delete().eq("id", undoData.id);
+          if (error) undoError = error.message;
+          break;
+        }
+        case "update_project": {
+          const { error } = await supabase.from("mya_projects").update(undoData.oldValues).eq("id", undoData.id);
+          if (error) undoError = error.message;
+          break;
+        }
+        case "update_company_brain": {
+          const { error } = await supabase.from("mya_company_brain").update(undoData.oldValues).eq("id", 1);
+          if (error) undoError = error.message;
+          break;
+        }
         default:
           undoError = `Don't know how to undo action type "${entry.action_type}".`;
       }
@@ -379,6 +396,229 @@ const SKILLS: Skill[] = [
       const { data, error } = await query.limit(20);
       if (error) return { error: error.message };
       return { facts: data || [] };
+    },
+  },
+  {
+    name: "get_company_brain",
+    description: "Get Elevate Construction's standing business info: margin targets, payment terms, warranty language, contract clauses, estimating standards, insurance procedures, equipment notes, and lessons learned.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+    execute: async () => {
+      const { data, error } = await supabase.from("mya_company_brain").select("*").eq("id", 1).maybeSingle();
+      if (error) return { error: error.message };
+      return { companyBrain: data || {} };
+    },
+  },
+  {
+    name: "update_company_brain",
+    description: "Update one or more pieces of Elevate Construction's standing business info. Only pass the fields being changed.",
+    input_schema: {
+      type: "object",
+      properties: {
+        companyName: { type: "string" },
+        licenseInfo: { type: "string" },
+        marginTarget: { type: "number", description: "Target profit margin percent, e.g. 35" },
+        marginFloor: { type: "number", description: "Minimum acceptable margin percent, e.g. 20" },
+        paymentTerms: { type: "string" },
+        warrantyTerms: { type: "string" },
+        contractClauses: { type: "string" },
+        estimatingStandards: { type: "string" },
+        insuranceProcedures: { type: "string" },
+        equipmentNotes: { type: "string" },
+        lessonsLearned: { type: "string" },
+      },
+      additionalProperties: false,
+    },
+    execute: async (input) => {
+      const fieldMap: Record<string, string> = {
+        companyName: "company_name",
+        licenseInfo: "license_info",
+        marginTarget: "margin_target",
+        marginFloor: "margin_floor",
+        paymentTerms: "payment_terms",
+        warrantyTerms: "warranty_terms",
+        contractClauses: "contract_clauses",
+        estimatingStandards: "estimating_standards",
+        insuranceProcedures: "insurance_procedures",
+        equipmentNotes: "equipment_notes",
+        lessonsLearned: "lessons_learned",
+      };
+      const columns = Object.keys(input)
+        .filter((k) => fieldMap[k] !== undefined)
+        .map((k) => fieldMap[k]);
+      if (columns.length === 0) return { error: "No recognized fields to update." };
+
+      const { data: before, error: fetchError } = await supabase
+        .from("mya_company_brain")
+        .select(columns.join(","))
+        .eq("id", 1)
+        .maybeSingle();
+      if (fetchError) return { error: fetchError.message };
+
+      const patch: Record<string, any> = { updated_at: new Date().toISOString() };
+      for (const [key, col] of Object.entries(fieldMap)) {
+        if (input[key] !== undefined) patch[col] = input[key];
+      }
+
+      const { error: updateError } = await supabase.from("mya_company_brain").update(patch).eq("id", 1);
+      if (updateError) return { error: updateError.message };
+
+      await logUndo("update_company_brain", { oldValues: before || {} }, `Updated company info: ${columns.join(", ")}`);
+      return { updated: true, fields: columns };
+    },
+  },
+  {
+    name: "create_project",
+    description: "Start tracking a new project/job.",
+    input_schema: {
+      type: "object",
+      properties: {
+        projectName: { type: "string", description: "e.g. '3941 Briar Glen Ct'" },
+        clientName: { type: "string" },
+        clientPhone: { type: "string" },
+        clientEmail: { type: "string" },
+        projectType: { type: "string", description: "e.g. Residential, Commercial, Insurance Restoration" },
+        originalScope: { type: "string" },
+      },
+      required: ["projectName"],
+      additionalProperties: false,
+    },
+    execute: async (input) => {
+      const { data, error } = await supabase
+        .from("mya_projects")
+        .insert({
+          project_name: String(input.projectName || "").trim(),
+          client_name: input.clientName || null,
+          client_phone: input.clientPhone || null,
+          client_email: input.clientEmail || null,
+          project_type: input.projectType || null,
+          original_scope: input.originalScope || null,
+        })
+        .select("id,project_name,client_name")
+        .single();
+      if (error) return { error: error.message };
+      if (data) {
+        await logUndo("create_project", { id: data.id }, `Created project ${data.project_name}`);
+      }
+      return { created: data };
+    },
+  },
+  {
+    name: "list_projects",
+    description: "List projects, optionally filtered by status (e.g. 'lead', 'estimating', 'contracted', 'in_progress', 'completed', 'lost') or a name/client keyword search.",
+    input_schema: {
+      type: "object",
+      properties: {
+        status: { type: "string" },
+        query: { type: "string", description: "Keyword to search in project name or client name" },
+      },
+      additionalProperties: false,
+    },
+    execute: async (input) => {
+      let query = supabase
+        .from("mya_projects")
+        .select("id,project_name,client_name,project_type,status,next_action,current_estimate")
+        .order("updated_at", { ascending: false });
+      if (input.status) query = query.eq("status", input.status);
+      if (input.query) query = query.or(`project_name.ilike.%${input.query}%,client_name.ilike.%${input.query}%`);
+      const { data, error } = await query.limit(25);
+      if (error) return { error: error.message };
+      return { projects: data || [] };
+    },
+  },
+  {
+    name: "get_project",
+    description: "Get everything on file for a specific project by name or client name — scope, pricing, decisions, next action, notes. If more than one project matches, this returns the matches instead of guessing.",
+    input_schema: {
+      type: "object",
+      properties: { query: { type: "string", description: "Project name or client name (or partial)" } },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    execute: async (input) => {
+      const { data: matches, error } = await supabase
+        .from("mya_projects")
+        .select("*")
+        .or(`project_name.ilike.%${input.query}%,client_name.ilike.%${input.query}%`);
+      if (error) return { error: error.message };
+      if (!matches || matches.length === 0) return { found: false, reason: "No project found matching that." };
+      if (matches.length > 1) {
+        return {
+          found: false,
+          matches: matches.map((m: any) => ({ id: m.id, project_name: m.project_name, client_name: m.client_name })),
+        };
+      }
+      return { project: matches[0] };
+    },
+  },
+  {
+    name: "update_project",
+    description: "Update a project's status, scope, measurements, pricing, payment/warranty terms, outstanding decisions, next action, or notes. Finds the project by name/client first — if more than one matches, this returns the matches instead of guessing.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Project name or client name (or partial) to find the project" },
+        status: { type: "string" },
+        revisedScope: { type: "string" },
+        measurements: { type: "string" },
+        currentEstimate: { type: "number" },
+        proposalVersion: { type: "string" },
+        paymentStructure: { type: "string" },
+        warrantyChoice: { type: "string" },
+        outstandingDecisions: { type: "string" },
+        nextAction: { type: "string" },
+        notes: { type: "string" },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    execute: async (input) => {
+      const fieldMap: Record<string, string> = {
+        status: "status",
+        revisedScope: "revised_scope",
+        measurements: "measurements",
+        currentEstimate: "current_estimate",
+        proposalVersion: "proposal_version",
+        paymentStructure: "payment_structure",
+        warrantyChoice: "warranty_choice",
+        outstandingDecisions: "outstanding_decisions",
+        nextAction: "next_action",
+        notes: "notes",
+      };
+      const columns = Object.keys(input)
+        .filter((k) => fieldMap[k] !== undefined)
+        .map((k) => fieldMap[k]);
+      if (columns.length === 0) return { error: "No recognized fields to update." };
+
+      const { data: matches, error: findError } = await supabase
+        .from("mya_projects")
+        .select(`id,project_name,client_name,${columns.join(",")}`)
+        .or(`project_name.ilike.%${input.query}%,client_name.ilike.%${input.query}%`);
+      if (findError) return { error: findError.message };
+      if (!matches || matches.length === 0) return { updated: false, reason: "No project found matching that." };
+      if (matches.length > 1) {
+        return {
+          updated: false,
+          matches: matches.map((m: any) => ({ id: m.id, project_name: m.project_name, client_name: m.client_name })),
+        };
+      }
+
+      const before = matches[0] as any;
+      const patch: Record<string, any> = { updated_at: new Date().toISOString() };
+      for (const [key, col] of Object.entries(fieldMap)) {
+        if (input[key] !== undefined) patch[col] = input[key];
+      }
+      const oldValues: Record<string, any> = {};
+      for (const col of columns) oldValues[col] = before[col];
+
+      const { error: updateError } = await supabase.from("mya_projects").update(patch).eq("id", before.id);
+      if (updateError) return { error: updateError.message };
+
+      await logUndo(
+        "update_project",
+        { id: before.id, oldValues },
+        `Updated ${before.project_name}: ${columns.join(", ")}`
+      );
+      return { updated: true, project: before.project_name, fields: columns };
     },
   },
 ];

@@ -304,19 +304,37 @@
   }
 
   /* ---------------- Projects needing attention ---------------- */
-  function renderProjects() {
+  function renderProjects(items, isLive) {
     const container = document.getElementById("projects-list");
-    SAMPLE_DATA.projectsNeedingAttention.forEach((p) => {
-      const row = el("div", "list-row");
-      row.innerHTML = `
-        <div class="list-row-main">
-          <strong>${p.name}</strong>
-          <span>${p.issue}</span>
-        </div>
-        <div class="list-row-side">${p.days} day${p.days === 1 ? "" : "s"}</div>
-      `;
-      container.appendChild(row);
-    });
+    container.innerHTML = "";
+    const list = items || SAMPLE_DATA.projectsNeedingAttention;
+
+    if (isLive && list.length === 0) {
+      container.innerHTML = `<div class="approval-empty">No projects need attention right now.</div>`;
+    } else {
+      list.forEach((p) => {
+        const row = el("div", "list-row");
+        if (isLive) {
+          row.innerHTML = `
+            <div class="list-row-main">
+              <strong>${p.name}</strong>
+              <span>${p.issue || "—"}</span>
+            </div>
+            <div class="list-row-side">${p.status || ""}</div>
+          `;
+        } else {
+          row.innerHTML = `
+            <div class="list-row-main">
+              <strong>${p.name}</strong>
+              <span>${p.issue}</span>
+            </div>
+            <div class="list-row-side">${p.days} day${p.days === 1 ? "" : "s"}</div>
+          `;
+        }
+        container.appendChild(row);
+      });
+    }
+    setLiveBadge("projects-list", Boolean(isLive));
   }
 
   /* ---------------- Memory insights ---------------- */
@@ -569,6 +587,27 @@
       if (!Array.isArray(data.facts)) return;
       renderMemoryFacts(
         data.facts.map((f) => ({ id: f.id, fact: f.fact, agoText: formatRelative(f.created_at) })),
+        true
+      );
+    } catch (e) {
+      /* silent fallback to sample data */
+    }
+  }
+
+  /* ---------------- Projects (live — Project Brain) ---------------- */
+  async function loadProjectsIfAvailable() {
+    if (location.protocol === "file:") return;
+    try {
+      const res = await fetch("/api/command-center-projects");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!Array.isArray(data.projects)) return;
+      renderProjects(
+        data.projects.map((p) => ({
+          name: p.client_name ? `${p.project_name} — ${p.client_name}` : p.project_name,
+          issue: p.next_action || p.outstanding_decisions || "No action set",
+          status: p.status
+        })),
         true
       );
     } catch (e) {
@@ -973,12 +1012,16 @@
         if (toolsUsed.includes("remember_fact")) {
           loadMemoryFactsIfAvailable();
         }
+        if (toolsUsed.includes("create_project") || toolsUsed.includes("update_project")) {
+          loadProjectsIfAvailable();
+        }
         if (toolsUsed.includes("undo_last_action")) {
           // Undo can reverse any reversible skill — refresh everything it could have touched.
           loadContractorsIfAvailable();
           loadApprovalsIfAvailable();
           loadFollowUpCountIfAvailable();
           loadMemoryFactsIfAvailable();
+          loadProjectsIfAvailable();
         }
       } catch (err) {
         pending.remove();
@@ -1034,6 +1077,7 @@
   loadFollowUpCountIfAvailable();
   loadContractorsIfAvailable();
   loadMemoryFactsIfAvailable();
+  loadProjectsIfAvailable();
   loadSettingsIfAvailable();
   initFollowUpModal();
   initSettingsModal();
