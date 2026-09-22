@@ -1132,7 +1132,7 @@
       startRecognition();
     }
 
-    function playReplyAudio(audioBase64) {
+    async function playReplyAudio(audioBase64) {
       if (!audioBase64 || !voiceEnabled) return;
       try {
         if (currentAudio) {
@@ -1140,13 +1140,17 @@
           currentAudio.src = "";
         }
         currentAudio = new Audio(`data:audio/mpeg;base64,${audioBase64}`);
-        pauseWakeListening();
         if (myaOrb) myaOrb.classList.add("is-speaking");
         currentAudio.addEventListener("ended", stopSpeakingAnimation);
         currentAudio.addEventListener("error", () => {
           console.error("Mya voice playback error:", currentAudio && currentAudio.error);
           stopSpeakingAnimation();
         });
+        // recognition.stop() is asynchronous — the mic isn't actually off
+        // until onend fires. Wait for that confirmation before playing,
+        // otherwise the still-live mic can hear the first few words of her
+        // own reply and mistake them for a new thing you said.
+        await pauseWakeListening();
         currentAudio.play().catch((err) => {
           console.error("Mya voice play() failed:", err);
           stopSpeakingAnimation();
@@ -1186,12 +1190,38 @@
       }
     }
 
+    // Returns a promise that resolves only once the mic has actually
+    // confirmed it stopped (recognition.onend fired) — not just when
+    // .stop() was called, since that's async in every browser. Wraps the
+    // existing onend handler (rather than replacing it) so its normal
+    // side effects — resetting intentionalStop, scheduling a restart —
+    // still happen exactly as before.
     function pauseWakeListening() {
       pausedForPlayback = true;
-      if (recognition) {
+      if (!recognition) return Promise.resolve();
+      return new Promise((resolve) => {
         intentionalStop = true;
-        try { recognition.stop(); } catch (e) { /* ignore */ }
-      }
+        const originalOnEnd = recognition.onend;
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+        recognition.onend = (event) => {
+          if (typeof originalOnEnd === "function") originalOnEnd(event);
+          finish();
+        };
+        // Safety net: if the recognizer was already idle, some browsers
+        // never fire onend for a stop() call — never let that hang block
+        // her from speaking at all.
+        setTimeout(finish, 500);
+        try {
+          recognition.stop();
+        } catch (e) {
+          finish();
+        }
+      });
     }
 
     // How long to keep listening for a follow-up without requiring the
