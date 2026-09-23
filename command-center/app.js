@@ -513,6 +513,17 @@
       return;
     }
 
+    const header = el("div", "directory-row-header");
+    header.innerHTML = `
+      <div class="directory-cell directory-head">Name</div>
+      <div class="directory-cell directory-head">Company</div>
+      <div class="directory-cell directory-head">Phone</div>
+      <div class="directory-cell directory-head">Email</div>
+      <div class="directory-cell directory-head">Website</div>
+      <div class="directory-cell directory-head">Category</div>
+    `;
+    container.appendChild(header);
+
     rows.forEach((row) => {
       const item = el("div", "directory-row");
       const canReclassify = Boolean(row.phone || row.name);
@@ -521,7 +532,8 @@
         .map((key) => `<option value="${key}"${key === (row.category || "uncategorized") ? " selected" : ""}>${escapeHtmlText(CALLER_CATEGORY_LABELS[key])}</option>`)
         .join("");
       item.innerHTML = `
-        <div class="directory-cell"><strong>${escapeHtmlText(row.name || "Unknown")}</strong>${row.company ? `<span>${escapeHtmlText(row.company)}</span>` : ""}</div>
+        <div class="directory-cell"><strong>${escapeHtmlText(row.name || "Unknown")}</strong></div>
+        <div class="directory-cell${row.company ? "" : " directory-muted"}">${escapeHtmlText(row.company || "—")}</div>
         <div class="directory-cell${row.phone ? "" : " directory-muted"}">${escapeHtmlText(row.phone || "—")}</div>
         <div class="directory-cell${row.email ? "" : " directory-muted"}">${escapeHtmlText(row.email || "—")}</div>
         <div class="directory-cell${row.website ? "" : " directory-muted"}">${escapeHtmlText(row.website || "—")}</div>
@@ -603,10 +615,10 @@
     const toSheetRows = (rows) =>
       rows.map((r) => ({
         Name: r.name || "",
+        Company: r.company || "",
         Phone: r.phone || "",
         Email: r.email || "",
         Website: r.website || "",
-        Company: r.company || "",
         Category: callerDirectoryLabel(r.category),
         "Flagged For Block": r.flagForBlock ? "Yes" : "",
         Notes: r.reasoning || "",
@@ -1509,10 +1521,12 @@
     }
 
     // How long to keep listening for a follow-up without requiring the
-    // wake word again. 7s proved too short for a real back-and-forth —
-    // reading a multi-point rundown and then framing a follow-up question
-    // easily takes longer than that.
-    const AWAKE_TIMEOUT_MS = 20000;
+    // wake word again. 7s, then 20s, both proved too short for a real
+    // back-and-forth — thinking through a follow-up, or just listening to
+    // a longer reply before responding to it, regularly takes longer than
+    // that, and hitting this timeout is what made a conversation feel like
+    // it "ended" after just one or two exchanges.
+    const AWAKE_TIMEOUT_MS = 45000;
 
     function resetAwakeTimer() {
       clearTimeout(awakeTimeout);

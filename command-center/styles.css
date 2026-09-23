@@ -527,7 +527,7 @@ button{ font-family: inherit; cursor: pointer; }
 .directory-empty{ font-size: 12.5px; color: var(--text-low); padding: 10px 2px; }
 .directory-row{
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1.3fr 1fr 1.2fr;
+  grid-template-columns: 1.1fr 1fr 1fr 1.3fr 1fr 1.2fr;
   gap: 10px;
   align-items: center;
   padding: 11px 13px;
@@ -536,6 +536,19 @@ button{ font-family: inherit; cursor: pointer; }
   border: 1px solid var(--card-border);
 }
 .directory-row + .directory-row{ margin-top: 8px; }
+.directory-row-header{
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1fr 1.3fr 1fr 1.2fr;
+  gap: 10px;
+  padding: 0 13px 6px;
+}
+.directory-head{
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-low);
+}
 .directory-cell{ min-width: 0; font-size: 12.5px; color: var(--text-mid); overflow-wrap: anywhere; }
 .directory-cell strong{ display: block; font-size: 13px; color: var(--text-hi); overflow-wrap: anywhere; }
 .directory-cell.directory-muted{ color: var(--text-low); }
