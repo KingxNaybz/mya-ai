@@ -124,6 +124,86 @@ async function getCategoryByPhoneMap(): Promise<Map<string, string>> {
   return new Map((data || []).filter((c: any) => c.phone).map((c: any) => [c.phone, c.category]));
 }
 
+/* ── Backfilling classification for calls that happened before Company
+   Contacts existed (or before its setup was finished) ─────────────────
+   Reuses the same categories/logic as the live call-ending classifier in
+   mya-call-ended.ts, adapted to work off the already-saved flat transcript
+   text (calls.transcript) instead of the live ElevenLabs event, since
+   that's all a past call has on file. Duplicated rather than shared, same
+   reason as getServicesStatus above — plus mya-call-ended.ts is a
+   protected file this project never edits except for its one already-made
+   isolated addition. */
+const BILL_COLLECTOR_PHRASE =
+  /attempt(?:ing)?\s+to\s+collect\s+(?:a|this|the)\s+debt|this\s+(?:call|communication)\s+is\s+from\s+a\s+debt\s+collector/i;
+
+/** Pulls just the caller's own lines out of the "Mya: ...\nCaller: ..." flat
+ * transcript text saved on the calls table. */
+function callerLinesFromTranscript(transcriptText: string): string {
+  return (transcriptText || "")
+    .split("\n")
+    .filter((line) => line.startsWith("Caller:"))
+    .join(" ");
+}
+
+function extractEmailFromTranscript(transcriptText: string): string | null {
+  const callerText = callerLinesFromTranscript(transcriptText);
+  const match = callerText.match(/[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}/);
+  return match ? match[0].toLowerCase() : null;
+}
+
+function extractWebsiteFromTranscript(transcriptText: string): string | null {
+  const callerText = callerLinesFromTranscript(transcriptText);
+  const candidates = callerText.matchAll(
+    /\b(?:https?:\/\/)?(?:www\.)?[a-zA-Z0-9-]+\.(?:com|net|org|io|co|biz)\b(?:\/[^\s]*)?/gi
+  );
+  for (const m of candidates) {
+    if (callerText[m.index! - 1] === "@") continue;
+    return m[0];
+  }
+  return null;
+}
+
+async function classifyTranscriptWithAI(transcriptText: string): Promise<{ category: string; reasoning: string } | null> {
+  if (!ANTHROPIC_API_KEY) return null;
+  try {
+    const prompt =
+      `A phone call happened at a construction company. Read the transcript and ` +
+      `classify who the caller was.\n\n` +
+      `Categories (pick exactly one): ${CALLER_CATEGORIES.filter((c) => c !== "uncategorized").join(", ")}\n\n` +
+      `Transcript:\n${transcriptText.slice(0, 6000)}\n\n` +
+      `Respond with ONLY this JSON shape, nothing else: {"category": "...", "reasoning": "one short sentence"}`;
+
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: ANTHROPIC_MODEL,
+        max_tokens: 150,
+        output_config: { effort: "low" },
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const text = (data.content || []).find((b: any) => b.type === "text")?.text || "";
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+    const category = CALLER_CATEGORIES.includes(parsed.category) ? parsed.category : "uncategorized";
+    return {
+      category,
+      reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning.slice(0, 300) : "",
+    };
+  } catch (err) {
+    console.error("Backfill classification AI error (non-fatal):", err);
+    return null;
+  }
+}
+
 const SYSTEM_PROMPT = `You are Mya, an AI operations assistant embedded in a dashboard for Elevate Construction, a construction company. The owner (Michael) talks to you here to check on the business and to make real changes using the tools you're given.
 
 Rules:
@@ -142,7 +222,7 @@ Rules:
 - New leads (list_leads), recent activity (list_recent_activity), and aggregate memory stats (get_memory_insights, different from your own remembered facts) are all real, live tools — use them rather than only citing the count from get_dashboard_summary. "New Leads" only counts real prospective customers — vendors, bill collectors, job applicants, and other non-leads are filtered out and show up in Company Contacts instead.
 - Today's Schedule is real: use create_appointment for a site visit/walkthrough/meeting at a specific date+time, and list_schedule to see today's appointments plus any project whose next action is due today (set via update_project's nextActionDue).
 - get_recent_actions and get_services_status are also real, live tools now, matching the "Mya Working Now" and "Connected Services" dashboard panels. get_services_status checks whether each integration is configured, not whether it's live-reachable right now — say so if asked to be precise.
-- After every real phone call ends, it's automatically sorted into Company Contacts (a separate list from "New Leads," opened from its own nav item, not shown inline on the dashboard) as a lead, existing client, vendor, contractor, subcontractor, general contractor, bill collector, job applicant, wrong number/spam, or uncategorized. Bill collectors get flagged there but nothing is actually blocked yet — that's a manual step the owner does himself, later. Use list_caller_directory to answer questions about who's called (optionally filtered by category), and call open_contact_directory when asked to "pull up the contact spreadsheet," "show me company contacts," or similar — the dashboard itself handles opening that view and offering the Excel download. If told a caller was sorted into the wrong category, call reclassify_caller — same disambiguation rule as everything else: if the name/phone matches more than one caller, list them and ask which one instead of guessing.
+- After every real phone call ends, it's automatically sorted into Company Contacts (a separate list from "New Leads," opened from its own nav item, not shown inline on the dashboard) as a lead, existing client, vendor, contractor, subcontractor, general contractor, bill collector, job applicant, wrong number/spam, or uncategorized. Bill collectors get flagged there but nothing is actually blocked yet — that's a manual step the owner does himself, later. Use list_caller_directory to answer questions about who's called (optionally filtered by category), and call open_contact_directory when asked to "pull up the contact spreadsheet," "show me company contacts," or similar — the dashboard itself handles opening that view and offering the Excel download. If told a caller was sorted into the wrong category, call reclassify_caller — same disambiguation rule as everything else: if the name/phone matches more than one caller, list them and ask which one instead of guessing. If asked about a past call/caller that isn't showing up in Company Contacts (it only auto-classifies calls that ended after this feature went live), call backfill_caller_classifications to go classify older calls on file — it's always safe to run, since it skips anything already classified.
 - Devices is the one dashboard panel still placeholder sample data with no tool behind it. If asked about it, say plainly you don't have that connected yet — never invent a plausible-sounding status to sound complete.`;
 
 /**
@@ -408,6 +488,88 @@ const SKILLS: Skill[] = [
       );
 
       return { reclassified: true, name: match.name || null, phone: match.phone || null, from: previousCategory, to: category };
+    },
+  },
+  {
+    name: "backfill_caller_classifications",
+    description: "Go back through past calls that happened before Company Contacts existed (or before it was fully set up) and classify them retroactively — lead, vendor, bill collector, etc., same categories new calls get automatically. Use this when asked to sort/classify old or past calls, or when a specific past caller (e.g. a name mentioned in an earlier call) isn't showing up in Company Contacts yet. Only processes calls that don't already have a classification, so it's always safe to run again — it never redoes work or double-bills.",
+    input_schema: {
+      type: "object",
+      properties: {
+        limit: {
+          type: "number",
+          description: "Max number of past calls to classify in this run (default 25) — kept modest so one request stays fast and cheap. Run again to process more.",
+        },
+      },
+      additionalProperties: false,
+    },
+    execute: async (input) => {
+      const limit = Math.min(Math.max(Number(input.limit) || 25, 1), 100);
+
+      const { data: calls, error } = await supabase
+        .from("calls")
+        .select("conversation_id,caller_number,caller_name,transcript,created_at")
+        .order("created_at", { ascending: false })
+        .limit(300);
+      if (error) return { error: error.message };
+
+      const candidateCalls = (calls || []).filter((c: any) => c.conversation_id);
+      if (candidateCalls.length === 0) return { processed: 0, remaining: 0, message: "No past calls on file." };
+
+      const { data: already, error: alreadyErr } = await supabase
+        .from("mya_caller_classifications")
+        .select("conversation_id")
+        .in("conversation_id", candidateCalls.map((c: any) => c.conversation_id));
+      if (alreadyErr) return { error: alreadyErr.message };
+
+      const alreadyDone = new Set((already || []).map((a: any) => a.conversation_id));
+      const unclassified = candidateCalls.filter((c: any) => !alreadyDone.has(c.conversation_id));
+      if (unclassified.length === 0) {
+        return { processed: 0, remaining: 0, message: "Everything on file is already classified — nothing left to backfill." };
+      }
+
+      const toProcess = unclassified.slice(0, limit);
+      const results: any[] = [];
+
+      for (const call of toProcess) {
+        const transcriptText = call.transcript || "";
+        const isBillCollector = BILL_COLLECTOR_PHRASE.test(transcriptText);
+        let category = "uncategorized";
+        let reasoning = "";
+
+        if (isBillCollector) {
+          category = "bill_collector";
+          reasoning = "Caller stated this was an attempt to collect a debt (required by law for debt collectors).";
+        } else {
+          const aiResult = await classifyTranscriptWithAI(transcriptText);
+          if (aiResult) {
+            category = aiResult.category;
+            reasoning = aiResult.reasoning;
+          }
+        }
+
+        const { error: insertErr } = await supabase.from("mya_caller_classifications").insert({
+          conversation_id: call.conversation_id,
+          phone: call.caller_number || null,
+          name: call.caller_name || null,
+          email: extractEmailFromTranscript(transcriptText),
+          website: extractWebsiteFromTranscript(transcriptText),
+          category,
+          flag_for_block: category === "bill_collector",
+          reasoning,
+        });
+        if (insertErr) {
+          console.error("Backfill insert error (non-fatal):", insertErr);
+          continue;
+        }
+        results.push({ name: call.caller_name || null, phone: call.caller_number || null, category });
+      }
+
+      return {
+        processed: results.length,
+        remaining: unclassified.length - results.length,
+        results,
+      };
     },
   },
   {
