@@ -1469,6 +1469,17 @@
     let intentionalStop = false;
     let pendingSpeechBuffer = "";
     let pendingSendTimer = null;
+    // Bumped every time a new recognition instance is created. Each
+    // instance's onend closes over the generation it was born with — if it
+    // fires late (after a newer instance has already taken over for a
+    // later exchange), the generation numbers won't match and it's treated
+    // as a complete no-op. Without this, a delayed onend from an old
+    // instance can read the CURRENT (by-then-stale-for-it) shared
+    // intentionalStop/pausedForPlayback flags and schedule a redundant
+    // restart, leaving two recognition instances competing for the
+    // microphone — the mic just stops responding to anything after enough
+    // of these pile up across a few exchanges.
+    let recognitionGeneration = 0;
 
     function setMicUI() {
       if (!SpeechRecognitionCtor) {
@@ -1585,6 +1596,7 @@
 
     function startRecognition() {
       if (!SpeechRecognitionCtor || pausedForPlayback || !micEnabled) return;
+      const myGeneration = ++recognitionGeneration;
       recognition = new SpeechRecognitionCtor();
       recognition.continuous = true;
       recognition.interimResults = true;
@@ -1646,6 +1658,12 @@
       };
 
       recognition.onend = () => {
+        // A newer recognition instance has already taken over (created for
+        // a later exchange) — this is a stale, late-arriving event from an
+        // instance nobody's using anymore. Touching the shared flags or
+        // scheduling a restart here would only interfere with whatever the
+        // current instance is already doing correctly.
+        if (myGeneration !== recognitionGeneration) return;
         if (intentionalStop) {
           intentionalStop = false;
           return;
