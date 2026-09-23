@@ -18,6 +18,17 @@ const OWNER_PHONE    = process.env.OWNER_PHONE_NUMBER || "";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+/* ── Caller Directory classification (leads/vendors/bill collectors/etc.) ──
+   Entirely separate, additive feature: builds a second list alongside
+   mya_contacts, never changes anything about it. See classifyAndStoreCaller
+   below for how it stays cheap and can never break this webhook. */
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
+const ANTHROPIC_MODEL = "claude-sonnet-5";
+// Set this env var to "off" in Vercel (no code change/deploy needed) to
+// instantly pause caller classification — e.g. if you ever want to stop
+// the small extra Anthropic usage it adds, for any reason.
+const CALLER_CLASSIFICATION_ENABLED = process.env.CALLER_CLASSIFICATION_ENABLED !== "off";
+
 /* ── helpers ─────────────────────────────────────────────────── */
 
 async function sendSms(to: string, body: string) {
@@ -92,6 +103,192 @@ function extractPropertyAddress(transcript: any[]): string | null {
   );
 
   return match?.[1]?.trim() || null;
+}
+
+/** Federal law (FDCPA) requires debt collectors to say this on every call —
+ * a far more reliable signal than guessing from tone or wording, and it
+ * needs no AI call at all. */
+const BILL_COLLECTOR_PHRASE =
+  /attempt(?:ing)?\s+to\s+collect\s+(?:a|this|the)\s+debt|this\s+(?:call|communication)\s+is\s+from\s+a\s+debt\s+collector/i;
+
+/** Extract a caller-stated email address from the transcript, if any. */
+function extractEmail(transcript: any[]): string | null {
+  if (!Array.isArray(transcript)) return null;
+  const userText = transcript
+    .filter((t: any) => t.role === "user")
+    .map((t: any) => t.message || t.text || "")
+    .join(" ");
+  const match = userText.match(/[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}/);
+  return match ? match[0].toLowerCase() : null;
+}
+
+/** Extract a caller-stated website/company domain from the transcript, if any. */
+function extractWebsite(transcript: any[]): string | null {
+  if (!Array.isArray(transcript)) return null;
+  const userText = transcript
+    .filter((t: any) => t.role === "user")
+    .map((t: any) => t.message || t.text || "")
+    .join(" ");
+  const candidates = userText.matchAll(
+    /\b(?:https?:\/\/)?(?:www\.)?[a-zA-Z0-9-]+\.(?:com|net|org|io|co|biz)\b(?:\/[^\s]*)?/gi
+  );
+  for (const m of candidates) {
+    const precedingChar = userText[m.index! - 1];
+    if (precedingChar === "@") continue; // that's an email's domain, not a separately-stated website
+    return m[0];
+  }
+  return null;
+}
+
+/** Every caller type the Caller Directory sorts into. Anything that doesn't
+ * clearly fit lands in "uncategorized" for a human to review, rather than
+ * have her guess and be confidently wrong. */
+const CALLER_CATEGORIES = [
+  "lead",
+  "existing_client",
+  "vendor",
+  "contractor",
+  "subcontractor",
+  "general_contractor",
+  "bill_collector",
+  "job_applicant",
+  "wrong_number_or_spam",
+  "uncategorized",
+];
+
+/** One small, cheap Claude call — only reached when nothing deterministic
+ * already answered the question — to classify open-ended caller types
+ * (job applicants, vendors, etc.) that no fixed keyword list could reliably
+ * catch. Never throws: any failure just means "uncategorized," never a
+ * broken webhook. */
+async function classifyWithAI(params: {
+  transcriptText: string;
+  callerType: string;
+  callPurpose: string;
+  trade: string | null;
+  crewSize: any;
+  serviceArea: string | null;
+}): Promise<{ category: string; reasoning: string } | null> {
+  if (!ANTHROPIC_API_KEY) return null;
+  try {
+    const hints = [
+      params.trade ? `Mentioned trade: ${params.trade}` : null,
+      params.crewSize ? `Mentioned crew size: ${params.crewSize}` : null,
+      params.serviceArea ? `Mentioned service area: ${params.serviceArea}` : null,
+      params.callPurpose && params.callPurpose !== "other" ? `Stated purpose: ${params.callPurpose}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const prompt =
+      `A phone call just ended at a construction company. Read the transcript ` +
+      `and classify who the caller was.\n\n` +
+      `Categories (pick exactly one): ${CALLER_CATEGORIES.filter((c) => c !== "uncategorized").join(", ")}\n\n` +
+      (hints ? `Known hints from the phone system:\n${hints}\n\n` : "") +
+      `Transcript:\n${params.transcriptText.slice(0, 6000)}\n\n` +
+      `Respond with ONLY this JSON shape, nothing else: {"category": "...", "reasoning": "one short sentence"}`;
+
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: ANTHROPIC_MODEL,
+        max_tokens: 150,
+        output_config: { effort: "low" },
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const text = (data.content || []).find((b: any) => b.type === "text")?.text || "";
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+    const category = CALLER_CATEGORIES.includes(parsed.category) ? parsed.category : "uncategorized";
+    return {
+      category,
+      reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning.slice(0, 300) : "",
+    };
+  } catch (err) {
+    console.error("Caller classification AI error (non-fatal):", err);
+    return null;
+  }
+}
+
+/**
+ * Classifies who just called (lead, vendor, bill collector, job applicant,
+ * etc.) and adds them to the Caller Directory — a brand-new table, entirely
+ * separate from mya_contacts/the "New Leads" count above, so nothing about
+ * those changes. Cheapest possible path first: the legally-required bill
+ * collector phrase and the phone system's own existing/prospective tags
+ * need no AI call at all — Claude is only asked when nothing else already
+ * answered the question. Skips entirely if this call was already
+ * classified (e.g. a resent webhook), so a retry can never trigger a
+ * second AI call.
+ */
+async function classifyAndStoreCaller(params: {
+  conversationId: string;
+  crmPhone: string;
+  callerName: string | null;
+  companyName: string | null;
+  transcript: any[];
+  transcriptText: string;
+  callerType: string;
+  callPurpose: string;
+  trade: string | null;
+  crewSize: any;
+  serviceArea: string | null;
+}): Promise<void> {
+  const { data: existing } = await supabase
+    .from("mya_caller_classifications")
+    .select("id")
+    .eq("conversation_id", params.conversationId)
+    .maybeSingle();
+  if (existing) return;
+
+  const email = extractEmail(params.transcript);
+  const website = extractWebsite(params.transcript);
+  const isBillCollector = BILL_COLLECTOR_PHRASE.test(params.transcriptText);
+
+  let category = "uncategorized";
+  let reasoning = "";
+
+  if (isBillCollector) {
+    category = "bill_collector";
+    reasoning = "Caller stated this was an attempt to collect a debt (required by law for debt collectors).";
+  } else if (params.callerType === "existing_client") {
+    category = "existing_client";
+    reasoning = "Phone system's own conversation tagged this as an existing client.";
+  } else if (params.callerType === "prospective_client") {
+    category = "lead";
+    reasoning = "Phone system's own conversation tagged this as a prospective client.";
+  } else {
+    const aiResult = await classifyWithAI(params);
+    if (aiResult) {
+      category = aiResult.category;
+      reasoning = aiResult.reasoning;
+    }
+  }
+
+  const flagForBlock = category === "bill_collector";
+
+  const { error } = await supabase.from("mya_caller_classifications").insert({
+    conversation_id: params.conversationId,
+    phone: params.crmPhone || null,
+    name: params.callerName || null,
+    email,
+    website,
+    company: params.companyName || null,
+    category,
+    flag_for_block: flagForBlock,
+    reasoning,
+  });
+
+  if (error) console.error("Caller classification insert error:", error);
 }
 
 /** Build bullet-point details from transcript */
@@ -636,6 +833,33 @@ if (crmPhone) {
         transcript,
       })
     );
+
+    /* 5. Classify caller for the Caller Directory (Leads/Vendors/Bill
+       Collectors/Job Applicants/etc.) ──────────────────────────────────
+       Fully isolated and best-effort: only ADDS a row to a brand-new
+       table. Never touches anything above, and can never fail this
+       webhook — if anything here throws, it's caught right here and
+       logged, and everything already saved above (the contact, the
+       conversation, the SMS) is completely unaffected. */
+    if (CALLER_CLASSIFICATION_ENABLED && conversationId) {
+      try {
+        await classifyAndStoreCaller({
+          conversationId,
+          crmPhone,
+          callerName,
+          companyName,
+          transcript,
+          transcriptText,
+          callerType,
+          callPurpose,
+          trade,
+          crewSize,
+          serviceArea,
+        });
+      } catch (classifyErr) {
+        console.error("Caller classification error (non-fatal):", classifyErr);
+      }
+    }
 
     return res.status(200).json({ ok: true, conversation_id: conversationId });
   } catch (err: any) {

@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mya — Elevate Construction AI Operations</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ============ LEFT NAV ============ -->
+  <nav class="sidenav">
+    <div class="logo-block">
+      <div class="logo-word">MYA</div>
+      <div class="logo-sub">YOUR AI OPERATIONS PARTNER</div>
+      <div class="logo-company">ELEVATE CONSTRUCTION</div>
+    </div>
+
+    <div class="nav-list">
+      <a href="#" class="nav-item active" id="nav-command-center"><span class="nav-icon">◆</span> Command Center</a>
+      <a href="#" class="nav-item" id="nav-calls"><span class="nav-icon">☎</span> Calls</a>
+      <a href="#" class="nav-item" id="nav-leads"><span class="nav-icon">✦</span> Leads</a>
+      <a href="#" class="nav-item" id="nav-company-contacts"><span class="nav-icon">📇</span> Company Contacts</a>
+      <a href="#" class="nav-item" id="nav-followups"><span class="nav-icon">↻</span> Follow-Ups</a>
+      <a href="#" class="nav-item" id="nav-projects"><span class="nav-icon">▣</span> Projects</a>
+      <a href="#" class="nav-item" id="nav-approvals"><span class="nav-icon">✓</span> Approvals</a>
+      <a href="#" class="nav-item" id="nav-memory"><span class="nav-icon">◈</span> Memory</a>
+      <a href="#" class="nav-item" id="nav-settings"><span class="nav-icon">⚙</span> Settings</a>
+    </div>
+
+    <div class="sidenav-footer">
+      <img class="logo-slot-img" src="assets/elevate-logo.webp" alt="Elevate Construction LLC">
+    </div>
+  </nav>
+
+  <!-- ============ CENTER COLUMN ============ -->
+  <main class="main-content">
+
+    <!-- Greeting header -->
+    <section class="greeting-header">
+      <div>
+        <h1 id="greeting-title">Good Morning, Michael</h1>
+        <p>Here's what's happening with your business today.</p>
+      </div>
+      <div class="greeting-clock">
+        <div class="clock-date" id="clock-date">Loading date…</div>
+        <div class="clock" id="clock">--:--:-- --</div>
+      </div>
+    </section>
+
+    <!-- Mya presence / message hero -->
+    <section class="panel mya-hero">
+      <div class="mya-orb" id="mya-orb" role="button" tabindex="0" title="Click, then say &quot;Mya&quot; to talk to her">
+        <div class="mya-orb-glow"></div>
+        <div class="mya-orb-ring ring-1"></div>
+        <div class="mya-orb-ring ring-2"></div>
+        <div class="mya-orb-core">
+          <div class="mya-orb-swirl"></div>
+        </div>
+      </div>
+      <div class="mya-message">
+        <div class="mya-message-head">
+          <strong>Hi Michael,</strong>
+          <span class="sample-badge">SAMPLE DATA</span>
+        </div>
+        <p id="mya-message-text">Loading your snapshot…</p>
+      </div>
+    </section>
+
+    <!-- KPI ROW -->
+    <section class="kpi-row" id="kpi-row" aria-label="Key performance indicators"></section>
+
+    <!-- Schedule / Activity / Attention -->
+    <section class="triple-row">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Today's Schedule</h2>
+          <span class="sample-badge">SAMPLE DATA</span>
+        </div>
+        <div class="timeline" id="schedule-list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Recent Activity</h2>
+          <span class="sample-badge">SAMPLE DATA</span>
+        </div>
+        <div class="activity-list" id="activity-list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Needs Your Attention</h2>
+          <span class="count-badge" id="approvals-count">0</span>
+          <span class="sample-badge">SAMPLE DATA</span>
+        </div>
+        <div class="approvals-list" id="approvals-list"></div>
+        <div class="approval-toast" id="approval-toast" hidden></div>
+      </div>
+    </section>
+
+    <!-- Leads / Projects / Memory / Working now -->
+    <section class="quad-row">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>New Leads</h2>
+          <span class="sample-badge">SAMPLE DATA</span>
+        </div>
+        <div class="list-block" id="leads-list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Projects Needing Attention</h2>
+          <span class="sample-badge">SAMPLE DATA</span>
+        </div>
+        <div class="list-block" id="projects-list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Memory Insights</h2>
+          <span class="sample-badge">SAMPLE DATA</span>
+        </div>
+        <div class="memory-stats" id="memory-stats"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Mya Working Now</h2>
+          <span class="sample-badge">SAMPLE DATA</span>
+        </div>
+        <ul class="working-list" id="working-list"></ul>
+      </div>
+    </section>
+
+    <!-- Contractors & Sub-Contractors -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Contractors &amp; Sub-Contractors</h2>
+        <span class="sample-badge">SAMPLE DATA</span>
+        <span class="panel-add-wrap">
+          <button type="button" class="panel-add-btn" id="add-contractor-btn" disabled>+ Add</button>
+          <span class="tooltip">Not connected yet — display only.</span>
+        </span>
+      </div>
+      <div class="list-block list-block-scroll" id="contractors-list"></div>
+    </section>
+
+    <!-- Mya's Memory -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Mya's Memory</h2>
+        <span class="sample-badge">SAMPLE DATA</span>
+      </div>
+      <div class="list-block list-block-scroll" id="memory-facts-list"></div>
+    </section>
+
+    <!-- ASK MYA -->
+    <section class="panel ask-mya-panel">
+      <div class="ask-mya-tabs">
+        <button class="ask-tab active" type="button" disabled>Ask Mya</button>
+        <button class="ask-tab" type="button" disabled>Create a Task</button>
+        <button class="ask-tab" type="button" disabled>Search Memory</button>
+        <button class="ask-tab" type="button" disabled>Analyze</button>
+        <button class="ask-tab" type="button" disabled>More ▾</button>
+      </div>
+      <div class="ask-mya-log" id="ask-mya-log" hidden></div>
+      <div class="ask-mya-input-wrap">
+        <input type="text" id="ask-mya-input" placeholder="Type a message or give a command…">
+        <button class="ask-send" type="button" id="ask-mya-send">➤</button>
+        <button class="ask-voice-toggle" type="button" id="ask-mya-voice-toggle" title="Mya speaks her replies out loud">🔊</button>
+        <button class="ask-mic" type="button" id="ask-mya-mic" title="Always listen for &quot;Mya&quot;">🎙</button>
+      </div>
+      <div class="ask-mya-status" id="ask-mya-voice-status" hidden></div>
+      <div class="ask-mya-chips">
+        <button class="chip" type="button" disabled>What's going on today?</button>
+        <button class="chip" type="button" disabled>Follow up with last week's estimates</button>
+        <button class="chip" type="button" disabled>Show me the Rivers project</button>
+        <button class="chip" type="button" disabled>Summarize my calls</button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============ RIGHT SIDEBAR ============ -->
+  <aside class="right-sidebar">
+
+    <div class="panel status-card">
+      <div class="status-card-head">
+        <span class="section-label">MYA STATUS</span>
+      </div>
+      <div class="status-online">
+        <span class="dot dot-online"></span> ONLINE
+      </div>
+      <div class="status-online-sub">Voice · Memory · Automations · Ready</div>
+
+      <div class="access-row" tabindex="0">
+        <div class="access-row-left">
+          <span class="access-icon">🖥</span>
+          <div>
+            <div class="access-label">Computer Access</div>
+            <div class="access-caption">No local actions permitted.</div>
+          </div>
+        </div>
+        <div class="toggle-off">OFF <span class="lock-icon">🔒</span></div>
+        <span class="tooltip">Not connected yet — display only.</span>
+      </div>
+
+      <button class="stop-mya-btn" tabindex="0">
+        ⛔ STOP MYA
+        <span class="stop-caption">Immediately halt all computer activity</span>
+        <span class="tooltip">Not connected yet — display only.</span>
+      </button>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Connected Services</h2>
+        <span class="sample-badge">SAMPLE DATA</span>
+      </div>
+      <div class="service-list" id="services-list"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Devices</h2>
+        <span class="sample-badge">SAMPLE DATA</span>
+      </div>
+      <div class="service-list" id="devices-list"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Quick Actions</h2>
+      </div>
+      <div class="quick-actions" id="quick-actions"></div>
+    </div>
+
+  </aside>
+
+</div>
+
+<!-- ============ FOOTER STRIP ============ -->
+<footer class="footer-strip">
+  <span class="safety-mode"><span class="dot dot-online"></span> Mya is ready. &nbsp;·&nbsp; 🔒 Safety Mode: Computer Access OFF</span>
+  <span class="tagline">Elevate Construction &nbsp;—&nbsp; <span id="footer-tagline-text">Building Excellence. Elevating Standards.</span></span>
+</footer>
+
+<!-- ============ COMPANY CONTACTS MODAL ============ -->
+<div class="modal-overlay" id="company-contacts-modal" hidden>
+  <div class="modal-card modal-card-wide">
+    <div class="modal-header">
+      <h3>Company Contacts</h3>
+      <span class="sample-badge">SAMPLE DATA</span>
+      <span class="panel-add-wrap">
+        <button type="button" class="panel-add-btn" id="caller-directory-download-btn">⬇ Download Spreadsheet</button>
+      </span>
+      <button type="button" class="modal-close" id="company-contacts-modal-close">✕</button>
+    </div>
+    <div class="directory-tabs" id="caller-directory-tabs"></div>
+    <div class="list-block list-block-scroll" id="caller-directory-list"></div>
+  </div>
+</div>
+
+<!-- ============ CREATE FOLLOW-UP MODAL ============ -->
+<div class="modal-overlay" id="followup-modal" hidden>
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3>Create a Follow-Up</h3>
+      <button type="button" class="modal-close" id="followup-modal-close">✕</button>
+    </div>
+    <form id="followup-form">
+      <label class="modal-field">
+        <span>Customer name</span>
+        <input type="text" id="followup-name" required autocomplete="off">
+      </label>
+      <label class="modal-field">
+        <span>Note (optional)</span>
+        <textarea id="followup-note" rows="3"></textarea>
+      </label>
+      <label class="modal-field">
+        <span>Due date (optional)</span>
+        <input type="date" id="followup-due">
+      </label>
+      <div class="modal-status" id="followup-status"></div>
+      <div class="modal-actions">
+        <button type="button" class="modal-cancel" id="followup-cancel">Cancel</button>
+        <button type="submit" class="modal-submit" id="followup-submit">Create Follow-Up</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ SETTINGS MODAL ============ -->
+<div class="modal-overlay" id="settings-modal" hidden>
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3>Settings</h3>
+      <button type="button" class="modal-close" id="settings-modal-close">✕</button>
+    </div>
+    <form id="settings-form">
+      <label class="modal-field">
+        <span>Owner name (shown in greeting)</span>
+        <input type="text" id="settings-owner-name" autocomplete="off">
+      </label>
+      <label class="modal-field">
+        <span>Footer tagline</span>
+        <input type="text" id="settings-tagline" autocomplete="off">
+      </label>
+      <label class="modal-checkbox">
+        <input type="checkbox" id="settings-notify-enabled">
+        <span>Text me when I approve a "Notifies you" item</span>
+      </label>
+      <label class="modal-field">
+        <span>Notification phone number (optional — uses the default if blank)</span>
+        <input type="text" id="settings-notify-phone" autocomplete="off" placeholder="+15551234567">
+      </label>
+      <div class="modal-status" id="settings-status"></div>
+      <div class="modal-actions">
+        <button type="button" class="modal-cancel" id="settings-cancel">Cancel</button>
+        <button type="submit" class="modal-submit" id="settings-submit">Save Settings</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ ADD CONTRACTOR MODAL ============ -->
+<div class="modal-overlay" id="contractor-modal" hidden>
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3>Add a Contractor / Sub-Contractor</h3>
+      <button type="button" class="modal-close" id="contractor-modal-close">✕</button>
+    </div>
+    <form id="contractor-form">
+      <label class="modal-field">
+        <span>Category (e.g. Roofing, Electrician, Plumber)</span>
+        <input type="text" id="contractor-category" required autocomplete="off">
+      </label>
+      <label class="modal-field">
+        <span>Contact name / company</span>
+        <input type="text" id="contractor-name" required autocomplete="off">
+      </label>
+      <label class="modal-field">
+        <span>Phone number (optional)</span>
+        <input type="text" id="contractor-phone" autocomplete="off" placeholder="+15551234567">
+      </label>
+      <label class="modal-field">
+        <span>Pricing / rate (optional)</span>
+        <input type="text" id="contractor-rate" autocomplete="off" placeholder="By the Job">
+      </label>
+      <label class="modal-field">
+        <span>Additional skills &amp; notes (optional)</span>
+        <textarea id="contractor-notes" rows="2"></textarea>
+      </label>
+      <label class="modal-checkbox">
+        <input type="checkbox" id="contractor-added-crm">
+        <span>Already added in CRM</span>
+      </label>
+      <div class="modal-status" id="contractor-status"></div>
+      <div class="modal-actions">
+        <button type="button" class="modal-cancel" id="contractor-cancel">Cancel</button>
+        <button type="submit" class="modal-submit" id="contractor-submit">Add Contractor</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Generates real multi-tab .xlsx files client-side for the Caller Directory download — no backend, no build step. -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
