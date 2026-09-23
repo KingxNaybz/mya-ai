@@ -513,6 +513,17 @@
       return;
     }
 
+    const header = el("div", "directory-row-header");
+    header.innerHTML = `
+      <div class="directory-cell directory-head">Name</div>
+      <div class="directory-cell directory-head">Company</div>
+      <div class="directory-cell directory-head">Phone</div>
+      <div class="directory-cell directory-head">Email</div>
+      <div class="directory-cell directory-head">Website</div>
+      <div class="directory-cell directory-head">Category</div>
+    `;
+    container.appendChild(header);
+
     rows.forEach((row) => {
       const item = el("div", "directory-row");
       const canReclassify = Boolean(row.phone || row.name);
@@ -521,7 +532,8 @@
         .map((key) => `<option value="${key}"${key === (row.category || "uncategorized") ? " selected" : ""}>${escapeHtmlText(CALLER_CATEGORY_LABELS[key])}</option>`)
         .join("");
       item.innerHTML = `
-        <div class="directory-cell"><strong>${escapeHtmlText(row.name || "Unknown")}</strong>${row.company ? `<span>${escapeHtmlText(row.company)}</span>` : ""}</div>
+        <div class="directory-cell"><strong>${escapeHtmlText(row.name || "Unknown")}</strong></div>
+        <div class="directory-cell${row.company ? "" : " directory-muted"}">${escapeHtmlText(row.company || "—")}</div>
         <div class="directory-cell${row.phone ? "" : " directory-muted"}">${escapeHtmlText(row.phone || "—")}</div>
         <div class="directory-cell${row.email ? "" : " directory-muted"}">${escapeHtmlText(row.email || "—")}</div>
         <div class="directory-cell${row.website ? "" : " directory-muted"}">${escapeHtmlText(row.website || "—")}</div>
@@ -603,10 +615,10 @@
     const toSheetRows = (rows) =>
       rows.map((r) => ({
         Name: r.name || "",
+        Company: r.company || "",
         Phone: r.phone || "",
         Email: r.email || "",
         Website: r.website || "",
-        Company: r.company || "",
         Category: callerDirectoryLabel(r.category),
         "Flagged For Block": r.flagForBlock ? "Yes" : "",
         Notes: r.reasoning || "",
@@ -1455,6 +1467,8 @@
     let awakeTimeout = null;
     let pausedForPlayback = false;
     let intentionalStop = false;
+    let pendingSpeechBuffer = "";
+    let pendingSendTimer = null;
 
     function setMicUI() {
       if (!SpeechRecognitionCtor) {
@@ -1507,15 +1521,20 @@
     }
 
     // How long to keep listening for a follow-up without requiring the
-    // wake word again. 7s proved too short for a real back-and-forth —
-    // reading a multi-point rundown and then framing a follow-up question
-    // easily takes longer than that.
-    const AWAKE_TIMEOUT_MS = 20000;
+    // wake word again. 7s, then 20s, both proved too short for a real
+    // back-and-forth — thinking through a follow-up, or just listening to
+    // a longer reply before responding to it, regularly takes longer than
+    // that, and hitting this timeout is what made a conversation feel like
+    // it "ended" after just one or two exchanges.
+    const AWAKE_TIMEOUT_MS = 45000;
 
     function resetAwakeTimer() {
       clearTimeout(awakeTimeout);
       awakeTimeout = setTimeout(() => {
         awake = false;
+        clearTimeout(pendingSendTimer);
+        pendingSendTimer = null;
+        pendingSpeechBuffer = "";
         setMicUI();
         setVoiceStatus('Listening for "Mya"…');
       }, AWAKE_TIMEOUT_MS);
@@ -1534,6 +1553,31 @@
       setMicUI();
       input.value = text;
       send();
+    }
+
+    // Chrome's speech recognizer marks a segment "final" after detecting a
+    // pause — including a normal mid-sentence breath or a moment spent
+    // thinking, not just the end of a thought. Sending the instant a
+    // segment finalizes was cutting people off mid-sentence. Instead,
+    // buffer finalized text and wait for a real quiet period before
+    // actually sending — any further speech (even a fresh "final" segment,
+    // or just an interim result proving they're still talking) extends the
+    // wait instead of firing early.
+    const FINAL_RESULT_QUIET_PERIOD_MS = 1500;
+
+    function queueSpeechForSend(text) {
+      pendingSpeechBuffer = pendingSpeechBuffer ? `${pendingSpeechBuffer} ${text}` : text;
+      extendPendingSend();
+    }
+
+    function extendPendingSend() {
+      clearTimeout(pendingSendTimer);
+      pendingSendTimer = setTimeout(() => {
+        const toSend = pendingSpeechBuffer;
+        pendingSpeechBuffer = "";
+        pendingSendTimer = null;
+        if (toSend) wakeAndSend(toSend);
+      }, FINAL_RESULT_QUIET_PERIOD_MS);
     }
 
     function startRecognition() {
@@ -1564,14 +1608,18 @@
           if (!result.isFinal) return;
         } else {
           // Already in conversation mode and hearing something — extend
-          // the window instead of letting it expire mid-thought.
+          // the window instead of letting it expire mid-thought. Also
+          // extend the shorter "are they still mid-sentence" wait below if
+          // one's already running — any activity at all, interim or final,
+          // is evidence they're not done talking yet.
           resetAwakeTimer();
+          if (pendingSendTimer) extendPendingSend();
         }
 
         if (!result.isFinal) return; // don't act on a still-changing transcript
 
         const after = transcript.replace(new RegExp(`^.*${WAKE_WORD.source}[,:]?\\s*`, "i"), "").trim();
-        if (after) wakeAndSend(after);
+        if (after) queueSpeechForSend(after);
         // else: this segment was just the wake word alone — already awake
         // and waiting, the actual request will arrive as the next result.
       };
@@ -1627,6 +1675,9 @@
       } else {
         awake = false;
         clearTimeout(awakeTimeout);
+        clearTimeout(pendingSendTimer);
+        pendingSendTimer = null;
+        pendingSpeechBuffer = "";
         intentionalStop = true;
         if (recognition) {
           try { recognition.stop(); } catch (e) { /* ignore */ }

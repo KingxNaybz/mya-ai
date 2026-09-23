@@ -230,11 +230,24 @@ async function classifyWithAI(params: {
  * classified (e.g. a resent webhook), so a retry can never trigger a
  * second AI call.
  */
+/** ElevenLabs Data Collection fields (like company_name, used below) can
+ * arrive as the raw internal shape { data_collection_id, value, json_schema,
+ * rationale, ... } instead of the plain string they're meant to hold —
+ * unwrap defensively before ever storing it, mirroring the same defensive
+ * handling this file already does elsewhere for other collected fields. */
+function unwrapCollectedText(value: any): string | null {
+  if (typeof value === "string") return value.trim() || null;
+  if (value && typeof value === "object" && typeof value.value === "string") {
+    return value.value.trim() || null;
+  }
+  return null;
+}
+
 async function classifyAndStoreCaller(params: {
   conversationId: string;
   crmPhone: string;
   callerName: string | null;
-  companyName: string | null;
+  companyName: any;
   transcript: any[];
   transcriptText: string;
   callerType: string;
@@ -282,7 +295,7 @@ async function classifyAndStoreCaller(params: {
     name: params.callerName || null,
     email,
     website,
-    company: params.companyName || null,
+    company: unwrapCollectedText(params.companyName),
     category,
     flag_for_block: flagForBlock,
     reasoning,

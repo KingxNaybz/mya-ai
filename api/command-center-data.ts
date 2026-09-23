@@ -299,14 +299,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       workingNow: (recentActions.data || []).map((r: any) => r.description),
       services: getServicesStatus(),
       callerDirectory: (callerDirectoryRows.data || []).map((c: any) => ({
-        name: c.name || null,
+        name: cleanText(c.name, 80) || null,
         phone: c.phone || null,
         email: c.email || null,
         website: c.website || null,
-        company: c.company || null,
+        company: cleanText(c.company, 80) || null,
         category: c.category || "uncategorized",
         flagForBlock: Boolean(c.flag_for_block),
-        reasoning: c.reasoning || null,
+        reasoning: cleanText(c.reasoning, 300) || null,
         createdAt: c.created_at,
       })),
     });
