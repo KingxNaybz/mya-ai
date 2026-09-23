@@ -148,6 +148,14 @@ button{ font-family: inherit; cursor: pointer; }
   box-shadow: var(--card-glow);
 }
 
+.panel-flash{
+  animation: panel-flash-pulse 1.2s ease-out;
+}
+@keyframes panel-flash-pulse{
+  0%{ box-shadow: 0 0 0 3px var(--accent-glow), var(--card-glow); border-color: var(--accent); }
+  100%{ box-shadow: var(--card-glow); }
+}
+
 .panel-header{
   display: flex;
   align-items: center;

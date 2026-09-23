@@ -145,6 +145,7 @@
       const sample = SAMPLE_DATA.kpis[key];
       const live = liveValues[key];
       const card = el("div", "kpi-card");
+      card.setAttribute("data-kpi", key);
       if (live && typeof live.value === "number") {
         card.innerHTML = `
           <div class="kpi-top">
@@ -867,6 +868,56 @@
       );
     } catch (e) {
       /* silent fallback to sample data */
+    }
+  }
+
+  // This is still one single dashboard page, not separate pages per nav
+  // item — clicking "Leads," "Approvals," etc. jumps you to that section
+  // right here and briefly highlights it, rather than doing nothing (which
+  // is what every one of these used to do). "Settings" opens the same real
+  // settings modal the Quick Actions button already does.
+  function flashPanel(el) {
+    if (!el) return;
+    const panel = el.closest(".panel, .kpi-card") || el;
+    panel.classList.add("panel-flash");
+    setTimeout(() => panel.classList.remove("panel-flash"), 1200);
+  }
+
+  function initSidenavJumpLinks() {
+    const jumpTargets = {
+      "nav-command-center": null, // scrolls to top, handled separately below
+      "nav-calls": "activity-list",
+      "nav-leads": "leads-list",
+      "nav-followups": '.kpi-card[data-kpi="followUpsDue"]',
+      "nav-projects": "projects-list",
+      "nav-approvals": "approvals-list",
+      "nav-memory": "memory-facts-list",
+    };
+
+    Object.entries(jumpTargets).forEach(([navId, targetSelector]) => {
+      const navEl = document.getElementById(navId);
+      if (!navEl) return;
+      navEl.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (!targetSelector) {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+          return;
+        }
+        const target = targetSelector.startsWith(".")
+          ? document.querySelector(targetSelector)
+          : document.getElementById(targetSelector);
+        if (!target) return;
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        flashPanel(target);
+      });
+    });
+
+    const settingsNav = document.getElementById("nav-settings");
+    if (settingsNav) {
+      settingsNav.addEventListener("click", (e) => {
+        e.preventDefault();
+        openSettingsModal();
+      });
     }
   }
 
@@ -1648,6 +1699,7 @@
   initContractorModal();
   initMemoryPanel();
   initCompanyContactsModal();
+  initSidenavJumpLinks();
   initAskMya();
 
   document.getElementById("approvals-list").addEventListener("click", (e) => {
