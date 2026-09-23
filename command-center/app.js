@@ -1455,6 +1455,8 @@
     let awakeTimeout = null;
     let pausedForPlayback = false;
     let intentionalStop = false;
+    let pendingSpeechBuffer = "";
+    let pendingSendTimer = null;
 
     function setMicUI() {
       if (!SpeechRecognitionCtor) {
@@ -1516,6 +1518,9 @@
       clearTimeout(awakeTimeout);
       awakeTimeout = setTimeout(() => {
         awake = false;
+        clearTimeout(pendingSendTimer);
+        pendingSendTimer = null;
+        pendingSpeechBuffer = "";
         setMicUI();
         setVoiceStatus('Listening for "Mya"…');
       }, AWAKE_TIMEOUT_MS);
@@ -1534,6 +1539,31 @@
       setMicUI();
       input.value = text;
       send();
+    }
+
+    // Chrome's speech recognizer marks a segment "final" after detecting a
+    // pause — including a normal mid-sentence breath or a moment spent
+    // thinking, not just the end of a thought. Sending the instant a
+    // segment finalizes was cutting people off mid-sentence. Instead,
+    // buffer finalized text and wait for a real quiet period before
+    // actually sending — any further speech (even a fresh "final" segment,
+    // or just an interim result proving they're still talking) extends the
+    // wait instead of firing early.
+    const FINAL_RESULT_QUIET_PERIOD_MS = 1500;
+
+    function queueSpeechForSend(text) {
+      pendingSpeechBuffer = pendingSpeechBuffer ? `${pendingSpeechBuffer} ${text}` : text;
+      extendPendingSend();
+    }
+
+    function extendPendingSend() {
+      clearTimeout(pendingSendTimer);
+      pendingSendTimer = setTimeout(() => {
+        const toSend = pendingSpeechBuffer;
+        pendingSpeechBuffer = "";
+        pendingSendTimer = null;
+        if (toSend) wakeAndSend(toSend);
+      }, FINAL_RESULT_QUIET_PERIOD_MS);
     }
 
     function startRecognition() {
@@ -1564,14 +1594,18 @@
           if (!result.isFinal) return;
         } else {
           // Already in conversation mode and hearing something — extend
-          // the window instead of letting it expire mid-thought.
+          // the window instead of letting it expire mid-thought. Also
+          // extend the shorter "are they still mid-sentence" wait below if
+          // one's already running — any activity at all, interim or final,
+          // is evidence they're not done talking yet.
           resetAwakeTimer();
+          if (pendingSendTimer) extendPendingSend();
         }
 
         if (!result.isFinal) return; // don't act on a still-changing transcript
 
         const after = transcript.replace(new RegExp(`^.*${WAKE_WORD.source}[,:]?\\s*`, "i"), "").trim();
-        if (after) wakeAndSend(after);
+        if (after) queueSpeechForSend(after);
         // else: this segment was just the wake word alone — already awake
         // and waiting, the actual request will arrive as the next result.
       };
@@ -1627,6 +1661,9 @@
       } else {
         awake = false;
         clearTimeout(awakeTimeout);
+        clearTimeout(pendingSendTimer);
+        pendingSendTimer = null;
+        pendingSpeechBuffer = "";
         intentionalStop = true;
         if (recognition) {
           try { recognition.stop(); } catch (e) { /* ignore */ }
