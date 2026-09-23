@@ -1414,16 +1414,30 @@
 
     const myaOrb = document.getElementById("mya-orb");
 
-    function stopSpeakingAnimation() {
-      if (myaOrb) myaOrb.classList.remove("is-speaking");
+    // Guards against restarting the mic twice for the same reply — once
+    // from the early "she's about to finish" warm-up below, and again from
+    // the normal "ended" handler. Whichever fires first wins; the other
+    // becomes a no-op. Without this, calling startRecognition() twice in a
+    // row creates two live recognition instances at once — the exact
+    // multi-instance mic bug fixed earlier, just from a different trigger.
+    let micRestartedForCurrentReply = false;
+
+    function restartMicForNextTurn() {
+      if (micRestartedForCurrentReply) return;
+      micRestartedForCurrentReply = true;
       pausedForPlayback = false;
       if (!micEnabled) return;
-      // She just finished replying — stay in "listening for your answer"
-      // mode for a few seconds instead of requiring the wake word again,
-      // so answering a question she just asked works like a real
+      // She's finishing up (or just finished) — stay in "listening for your
+      // answer" mode for a few seconds instead of requiring the wake word
+      // again, so answering a question she just asked works like a real
       // back-and-forth conversation, not a fresh command each time.
       enterAwakeMode();
       startRecognition();
+    }
+
+    function stopSpeakingAnimation() {
+      if (myaOrb) myaOrb.classList.remove("is-speaking");
+      restartMicForNextTurn();
     }
 
     async function playReplyAudio(audioBase64) {
@@ -1434,11 +1448,25 @@
           currentAudio.src = "";
         }
         currentAudio = new Audio(`data:audio/mpeg;base64,${audioBase64}`);
+        micRestartedForCurrentReply = false;
         if (myaOrb) myaOrb.classList.add("is-speaking");
         currentAudio.addEventListener("ended", stopSpeakingAnimation);
         currentAudio.addEventListener("error", () => {
           console.error("Mya voice playback error:", currentAudio && currentAudio.error);
           stopSpeakingAnimation();
+        });
+        // The browser's speech recognizer has real startup lag -- waiting
+        // for "ended" before restarting it means the first word or two of
+        // whatever you say next can get lost while it's still spinning up.
+        // Start warming it back up a little before she actually finishes
+        // instead: close enough to the end that it's essentially just her
+        // trailing silence, not her actual voice.
+        const EARLY_RESTART_SECONDS = 0.3;
+        currentAudio.addEventListener("timeupdate", () => {
+          const d = currentAudio.duration;
+          if (d && isFinite(d) && currentAudio.currentTime >= d - EARLY_RESTART_SECONDS) {
+            restartMicForNextTurn();
+          }
         });
         // recognition.stop() is asynchronous — the mic isn't actually off
         // until onend fires. Wait for that confirmation before playing,
