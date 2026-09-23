@@ -1562,8 +1562,11 @@
     // buffer finalized text and wait for a real quiet period before
     // actually sending — any further speech (even a fresh "final" segment,
     // or just an interim result proving they're still talking) extends the
-    // wait instead of firing early.
-    const FINAL_RESULT_QUIET_PERIOD_MS = 1500;
+    // wait instead of firing early. 1.5s still wasn't enough for a real
+    // thinking-pause mid-sentence; there's no value here that's guaranteed
+    // to never interrupt someone, only a tradeoff between that risk and
+    // how long she waits before responding.
+    const FINAL_RESULT_QUIET_PERIOD_MS = 3000;
 
     function queueSpeechForSend(text) {
       pendingSpeechBuffer = pendingSpeechBuffer ? `${pendingSpeechBuffer} ${text}` : text;
