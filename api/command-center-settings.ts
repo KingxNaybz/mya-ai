@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { createHash } from "crypto";
 import { createSessionToken, sessionCookieHeader, clearSessionCookieHeader, safeStringEqual } from "../lib/session";
 
 /**
@@ -170,6 +171,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // COMMAND_CENTER_API_KEY or any future MCP credential.
       res.setHeader("Set-Cookie", clearSessionCookieHeader());
       return res.status(200).json({ ok: true });
+    }
+
+    if (body.diagnoseHash === true) {
+      // Temporary, for the current Preview login investigation only --
+      // remove once resolved. Deliberately does NOT return either side's
+      // hash: publishing a bare hash of the password from an
+      // unauthenticated endpoint would let it be brute-forced completely
+      // offline, with no rate limit, no lockout, and no audit trail --
+      // bypassing mya_login_attempts entirely. Instead, the caller submits
+      // a SHA-256 of their own candidate (computed locally, e.g. from a
+      // clipboard value, never sent as plaintext) and gets back only
+      // whether it matches -- the same amount of information a real login
+      // attempt would reveal, no more.
+      const submitted = typeof body.sha256 === "string" ? body.sha256.trim().toLowerCase() : "";
+      const actual = createHash("sha256").update(DASHBOARD_PASSWORD).digest("hex");
+      const matches = submitted.length === 64 && safeStringEqual(submitted, actual);
+      return res.status(200).json({
+        dashboardPasswordConfigured: Boolean(DASHBOARD_PASSWORD),
+        matches,
+      });
     }
 
     if (body.login === true) {
