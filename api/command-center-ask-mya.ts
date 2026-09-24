@@ -1517,6 +1517,181 @@ async function executeTool(name: string, input: any): Promise<{ result: any; too
   }
 }
 
+/**
+ * MCP TOOL BRIDGE — lets an external MCP-speaking client (eventually the
+ * Hermes "mya" profile, once explicitly connected — NOT done by this code)
+ * call a small, explicit allowlist of Mya's own READ-only skills over the
+ * same endpoint the dashboard/desktop app already use. Off by default
+ * (MCP_BRIDGE_ENABLED must be exactly "true"); every branch below fails
+ * closed. No new Vercel function, no new URL — same file, same route,
+ * dispatched by request shape (a JSON-RPC 2.0 body instead of the existing
+ * {message,...}/{directTool,...} shapes).
+ *
+ * Deliberately exposes ONLY skills already classified at permission level 0
+ * (see getPermissionLevel above) — computed from that classification, not a
+ * separately hand-maintained list, so a skill can never be exposed here
+ * just because someone forgot to exclude it. ACT/APPROVAL-level skills are
+ * never reachable through this bridge, full stop, regardless of what a
+ * caller asks for by name.
+ */
+const MCP_BRIDGE_ENABLED = process.env.MCP_BRIDGE_ENABLED === "true";
+const MCP_BRIDGE_KEY = process.env.MCP_BRIDGE_KEY || "";
+const MCP_PROTOCOL_VERSION = "2024-11-05";
+const MCP_EXPOSED_SKILLS: Skill[] = SKILLS.filter((s) => getPermissionLevel(s.name) === 0);
+
+function findExposedMcpSkill(name: string): Skill | undefined {
+  return MCP_EXPOSED_SKILLS.find((s) => s.name === name);
+}
+
+/** Light JSON-Schema-subset validation against a skill's own input_schema —
+ * exactly the shape already used across every skill in SKILLS (type/object,
+ * properties with type, required[]). Rejects unknown-shaped or missing
+ * required input before anything reaches a skill's execute(); a caller can
+ * only ever pass plain strings/numbers/booleans into fields the skill
+ * itself already declared, never arbitrary structures, SQL, or code. */
+/** Returns null when input is valid, or an error message string when not —
+ * a plain nullable-string result rather than a discriminated union, kept
+ * deliberately simple here. */
+function validateToolInput(skill: Skill, input: any): string | null {
+  const schema = skill.input_schema as any;
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    return "arguments must be a plain object";
+  }
+  const required: string[] = Array.isArray(schema?.required) ? schema.required : [];
+  for (const key of required) {
+    if (input[key] === undefined || input[key] === null || input[key] === "") {
+      return `missing required argument "${key}"`;
+    }
+  }
+  const properties: Record<string, any> = schema?.properties || {};
+  for (const [key, value] of Object.entries(input)) {
+    const propSchema = properties[key];
+    if (!propSchema) {
+      if (schema?.additionalProperties === false) {
+        return `unknown argument "${key}"`;
+      }
+      continue;
+    }
+    if (propSchema.type === "string" && typeof value !== "string") {
+      return `argument "${key}" must be a string`;
+    }
+    if (propSchema.type === "number" && typeof value !== "number") {
+      return `argument "${key}" must be a number`;
+    }
+    if (Array.isArray(propSchema.enum) && !propSchema.enum.includes(value)) {
+      return `argument "${key}" must be one of: ${propSchema.enum.join(", ")}`;
+    }
+  }
+  return null;
+}
+
+function jsonRpcError(id: any, code: number, message: string) {
+  return { jsonrpc: "2.0", id: id ?? null, error: { code, message } };
+}
+function jsonRpcResult(id: any, result: any) {
+  return { jsonrpc: "2.0", id: id ?? null, result };
+}
+
+/** Handles one MCP JSON-RPC request. Returns the full JSON-RPC response
+ * body and the HTTP status to send it with — the caller (handler(), below)
+ * owns actually writing it, so auth/shape checks stay pure and testable. */
+async function handleMcpRequest(
+  body: any,
+  authHeader: string | undefined
+): Promise<{ status: number; body: any }> {
+  const id = body?.id ?? null;
+
+  if (!MCP_BRIDGE_ENABLED) {
+    return { status: 404, body: jsonRpcError(id, -32001, "MCP bridge is not enabled.") };
+  }
+  if (!MCP_BRIDGE_KEY) {
+    // Fails closed: an enabled-but-unconfigured bridge refuses every
+    // request rather than accepting one because no key was set to check.
+    return { status: 401, body: jsonRpcError(id, -32001, "MCP bridge has no key configured.") };
+  }
+  const presented = (authHeader || "").replace(/^Bearer\s+/i, "").trim();
+  if (!presented || presented !== MCP_BRIDGE_KEY) {
+    return { status: 401, body: jsonRpcError(id, -32001, "Unauthorized.") };
+  }
+
+  const method = body?.method;
+
+  if (method === "initialize") {
+    return {
+      status: 200,
+      body: jsonRpcResult(id, {
+        protocolVersion: MCP_PROTOCOL_VERSION,
+        capabilities: { tools: {} },
+        serverInfo: { name: "mya-command-center", version: "1.0.0" },
+      }),
+    };
+  }
+
+  if (method === "notifications/initialized") {
+    // A notification carries no id and expects no response body; 204 is
+    // the correct empty acknowledgment for the HTTP transport.
+    return { status: 204, body: null };
+  }
+
+  if (method === "tools/list") {
+    return {
+      status: 200,
+      body: jsonRpcResult(id, {
+        tools: MCP_EXPOSED_SKILLS.map((s) => ({
+          name: s.name,
+          description: s.description,
+          inputSchema: s.input_schema,
+        })),
+      }),
+    };
+  }
+
+  if (method === "tools/call") {
+    const toolName = body?.params?.name;
+    const toolArgs = body?.params?.arguments ?? {};
+
+    if (typeof toolName !== "string") {
+      return { status: 400, body: jsonRpcError(id, -32602, "params.name is required.") };
+    }
+
+    const skill = findExposedMcpSkill(toolName);
+    if (!skill) {
+      // Deliberately the same rejection whether the name is unknown to the
+      // whole system or is a real but non-exposed (ACT/APPROVAL) skill —
+      // never confirms or denies the existence of a higher-permission tool.
+      await logActionEvent({ toolName, input: toolArgs, result: { error: "unknown or unexposed tool" }, surface: "hermes_mcp" });
+      return { status: 404, body: jsonRpcError(id, -32602, `Unknown tool: ${toolName}`) };
+    }
+
+    // Defense-in-depth: re-check permission level even though the tool
+    // could only have been found via MCP_EXPOSED_SKILLS above — this is
+    // the actual gate the requirement asks for, not just list filtering.
+    if (getPermissionLevel(skill.name) !== 0) {
+      await logActionEvent({ toolName, input: toolArgs, result: { error: "permission denied" }, surface: "hermes_mcp" });
+      return { status: 403, body: jsonRpcError(id, -32002, "Permission denied for this tool.") };
+    }
+
+    const validationError = validateToolInput(skill, toolArgs);
+    if (validationError) {
+      await logActionEvent({ toolName, input: toolArgs, result: { error: validationError }, surface: "hermes_mcp" });
+      return { status: 400, body: jsonRpcError(id, -32602, validationError) };
+    }
+
+    const { result } = await executeTool(skill.name, toolArgs);
+    await logActionEvent({ toolName: skill.name, input: toolArgs, result, surface: "hermes_mcp" });
+
+    return {
+      status: 200,
+      body: jsonRpcResult(id, {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        isError: Boolean(result && typeof result === "object" && "error" in result),
+      }),
+    };
+  }
+
+  return { status: 400, body: jsonRpcError(id, -32601, `Unknown method: ${method}`) };
+}
+
 // Turns reply text into speech using the same ElevenLabs voice as the phone
 // system. Returns null (never throws) if not configured or the call fails —
 // voice is a nice-to-have, it should never break the text reply.
@@ -1636,6 +1811,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  // MCP tool bridge: a JSON-RPC 2.0 body (jsonrpc:"2.0") is unmistakably not
+  // the dashboard's own {message,...}/{directTool,...} shapes, so it's safe
+  // to branch on that alone before anything else runs — including before
+  // the ANTHROPIC_API_KEY check below, since the bridge doesn't need it.
+  if ((req.body || {}).jsonrpc === "2.0") {
+    const { status, body } = await handleMcpRequest(req.body, req.headers?.authorization as string | undefined);
+    if (status === 204) return res.status(204).end();
+    return res.status(status).json(body);
   }
 
   // Fast path for the dashboard's own UI controls (the Company Contacts
