@@ -241,6 +241,59 @@ async function logUndo(actionType: string, undoData: any, description: string): 
   });
 }
 
+/**
+ * PERMISSION LEVELS (0=READ, 1=PREPARE, 2=ACT, 3=APPROVAL REQUIRED, 4=OWNER
+ * ONLY) — classification only, for the audit log below. Nothing here blocks
+ * a skill from running; every skill still behaves exactly as it does today.
+ * Gating specific levels behind an actual approval step is a deliberate,
+ * separate, later change, not something this classification does on its own.
+ *
+ * Only exceptions to the "get_/list_/calculate_/evaluate_/recall_ = read"
+ * naming convention need an entry here — everything else defaults to level 2
+ * (an already-undoable action, matching every write-capable skill's existing
+ * logUndo() call) unless listed.
+ */
+const PERMISSION_OVERRIDES: Record<string, number> = {
+  open_contact_directory: 0, // signals the dashboard to open a view — never writes
+  update_company_brain: 3, // margin targets, contract language — real business consequence
+};
+const READ_PREFIXES = ["get_", "list_", "calculate_", "evaluate_", "recall_"];
+
+function getPermissionLevel(skillName: string): number {
+  if (skillName in PERMISSION_OVERRIDES) return PERMISSION_OVERRIDES[skillName];
+  return READ_PREFIXES.some((p) => skillName.startsWith(p)) ? 0 : 2;
+}
+
+/**
+ * mya_action_log: a full audit trail (tool, permission level, which model,
+ * what was asked, success/error, when) for every tool call Mya makes, read
+ * or write — a superset of mya_undo_log, which only ever needed to track
+ * reversible writes for "undo that." Best-effort and strictly non-blocking:
+ * same pattern as synthesizeSpeech below — an audit-log failure (e.g. the
+ * table not existing yet) must never break the actual reply.
+ */
+async function logActionEvent(params: {
+  toolName: string;
+  input: any;
+  result: any;
+  surface: string;
+}): Promise<void> {
+  try {
+    const success = !(params.result && typeof params.result === "object" && "error" in params.result);
+    await supabase.from("mya_action_log").insert({
+      tool_name: params.toolName,
+      permission_level: getPermissionLevel(params.toolName),
+      model_provider: "anthropic",
+      model_name: ANTHROPIC_MODEL,
+      requested_by: params.surface,
+      input: params.input,
+      result_summary: success ? "success" : "error",
+    });
+  } catch (err) {
+    console.error("Action log write failed (non-fatal):", err);
+  }
+}
+
 type Skill = {
   name: string;
   description: string;
@@ -1505,6 +1558,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: `"${directTool}" isn't available as a direct action.` });
     }
     const { result } = await executeTool(directTool, (req.body || {}).input || {});
+    await logActionEvent({ toolName: directTool, input: (req.body || {}).input || {}, result, surface: "dashboard_direct_ui" });
     return res.status(200).json({ result });
   }
 
@@ -1552,6 +1606,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         toolUseBlocks.map(async (tu: any) => {
           const { result, toolUsed } = await executeTool(tu.name, tu.input || {});
           toolsUsed.push(toolUsed);
+          await logActionEvent({ toolName: toolUsed, input: tu.input || {}, result, surface: "dashboard_or_desktop_chat" });
           return { type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(result) };
         })
       );
