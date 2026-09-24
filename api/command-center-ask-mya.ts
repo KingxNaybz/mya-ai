@@ -1091,6 +1091,48 @@ const SKILLS: Skill[] = [
     },
   },
   {
+    name: "get_client",
+    description: "Look up what's known about a client/customer by name, phone, or email — combines their project history (if any) with their Company Contacts record (if any) into one profile. Use for general 'who is this / what do we know about them' questions; use get_project for a specific job's details.",
+    input_schema: {
+      type: "object",
+      properties: { query: { type: "string", description: "Name, phone, or email to search for" } },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    execute: async (input) => {
+      const query = String(input.query || "").trim();
+      if (!query) return { error: "query is required" };
+
+      const [projectRows, contactRows] = await Promise.all([
+        supabase
+          .from("mya_projects")
+          .select("id,project_name,client_name,client_phone,client_email,status")
+          .or(`client_name.ilike.%${query}%,client_phone.ilike.%${query}%,client_email.ilike.%${query}%`),
+        supabase
+          .from("mya_caller_classifications")
+          .select("name,phone,email,company,category")
+          .or(`name.ilike.%${query}%,phone.ilike.%${query}%,email.ilike.%${query}%`),
+      ]);
+      if (projectRows.error) return { error: projectRows.error.message };
+      if (contactRows.error) return { error: contactRows.error.message };
+
+      const projects = projectRows.data || [];
+      const contacts = contactRows.data || [];
+      if (projects.length === 0 && contacts.length === 0) {
+        return { found: false, reason: "No client found matching that." };
+      }
+      return {
+        found: true,
+        projects: projects.map((p: any) => ({ id: p.id, projectName: p.project_name, status: p.status })),
+        companyContactsRecord: contacts[0] || null,
+        note:
+          contacts.length > 1
+            ? "Multiple Company Contacts entries matched — showing the first; use list_caller_directory for the full list."
+            : undefined,
+      };
+    },
+  },
+  {
     name: "update_project",
     description: "Update a project's status, scope, measurements, pricing, payment/warranty terms, outstanding decisions, next action, or notes. Finds the project by name/client first — if more than one matches, this returns the matches instead of guessing.",
     input_schema: {
@@ -1536,6 +1578,56 @@ async function callAnthropic(messages: any[]): Promise<any> {
   return res.json();
 }
 
+/**
+ * MYA PROVIDER ROUTER — a thin seam, not a rewrite. callModel() is what the
+ * tool loop below actually calls; DEFAULT_MODEL_PROVIDER pins it to
+ * "anthropic" today, which just calls callAnthropic() exactly as before —
+ * this file's production behavior is unchanged until something explicitly
+ * routes elsewhere. The "hermes" branch talks to the real, externally
+ * verified Hermes multiplex endpoint (Open WebUI → Cloudflare → Hermes →
+ * the "mya" profile), but nothing currently sends requests down it — it has
+ * no tools wired in yet (see the MCP bridge below) and isn't the default
+ * for any request today. HERMES_BRIDGE_URL/HERMES_BRIDGE_KEY are Vercel env
+ * vars set later, directly in the dashboard, never through this codebase.
+ */
+type ModelProvider = "anthropic" | "hermes";
+const DEFAULT_MODEL_PROVIDER: ModelProvider = "anthropic";
+const HERMES_BRIDGE_URL = process.env.HERMES_BRIDGE_URL || "https://mya-api.gaelevate.com/p/mya/v1";
+const HERMES_BRIDGE_KEY = process.env.HERMES_BRIDGE_KEY || "";
+
+async function callHermes(messages: any[]): Promise<any> {
+  if (!HERMES_BRIDGE_KEY) {
+    throw new Error("Hermes provider not configured — set HERMES_BRIDGE_KEY in Vercel's environment variables.");
+  }
+  const res = await fetch(`${HERMES_BRIDGE_URL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${HERMES_BRIDGE_KEY}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "mya",
+      messages: messages.map((m: any) => ({
+        role: m.role,
+        content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+      })),
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Hermes API error ${res.status}: ${text.slice(0, 300)}`);
+  }
+  const data = await res.json();
+  const text = data?.choices?.[0]?.message?.content || "";
+  // Normalized to the exact same shape callAnthropic() returns, so the tool
+  // loop below never needs to know which provider actually answered.
+  return { content: [{ type: "text", text }] };
+}
+
+async function callModel(provider: ModelProvider, messages: any[]): Promise<any> {
+  return provider === "hermes" ? callHermes(messages) : callAnthropic(messages);
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -1589,7 +1681,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-      const response = await callAnthropic(messages);
+      const response = await callModel(DEFAULT_MODEL_PROVIDER, messages);
       const toolUseBlocks = (response.content || []).filter((b: any) => b.type === "tool_use");
 
       if (toolUseBlocks.length === 0) {
