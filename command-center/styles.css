@@ -218,6 +218,20 @@ button{ font-family: inherit; cursor: pointer; }
   color: var(--text-mid);
   margin-top: 8px;
 }
+.logout-btn{
+  margin-top: 14px;
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  color: var(--text-low);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.logout-btn:hover{ color: var(--text-mid); border-color: var(--border-strong); }
+.logout-btn:disabled{ opacity: 0.6; cursor: default; }
 
 .nav-list{ display: flex; flex-direction: column; }
 

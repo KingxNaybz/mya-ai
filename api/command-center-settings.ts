@@ -1,14 +1,16 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
-import { createSessionToken, sessionCookieHeader, safeStringEqual } from "../lib/session";
+import { createSessionToken, sessionCookieHeader, clearSessionCookieHeader, safeStringEqual } from "../lib/session";
 
 /**
  * The settings GET/POST behavior below is intentionally unchanged and still
  * has no auth check of its own (out of scope for this remediation pass —
  * see the Production Endpoint Security Review). This file's new
- * responsibility is narrower: it issues the dashboard session cookie that
- * /api/command-center-ask-mya now requires, via the { login: true } branch
- * below. That branch is the only new auth surface added here.
+ * responsibility is narrower: it issues and clears the dashboard session
+ * cookie that /api/command-center-ask-mya requires, via the { login: true }
+ * and { logout: true } branches below, and throttles repeated failed
+ * logins against mya_login_attempts. Those branches are the only new auth
+ * surface added here.
  */
 
 const SUPABASE_URL =
@@ -22,10 +24,98 @@ const SUPABASE_KEY =
   "";
 
 const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || "";
+const SESSION_SIGNING_SECRET = process.env.SESSION_SIGNING_SECRET || "";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const SETTINGS_COLUMNS = "owner_name,footer_tagline,notify_enabled,notify_phone";
+
+// Conservative defaults for a single-owner administrative dashboard: 5
+// failed attempts within a 15-minute window triggers a 15-minute lockout.
+// Configurable via env vars without touching code, per instruction.
+const LOGIN_MAX_ATTEMPTS = parseInt(process.env.LOGIN_MAX_ATTEMPTS || "", 10) || 5;
+const LOGIN_WINDOW_MS = (parseInt(process.env.LOGIN_WINDOW_MINUTES || "", 10) || 15) * 60 * 1000;
+const LOGIN_LOCKOUT_MS = (parseInt(process.env.LOGIN_LOCKOUT_MINUTES || "", 10) || 15) * 60 * 1000;
+
+// Keyed by client IP (falling back to a fixed bucket if none is presented,
+// which Vercel practically always sets). Never keyed by, or storing, the
+// submitted password.
+function getLoginRateLimitKey(req: VercelRequest): string {
+  const xff = (req.headers || {})["x-forwarded-for"];
+  const first = Array.isArray(xff) ? xff[0] : xff;
+  const ip = typeof first === "string" ? first.split(",")[0].trim() : "";
+  return ip || "unknown";
+}
+
+// "unavailable" means the rate-limit store itself couldn't be read -- the
+// caller must treat that as a hard stop (fail closed), never as "allow",
+// per instruction that a rate-limiter outage must not bypass throttling.
+async function checkLoginLock(key: string): Promise<"allow" | "locked" | "unavailable"> {
+  const { data, error } = await supabase
+    .from("mya_login_attempts")
+    .select("locked_until")
+    .eq("id", key)
+    .maybeSingle();
+  if (error) {
+    console.error("command-center-settings login rate-limit read failed:", error.message);
+    return "unavailable";
+  }
+  if (data && data.locked_until && new Date(data.locked_until).getTime() > Date.now()) {
+    return "locked";
+  }
+  return "allow";
+}
+
+// Records a failed attempt (incrementing within the rolling window, locking
+// once LOGIN_MAX_ATTEMPTS is crossed) or clears the record on success.
+// Returns false only when a WRITE needed to enforce throttling itself
+// failed -- an unrecorded failure can't be reliably throttled, so the
+// caller rejects that login attempt rather than silently letting it
+// through unrecorded. A failed RESET after a successful login never blocks
+// that login: existing valid sessions and successful auth must not depend
+// on this store being healthy, only new/repeated failed attempts do.
+async function recordLoginResult(key: string, success: boolean): Promise<boolean> {
+  if (success) {
+    const { error } = await supabase.from("mya_login_attempts").delete().eq("id", key);
+    if (error) console.error("command-center-settings login rate-limit reset failed:", error.message);
+    return true;
+  }
+
+  const now = Date.now();
+  const { data, error: readError } = await supabase
+    .from("mya_login_attempts")
+    .select("failed_count, window_started_at")
+    .eq("id", key)
+    .maybeSingle();
+  if (readError) {
+    console.error("command-center-settings login rate-limit read failed:", readError.message);
+    return false;
+  }
+
+  let failedCount = 1;
+  let windowStartedAt = new Date(now).toISOString();
+  if (data) {
+    const windowAgeMs = now - new Date(data.window_started_at).getTime();
+    if (windowAgeMs < LOGIN_WINDOW_MS) {
+      failedCount = data.failed_count + 1;
+      windowStartedAt = data.window_started_at;
+    }
+  }
+  const lockedUntil = failedCount >= LOGIN_MAX_ATTEMPTS ? new Date(now + LOGIN_LOCKOUT_MS).toISOString() : null;
+
+  const { error: writeError } = await supabase.from("mya_login_attempts").upsert({
+    id: key,
+    failed_count: failedCount,
+    window_started_at: windowStartedAt,
+    locked_until: lockedUntil,
+    updated_at: new Date(now).toISOString(),
+  });
+  if (writeError) {
+    console.error("command-center-settings login rate-limit write failed:", writeError.message);
+    return false;
+  }
+  return true;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -50,12 +140,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "POST") {
     const body = req.body || {};
 
+    if (body.logout === true) {
+      // No credential check needed to log out -- clearing a cookie that may
+      // already be absent or invalid is harmless, and never touches
+      // COMMAND_CENTER_API_KEY or any future MCP credential.
+      res.setHeader("Set-Cookie", clearSessionCookieHeader());
+      return res.status(200).json({ ok: true });
+    }
+
     if (body.login === true) {
       const password = typeof body.password === "string" ? body.password : "";
+      const rateLimitKey = getLoginRateLimitKey(req);
+
+      const lockState = await checkLoginLock(rateLimitKey);
+      if (lockState === "unavailable") {
+        return res.status(503).json({ error: "Login temporarily unavailable. Try again shortly." });
+      }
+      if (lockState === "locked") {
+        return res.status(429).json({ error: "Too many attempts. Try again later." });
+      }
+
       if (!DASHBOARD_PASSWORD || !password || !safeStringEqual(password, DASHBOARD_PASSWORD)) {
+        const recorded = await recordLoginResult(rateLimitKey, false);
+        if (!recorded) {
+          return res.status(503).json({ error: "Login temporarily unavailable. Try again shortly." });
+        }
         return res.status(401).json({ error: "Invalid password" });
       }
-      const token = createSessionToken(DASHBOARD_PASSWORD);
+
+      if (!SESSION_SIGNING_SECRET) {
+        // Fail closed: never issue a session that can't be independently
+        // signed and verified.
+        return res.status(503).json({ error: "Session signing is not configured." });
+      }
+
+      await recordLoginResult(rateLimitKey, true); // best-effort reset; never blocks a successful login
+      const token = createSessionToken(SESSION_SIGNING_SECRET);
       res.setHeader("Set-Cookie", sessionCookieHeader(token));
       return res.status(200).json({ ok: true });
     }

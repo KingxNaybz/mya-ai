@@ -1812,7 +1812,8 @@
         });
         passwordInput.value = "";
         if (!res.ok) {
-          errEl.textContent = "Incorrect password — try again.";
+          const data = await res.json().catch(() => ({}));
+          errEl.textContent = data.error || "Incorrect password — try again.";
           errEl.hidden = false;
           return;
         }
@@ -1823,6 +1824,29 @@
       } finally {
         submitBtn.disabled = false;
       }
+    });
+  }
+
+  // Clears the session cookie server-side and reloads -- no credential is
+  // ever read or held by this code, it just asks the server to forget the
+  // current session. Independent of the desktop app's own auth and MCP,
+  // neither of which this touches.
+  function initLogoutControl() {
+    const btn = document.getElementById("logout-btn");
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        await fetch("/api/command-center-settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ logout: true }),
+        });
+      } catch (err) {
+        /* best-effort -- reload regardless, since the point is to force the
+           next request to re-authenticate either way */
+      }
+      location.reload();
     });
   }
 
@@ -1857,6 +1881,7 @@
   initSidenavJumpLinks();
   initAskMya();
   initLoginOverlay();
+  initLogoutControl();
 
   document.getElementById("approvals-list").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-action]");

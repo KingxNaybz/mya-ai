@@ -32,7 +32,7 @@ const SUPABASE_KEY =
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
-const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || "";
+const SESSION_SIGNING_SECRET = process.env.SESSION_SIGNING_SECRET || "";
 const COMMAND_CENTER_API_KEY = process.env.COMMAND_CENTER_API_KEY || "";
 
 // Authentication (proving who's calling) is deliberately independent from
@@ -40,7 +40,9 @@ const COMMAND_CENTER_API_KEY = process.env.COMMAND_CENTER_API_KEY || "";
 // enforced by getPermissionLevel()/logActionEvent() below) -- this only
 // gates entry to the endpoint at all, for the two legitimate callers:
 // the browser dashboard (a signed, HttpOnly session cookie issued by
-// /api/command-center-settings after a correct DASHBOARD_PASSWORD) and the
+// /api/command-center-settings after a correct DASHBOARD_PASSWORD, but
+// signed with the independent SESSION_SIGNING_SECRET -- this file never
+// reads DASHBOARD_PASSWORD at all, only the signing secret) and the
 // desktop app (a static key sent as a header, from its own private .env,
 // independent of every other credential in this codebase). Neither path
 // grants any skill execution by itself -- permission levels still apply
@@ -51,7 +53,7 @@ function isCommandCenterAuthenticated(req: VercelRequest): boolean {
     return true;
   }
   const cookieToken = extractSessionCookie(req.headers.cookie as string | undefined);
-  if (cookieToken && DASHBOARD_PASSWORD && verifySessionToken(cookieToken, DASHBOARD_PASSWORD)) {
+  if (cookieToken && SESSION_SIGNING_SECRET && verifySessionToken(cookieToken, SESSION_SIGNING_SECRET)) {
     return true;
   }
   return false;
