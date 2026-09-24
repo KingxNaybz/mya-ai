@@ -23,7 +23,16 @@ const SUPABASE_KEY =
   process.env.SUPABASE_SERVICE_KEY ||
   "";
 
-const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || "";
+// Trimmed deliberately: a value pasted into Vercel's env var editor (or
+// typed into the browser's password field) that picks up an invisible
+// trailing newline or space is a common, real operator error -- confirmed
+// as the leading suspect after a Preview login failed with a freshly
+// generated, correctly-scoped password. Trimming both sides of the
+// comparison below removes that footgun without reducing the actual
+// security floor: an attacker still needs the exact (trimmed) secret,
+// and a deliberately whitespace-padded password is not a realistic use
+// case for a single-owner dashboard credential.
+const DASHBOARD_PASSWORD = (process.env.DASHBOARD_PASSWORD || "").trim();
 const SESSION_SIGNING_SECRET = process.env.SESSION_SIGNING_SECRET || "";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -124,6 +133,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "OPTIONS") return res.status(200).end();
 
   if (req.method === "GET") {
+    // Temporary diagnostic for the current Preview login investigation --
+    // reveals ONLY whether DASHBOARD_PASSWORD is set and how many
+    // characters long it is AFTER trimming, never the value, a hash, or
+    // any prefix/suffix. A length mismatch against what you actually
+    // generated is the single fastest way to confirm a whitespace/paste
+    // artifact without spending another attempt against the rate limiter.
+    // Remove this route once the investigation is resolved -- it isn't
+    // needed for the feature to work, only to debug this one incident.
+    if ((req.query || {}).diagnose === "dashboard-password") {
+      return res.status(200).json({
+        dashboardPasswordConfigured: Boolean(DASHBOARD_PASSWORD),
+        dashboardPasswordLength: DASHBOARD_PASSWORD.length,
+      });
+    }
+
     const { data, error } = await supabase
       .from("mya_settings")
       .select(SETTINGS_COLUMNS)
@@ -149,7 +173,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (body.login === true) {
-      const password = typeof body.password === "string" ? body.password : "";
+      const password = typeof body.password === "string" ? body.password.trim() : "";
       const rateLimitKey = getLoginRateLimitKey(req);
 
       const lockState = await checkLoginLock(rateLimitKey);
