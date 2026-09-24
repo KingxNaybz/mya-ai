@@ -146,6 +146,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({
         dashboardPasswordConfigured: Boolean(DASHBOARD_PASSWORD),
         dashboardPasswordLength: DASHBOARD_PASSWORD.length,
+        // SESSION_SIGNING_SECRET is a separate required var (see edb3024) --
+        // a login can pass the password check and still fail with "Session
+        // signing is not configured" if this one is missing on this
+        // deployment specifically. Same rule as above: presence only, never
+        // the value or its length (no legitimate reason to leak length for
+        // a secret that's never human-typed at login).
+        sessionSigningSecretConfigured: Boolean(SESSION_SIGNING_SECRET),
       });
     }
 
