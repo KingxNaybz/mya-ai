@@ -8,6 +8,19 @@
 </head>
 <body>
 
+<!-- Shown when a Command Center request comes back 401 (no valid session
+     cookie yet, or it expired). Password is never stored anywhere except
+     this in-memory form field for the moment it takes to submit it. -->
+<div class="login-overlay" id="login-overlay" hidden>
+  <form class="login-box" id="login-form">
+    <div class="logo-word">MYA</div>
+    <p>Enter the dashboard password to continue.</p>
+    <input type="password" id="login-password" autocomplete="current-password" required>
+    <button type="submit">Unlock</button>
+    <p class="login-error" id="login-error" hidden></p>
+  </form>
+</div>
+
 <div class="app-shell">
 
   <!-- ============ LEFT NAV ============ -->

@@ -567,6 +567,11 @@
           input: { query: row.phone || row.name, category: newCategory },
         }),
       });
+      if (res.status === 401) {
+        showLoginOverlay();
+        renderCallerDirectoryRows(); // revert the dropdown to the real current value
+        return;
+      }
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.result || data.result.error || data.result.matches) {
         alert(
@@ -1312,9 +1317,14 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message, voice: voiceEnabled, history: conversationHistory }),
         });
-        const data = await res.json().catch(() => ({}));
-
         pending.remove();
+
+        if (res.status === 401) {
+          showLoginOverlay();
+          return;
+        }
+
+        const data = await res.json().catch(() => ({}));
 
         if (!res.ok) {
           addMessage(data.message || data.error || "Something went wrong — try again.", "mya error");
@@ -1771,6 +1781,51 @@
     checkProactiveAlerts();
   }
 
+  /* ---------------- Login overlay (shown on any 401 from the Command
+     Center API) ---------------- */
+  function showLoginOverlay() {
+    const passwordInput = document.getElementById("login-password");
+    const errEl = document.getElementById("login-error");
+    document.getElementById("login-overlay").hidden = false;
+    errEl.hidden = true;
+    errEl.textContent = "";
+    passwordInput.value = "";
+    passwordInput.focus();
+  }
+  function hideLoginOverlay() {
+    document.getElementById("login-overlay").hidden = true;
+  }
+  function initLoginOverlay() {
+    const form = document.getElementById("login-form");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const passwordInput = document.getElementById("login-password");
+      const errEl = document.getElementById("login-error");
+      const submitBtn = form.querySelector("button[type=submit]");
+      const password = passwordInput.value;
+      submitBtn.disabled = true;
+      try {
+        const res = await fetch("/api/command-center-settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ login: true, password }),
+        });
+        passwordInput.value = "";
+        if (!res.ok) {
+          errEl.textContent = "Incorrect password — try again.";
+          errEl.hidden = false;
+          return;
+        }
+        hideLoginOverlay();
+      } catch (err) {
+        errEl.textContent = "Couldn't reach the server — check your connection and try again.";
+        errEl.hidden = false;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  }
+
   /* ---------------- Init ---------------- */
   renderMyaMessage();
   renderKPIs();
@@ -1801,6 +1856,7 @@
   initCompanyContactsModal();
   initSidenavJumpLinks();
   initAskMya();
+  initLoginOverlay();
 
   document.getElementById("approvals-list").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-action]");

@@ -1,12 +1,14 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { createSessionToken, sessionCookieHeader, safeStringEqual } from "../lib/session";
 
 /**
- * Same protection model as the other command-center-*.ts endpoints: no
- * password/key check of its own — relies entirely on Vercel's own
- * "Deployment Protection" for the environment this is deployed to. Do not
- * merge to main without Deployment Protection covering Production too, or
- * a proper page-level login in front of the Command Center.
+ * The settings GET/POST behavior below is intentionally unchanged and still
+ * has no auth check of its own (out of scope for this remediation pass —
+ * see the Production Endpoint Security Review). This file's new
+ * responsibility is narrower: it issues the dashboard session cookie that
+ * /api/command-center-ask-mya now requires, via the { login: true } branch
+ * below. That branch is the only new auth surface added here.
  */
 
 const SUPABASE_URL =
@@ -18,6 +20,8 @@ const SUPABASE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.SUPABASE_SERVICE_KEY ||
   "";
+
+const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || "";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -45,6 +49,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === "POST") {
     const body = req.body || {};
+
+    if (body.login === true) {
+      const password = typeof body.password === "string" ? body.password : "";
+      if (!DASHBOARD_PASSWORD || !password || !safeStringEqual(password, DASHBOARD_PASSWORD)) {
+        return res.status(401).json({ error: "Invalid password" });
+      }
+      const token = createSessionToken(DASHBOARD_PASSWORD);
+      res.setHeader("Set-Cookie", sessionCookieHeader(token));
+      return res.status(200).json({ ok: true });
+    }
+
     const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
     if (typeof body.ownerName === "string") update.owner_name = body.ownerName.trim().slice(0, 60);

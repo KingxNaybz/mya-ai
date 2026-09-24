@@ -33,6 +33,13 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = "claude-sonnet-5"
 HOTKEY = os.environ.get("MYA_HOTKEY", "ctrl+alt+m")
 
+# Independent from ANTHROPIC_API_KEY and from every other credential in
+# this codebase — this is what authenticates the desktop app itself to
+# /api/command-center-ask-mya, now that endpoint requires proof of identity
+# for every non-MCP caller. Generate your own value and set the SAME one
+# in Vercel's COMMAND_CENTER_API_KEY environment variable.
+COMMAND_CENTER_API_KEY = os.environ.get("COMMAND_CENTER_API_KEY", "")
+
 # The deployed web dashboard's own Ask Mya endpoint — same brain, same
 # skills, same memory, same voice as the browser version. Override in
 # .env if the dashboard ever moves to a different URL (e.g. once merged
@@ -314,7 +321,13 @@ def ask_dashboard_brain(message: str, history: List[dict]) -> dict:
     which shows up as an HTML login page instead of JSON)."""
     url = f"{DASHBOARD_BASE_URL}/api/command-center-ask-mya"
     payload = build_dashboard_payload(message, history, voice=True)
-    res = requests.post(url, json=payload, timeout=45)
+    headers = {"x-command-center-key": COMMAND_CENTER_API_KEY} if COMMAND_CENTER_API_KEY else {}
+    res = requests.post(url, json=payload, headers=headers, timeout=45)
+    if res.status_code == 401:
+        raise RuntimeError(
+            "Dashboard rejected this request as unauthorized — check that COMMAND_CENTER_API_KEY "
+            "in your .env matches the value set in Vercel."
+        )
     try:
         return res.json()
     except ValueError:

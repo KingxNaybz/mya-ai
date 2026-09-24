@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { verifySessionToken, extractSessionCookie, safeStringEqual } from "../lib/session";
 
 /**
  * Same protection model as the other command-center-*.ts endpoints: no
@@ -31,6 +32,30 @@ const SUPABASE_KEY =
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
+const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || "";
+const COMMAND_CENTER_API_KEY = process.env.COMMAND_CENTER_API_KEY || "";
+
+// Authentication (proving who's calling) is deliberately independent from
+// Mya's existing permission/approval system (what they're allowed to do,
+// enforced by getPermissionLevel()/logActionEvent() below) -- this only
+// gates entry to the endpoint at all, for the two legitimate callers:
+// the browser dashboard (a signed, HttpOnly session cookie issued by
+// /api/command-center-settings after a correct DASHBOARD_PASSWORD) and the
+// desktop app (a static key sent as a header, from its own private .env,
+// independent of every other credential in this codebase). Neither path
+// grants any skill execution by itself -- permission levels still apply
+// to every tool call made afterward, unchanged.
+function isCommandCenterAuthenticated(req: VercelRequest): boolean {
+  const apiKeyHeader = (req.headers["x-command-center-key"] as string | undefined) || "";
+  if (COMMAND_CENTER_API_KEY && apiKeyHeader && safeStringEqual(apiKeyHeader, COMMAND_CENTER_API_KEY)) {
+    return true;
+  }
+  const cookieToken = extractSessionCookie(req.headers.cookie as string | undefined);
+  if (cookieToken && DASHBOARD_PASSWORD && verifySessionToken(cookieToken, DASHBOARD_PASSWORD)) {
+    return true;
+  }
+  return false;
+}
 const ANTHROPIC_MODEL = "claude-sonnet-5";
 const MAX_TOOL_ITERATIONS = 5;
 
@@ -1836,12 +1861,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(status).json(body);
   }
 
+  // Everything below this point is the dashboard/desktop surface, not MCP —
+  // require proof of identity before any of it (directTool or chat) can
+  // dispatch. This is authentication only; Mya's own permission/approval
+  // system still runs independently on every tool call after this gate.
+  if (!isCommandCenterAuthenticated(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   // Fast path for the dashboard's own UI controls (the Company Contacts
   // category dropdown) that already know exactly which tool to call —
   // skips Claude entirely so a plain UI action doesn't cost a wasted API
   // call or need ANTHROPIC_API_KEY at all. Chat/voice always goes through
-  // Claude below. Allowlisted to the one tool meant for direct UI use.
-  const DIRECT_TOOL_ALLOWLIST = new Set(["reclassify_caller", "undo_last_action"]);
+  // Claude below. Allowlisted to the one tool meant for direct UI use;
+  // undo_last_action was removed (see the Security Review) since it has no
+  // legitimate caller as a direct tool — it's only ever invoked through the
+  // normal chat path, which is unaffected by this allowlist.
+  const DIRECT_TOOL_ALLOWLIST = new Set(["reclassify_caller"]);
   const directTool = (req.body || {}).directTool;
   if (typeof directTool === "string") {
     if (!DIRECT_TOOL_ALLOWLIST.has(directTool)) {
