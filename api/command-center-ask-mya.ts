@@ -1537,7 +1537,20 @@ async function executeTool(name: string, input: any): Promise<{ result: any; too
 const MCP_BRIDGE_ENABLED = process.env.MCP_BRIDGE_ENABLED === "true";
 const MCP_BRIDGE_KEY = process.env.MCP_BRIDGE_KEY || "";
 const MCP_PROTOCOL_VERSION = "2024-11-05";
-const MCP_EXPOSED_SKILLS: Skill[] = SKILLS.filter((s) => getPermissionLevel(s.name) === 0);
+// list_capabilities is level 0 (read-only) and stays exactly as available to
+// Mya's own Claude-driven chat as it's always been -- this exclusion is
+// MCP-bridge-specific only. It's a different kind of skill from every other
+// level-0 one: the others each return one bounded slice of business data;
+// this one enumerates the entire internal skill set, including every
+// ACT/APPROVAL-level name. An MCP client can't invoke those either way, but
+// there's no reason to hand over that map, and the bridge's own tools/list
+// already tells an authenticated caller exactly what it can call here --
+// a second listing that also reveals what it can't call is strictly worse
+// for this consumer, not more useful.
+const MCP_EXCLUDED_SKILLS = new Set(["list_capabilities"]);
+const MCP_EXPOSED_SKILLS: Skill[] = SKILLS.filter(
+  (s) => getPermissionLevel(s.name) === 0 && !MCP_EXCLUDED_SKILLS.has(s.name)
+);
 
 function findExposedMcpSkill(name: string): Skill | undefined {
   return MCP_EXPOSED_SKILLS.find((s) => s.name === name);
