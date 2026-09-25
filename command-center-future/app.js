@@ -24,6 +24,82 @@
 (function () {
   "use strict";
 
+  /* ---------------- Wireframe sphere mesh (decorative, generated once) ----------------
+     Procedurally distributes points over a sphere (a standard Fibonacci
+     sphere) and projects them to 2D, so the dense "wireframe globe" look
+     from the reference doesn't require ~150 hand-authored SVG coordinates.
+     Depth (the fake third dimension) only ever affects size/opacity here --
+     there is no real 3D rendering, no WebGL, no Three.js; it's plain SVG
+     circles and lines, generated once at load and then animated purely
+     with CSS (see .mesh-group in styles.css). Runs unconditionally,
+     before the auth gate -- this is decorative chrome, not business data. */
+  function generateCoreMesh() {
+    var svgNS = "http://www.w3.org/2000/svg";
+    var group = document.getElementById("mesh-group");
+    if (!group) return;
+    var cx = 240, cy = 240, R = 150;
+    var count = 72;
+    var golden = Math.PI * (3 - Math.sqrt(5));
+    var points = [];
+
+    for (var i = 0; i < count; i++) {
+      var y = 1 - (i / (count - 1)) * 2; // top (-1) to bottom (1)
+      var radiusAtY = Math.sqrt(Math.max(0, 1 - y * y));
+      var theta = golden * i;
+      var x = Math.cos(theta) * radiusAtY;
+      var z = Math.sin(theta) * radiusAtY;
+      points.push({ x: x, y: y, z: z });
+    }
+
+    // Links first (drawn under the nodes): a light spiral thread (i -> i+1)
+    // plus occasional short cross-links, so it reads as a connected mesh
+    // rather than a scatter of dots -- capped in number, generated once,
+    // never recomputed per frame.
+    points.forEach(function (p, i) {
+      var next = points[i + 1];
+      if (next) group.appendChild(makeMeshLine(p, next, cx, cy, R));
+      var cross = points[i + 9];
+      if (cross) {
+        var dx = (p.x - cross.x) * R, dy = (p.y - cross.y) * R;
+        if (Math.sqrt(dx * dx + dy * dy) < 90) group.appendChild(makeMeshLine(p, cross, cx, cy, R));
+      }
+    });
+
+    points.forEach(function (p) {
+      var depth = (p.z + 1) / 2; // 0 = far side, 1 = near side
+      var px = cx + p.x * R;
+      var py = cy + p.y * R * 0.92; // slight squash -- reads more like the reference's orbital silhouette
+      var circle = document.createElementNS(svgNS, "circle");
+      circle.setAttribute("cx", px.toFixed(1));
+      circle.setAttribute("cy", py.toFixed(1));
+      circle.setAttribute("r", (0.8 + depth * 1.4).toFixed(2));
+      circle.setAttribute("class", "mesh-node");
+      circle.style.opacity = (0.15 + depth * 0.55).toFixed(2);
+      group.appendChild(circle);
+    });
+
+    function makeMeshLine(a, b, cx, cy, R) {
+      var line = document.createElementNS(svgNS, "line");
+      line.setAttribute("x1", (cx + a.x * R).toFixed(1));
+      line.setAttribute("y1", (cy + a.y * R * 0.92).toFixed(1));
+      line.setAttribute("x2", (cx + b.x * R).toFixed(1));
+      line.setAttribute("y2", (cy + b.y * R * 0.92).toFixed(1));
+      line.setAttribute("class", "mesh-link");
+      return line;
+    }
+  }
+  generateCoreMesh();
+
+  /* ---------------- Entrance animation -- "comes from behind, small, then
+     flips/pops into place." Plays once when the shell is first revealed;
+     replayable via the dev-only button for review. ---------------- */
+  function playCoreIntro() {
+    var stage = document.getElementById("mya-core-stage");
+    stage.classList.remove("intro-play");
+    void stage.offsetWidth; // force reflow so re-adding the class restarts the animation
+    stage.classList.add("intro-play");
+  }
+
   /* ---------------- Mya Core state controller ---------------- */
   var coreEl = document.getElementById("mya-core");
   var stateLabelEl = document.getElementById("mf-state-label");
@@ -72,6 +148,11 @@
       });
       row.appendChild(btn);
     });
+  })();
+
+  (function initReplayIntroButton() {
+    var btn = document.getElementById("mf-replay-intro-btn");
+    if (btn) btn.addEventListener("click", playCoreIntro);
   })();
 
   /* ---------------- Login overlay (identical behavior to the existing
@@ -212,6 +293,7 @@
       : "Hello.";
     document.getElementById("mf-shell").hidden = false;
     setCoreState("idle");
+    playCoreIntro();
     initCommandBar();
     initLogoutControl();
   }

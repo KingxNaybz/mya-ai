@@ -32,7 +32,7 @@
   --mf-glow-strength: 0.55;   /* 0..1 */
   --mf-anim-speed: 1;         /* multiplier; 1 = normal, 2 = twice as fast */
   --mf-particle-density: 1;   /* 0..1, scales particle opacity */
-  --mf-core-size: 320px;
+  --mf-core-size: 380px;
 
   /* Mya Core palette, named at point of use for clarity */
   --core-center-hi: #ffffff;
@@ -207,11 +207,33 @@ button, input { font-family: inherit; }
 /* ============================================================
    MYA CORE STAGE
    ============================================================ */
+.mya-core-perspective {
+  perspective: 1400px;
+  margin: 12px auto 8px;
+  width: var(--mf-core-size);
+}
+
 .mya-core-stage {
   position: relative;
   width: var(--mf-core-size);
   height: var(--mf-core-size);
-  margin: 12px auto 8px;
+  transform-style: preserve-3d;
+}
+
+/* ENTRANCE -- "comes from behind, small, then flips/pops into place."
+   Starts pushed back in Z, tiny, rotated away from the viewer and
+   slightly blurred (reads as "distant"), then flips upright and overshoots
+   past full size before settling -- the "pop" -- as it arrives at rest.
+   Runs once, triggered by app.js right when the shell is revealed (and
+   replayable via the dev-only button for review). */
+.mya-core-stage.intro-play {
+  animation: coreIntro calc(1.5s / max(var(--mf-anim-speed), 0.4)) cubic-bezier(0.22, 0.9, 0.24, 1) both;
+}
+@keyframes coreIntro {
+  0%   { opacity: 0; filter: blur(8px); transform: translateZ(-620px) scale(0.18) rotateY(55deg) rotateX(14deg); }
+  55%  { opacity: 1; filter: blur(0); }
+  78%  { transform: translateZ(0) scale(1.08) rotateY(-5deg) rotateX(-2deg); }
+  100% { transform: translateZ(0) scale(1) rotateY(0deg) rotateX(0deg); }
 }
 
 .mya-core { position: absolute; inset: 0; }
@@ -249,8 +271,26 @@ button, input { font-family: inherit; }
 .orbit-a { animation: orbitSpin calc(46s / var(--mf-anim-speed)) linear infinite; }
 .orbit-b { animation: orbitSpinReverse calc(64s / var(--mf-anim-speed)) linear infinite; }
 .orbit-c { animation: orbitSpin calc(80s / var(--mf-anim-speed)) linear infinite; }
+.orbit-d { animation: orbitSpinReverse calc(96s / var(--mf-anim-speed)) linear infinite; opacity: 0.6; }
 @keyframes orbitSpin { to { transform: rotate(360deg); } }
 @keyframes orbitSpinReverse { to { transform: rotate(-360deg); } }
+
+/* Dense wireframe-sphere mesh, generated at load by app.js. Reacts to
+   state only as a group (color + speed), unlike the six named links/nodes
+   above which react individually. */
+.mesh-group { animation: orbitSpin calc(140s / var(--mf-anim-speed)) linear infinite; transform-origin: 240px 240px; }
+.mesh-node { fill: var(--core-node-color); }
+.mesh-link { stroke: var(--core-link-color); stroke-width: 0.6; opacity: 0.16; }
+
+.core-wordmark {
+  font-family: -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  fill: var(--mf-text-hi);
+  opacity: 0.85;
+  pointer-events: none;
+}
 
 .link {
   stroke: var(--core-link-color);
@@ -284,6 +324,9 @@ button, input { font-family: inherit; }
 .mya-core[data-state="listening"] .core-center { fill: var(--core-listening); animation: coreListen calc(1.6s / var(--mf-anim-speed)) ease-in-out infinite; }
 .mya-core[data-state="listening"] .orbit-path { stroke: var(--core-listening); opacity: 0.4; }
 .mya-core[data-state="listening"] .node { fill: var(--core-listening); }
+.mya-core[data-state="listening"] .mesh-node { fill: var(--core-listening); }
+.mya-core[data-state="listening"] .mesh-link { stroke: var(--core-listening); }
+.mya-core[data-state="listening"] .mesh-group { animation-duration: calc(60s / var(--mf-anim-speed)); }
 @keyframes coreListen { 0%, 100% { transform: scale(1); } 50% { transform: scale(0.93); } }
 
 /* -------- THINKING -- links fire in sequence, particles accelerate -------- */
@@ -297,11 +340,14 @@ button, input { font-family: inherit; }
 .mya-core[data-state="thinking"] .orbit-a { animation-duration: calc(14s / var(--mf-anim-speed)); }
 .mya-core[data-state="thinking"] .orbit-b { animation-duration: calc(20s / var(--mf-anim-speed)); }
 .mya-core[data-state="thinking"] .core-center { animation: coreBreathe calc(1.1s / var(--mf-anim-speed)) ease-in-out infinite; }
+.mya-core[data-state="thinking"] .mesh-link { animation: linkFire calc(1.8s / var(--mf-anim-speed)) ease-in-out infinite; }
+.mya-core[data-state="thinking"] .mesh-group { animation-duration: calc(40s / var(--mf-anim-speed)); }
 @keyframes linkFire { 0%, 100% { opacity: 0.18; } 50% { opacity: 0.9; } }
 
 /* -------- SPEAKING -- rhythmic pulse (extends the original orb concept) -------- */
 .mya-core[data-state="speaking"] .core-center { fill: var(--core-speaking); animation: coreSpeak calc(0.5s / var(--mf-anim-speed)) ease-in-out infinite; }
 .mya-core[data-state="speaking"] .core-halo { fill: var(--core-speaking); animation: haloBreathe calc(0.5s / var(--mf-anim-speed)) ease-in-out infinite; }
+.mya-core[data-state="speaking"] .mesh-node { fill: var(--core-speaking); }
 @keyframes coreSpeak { 0%, 100% { transform: scale(1); filter: brightness(1); } 50% { transform: scale(1.12); filter: brightness(1.3); } }
 
 /* -------- MEMORY-RETRIEVAL -- activity travels along the links -------- */
@@ -427,6 +473,18 @@ button, input { font-family: inherit; }
   cursor: pointer;
 }
 .mf-dev-states-row button:hover { border-color: var(--mf-border-strong); color: var(--mf-text-hi); }
+
+.mf-replay-intro-btn {
+  margin-top: 12px;
+  font-size: 11.5px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--mf-border);
+  background: var(--mf-surface);
+  color: var(--mf-text-mid);
+  cursor: pointer;
+}
+.mf-replay-intro-btn:hover { border-color: var(--mf-border-strong); color: var(--mf-text-hi); }
 
 /* ============================================================
    RESPONSIVE
