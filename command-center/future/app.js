@@ -245,13 +245,30 @@
   /* ---------------- Real command bar -- genuine authenticated chat ----------------
      Talks to the exact same /api/command-center-ask-mya endpoint the
      existing dashboard uses. This is what makes thinking/speaking real
-     signals instead of decoration. */
+     signals instead of decoration.
+
+     Voice: requests audio the exact same way the existing dashboard does
+     (voice: true in the request body; the backend only returns
+     audioBase64 when ELEVENLABS_API_KEY/ELEVENLABS_VOICE_ID are configured
+     server-side and voice was requested -- otherwise it's just null and
+     nothing plays, same as before). Shares the existing dashboard's
+     mya-voice-enabled localStorage key so muting on one page carries to
+     the other -- same origin, same preference, not a new setting.
+
+     NOT ported in this pass: the always-listening wake-word microphone
+     pipeline (the existing dashboard's ~500-line SpeechRecognition/
+     "awake timer" subsystem). This adds real voice OUTPUT only -- typed
+     input, spoken reply. "Listening" remains a dev-preview-only state
+     until the mic pipeline itself is ported as its own piece of work. */
   function initCommandBar() {
     var form = document.getElementById("mf-command-form");
     var input = document.getElementById("mf-command-input");
     var log = document.getElementById("mf-command-log");
     var sendBtn = document.getElementById("mf-command-send");
+    var voiceToggleBtn = document.getElementById("mf-voice-toggle");
     var history = [];
+    var voiceEnabled = localStorage.getItem("mya-voice-enabled") !== "off";
+    var currentAudio = null;
 
     function addLine(text, role) {
       var line = document.createElement("div");
@@ -259,6 +276,48 @@
       line.textContent = text;
       log.appendChild(line);
       log.scrollTop = log.scrollHeight;
+    }
+
+    function applyVoiceToggleUI() {
+      voiceToggleBtn.textContent = voiceEnabled ? "🔊" : "🔇";
+      voiceToggleBtn.classList.toggle("is-muted", !voiceEnabled);
+      voiceToggleBtn.title = voiceEnabled
+        ? "Mya speaks her replies out loud (click to mute)"
+        : "Mya's voice is muted (click to unmute)";
+    }
+    applyVoiceToggleUI();
+
+    voiceToggleBtn.addEventListener("click", function () {
+      voiceEnabled = !voiceEnabled;
+      localStorage.setItem("mya-voice-enabled", voiceEnabled ? "on" : "off");
+      applyVoiceToggleUI();
+      if (!voiceEnabled && currentAudio) currentAudio.pause();
+    });
+
+    // Real audio, when present, drives the speaking->idle transition itself
+    // (ended/error) instead of the generic fixed-timeout fallback in
+    // mya.responding's default handler -- the Core stays visibly "speaking"
+    // for exactly as long as she's actually talking, not an approximation.
+    function playReplyAudio(audioBase64) {
+      if (!audioBase64 || !voiceEnabled) return false;
+      try {
+        if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; }
+        currentAudio = new Audio("data:audio/mpeg;base64," + audioBase64);
+        clearTimeout(idleTimer);
+        var finish = function () { setCoreState("idle"); };
+        currentAudio.addEventListener("ended", finish);
+        currentAudio.addEventListener("error", function () {
+          console.error("Mya voice playback error:", currentAudio && currentAudio.error);
+          finish();
+        });
+        currentAudio.play().catch(function (err) {
+          console.error("Mya voice play() failed:", err);
+          finish();
+        });
+        return true;
+      } catch (e) {
+        return false;
+      }
     }
 
     form.addEventListener("submit", function (e) {
@@ -275,7 +334,7 @@
       fetch("/api/command-center-ask-mya", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: message, history: history.slice(-20) }),
+        body: JSON.stringify({ message: message, history: history.slice(-20), voice: voiceEnabled }),
       })
         .then(function (res) {
           if (res.status === 401) {
@@ -296,6 +355,7 @@
           addLine(reply, "mya");
           history.push({ role: "assistant", content: reply });
           MyaEvents.emit("mya.responding", { dev: false });
+          playReplyAudio(result.data.audioBase64); // no-op (falls back to the timed auto-idle) if no audio or muted
         })
         .catch(function () {
           addLine("Couldn't reach Mya — try again.", "mya");

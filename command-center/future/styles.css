@@ -499,6 +499,11 @@ button, input { font-family: inherit; }
   font-size: 15px;
 }
 .mf-command-bar button:disabled { opacity: 0.55; cursor: default; }
+.mf-voice-toggle {
+  background: transparent !important;
+  color: var(--mf-text-mid) !important;
+}
+.mf-voice-toggle.is-muted { opacity: 0.5; }
 
 .mf-command-log {
   margin-top: 14px;

@@ -10,7 +10,7 @@
      an earlier deployment at this same URL can otherwise keep serving
      stale CSS/JS indefinitely even after a new, correct version is live --
      bump N here every time either file changes. -->
-<link rel="stylesheet" href="styles.css?v=9">
+<link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
 
@@ -24,7 +24,7 @@
 <!-- Visible build tag -- if this doesn't match the number in the most
      recent commit message, the browser is showing a stale cached page,
      not the current code. Bump alongside the ?v= numbers above. -->
-<div class="dev-badge">Phase 1 Preview — Build 9 — Not Production</div>
+<div class="dev-badge">Phase 1 Preview — Build 10 — Not Production</div>
 
 <!-- Same behavior as the existing dashboard's login overlay: visible by
      default, hidden only after a real session is confirmed against the
@@ -145,6 +145,7 @@
   <div class="mf-command-panel">
     <form class="mf-command-bar" id="mf-command-form">
       <input type="text" id="mf-command-input" placeholder="Type a message to Mya…" autocomplete="off">
+      <button type="button" class="mf-voice-toggle" id="mf-voice-toggle" title="Mya speaks her replies out loud">🔊</button>
       <button type="submit" id="mf-command-send">➤</button>
     </form>
     <div class="mf-command-log" id="mf-command-log"></div>
@@ -164,7 +165,7 @@
 
 </div>
 
-<script src="mya-events.js?v=9"></script>
-<script src="app.js?v=9"></script>
+<script src="mya-events.js?v=10"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>
