@@ -52,4 +52,34 @@ export function extractSessionCookie(cookieHeader: string | undefined | null): s
   return match.slice(SESSION_COOKIE_NAME.length + 1);
 }
 
+// Shared entry gate for every Command Center endpoint except the settings
+// login/logout branches themselves (which must stay reachable without a
+// session -- you can't require a session to obtain one). Accepts either of
+// the two legitimate non-MCP callers: the browser dashboard (a signed,
+// HttpOnly session cookie issued after a correct DASHBOARD_PASSWORD) or the
+// desktop app (a static key sent as a header, from its own private .env,
+// independent of every other credential in this codebase). This is
+// authentication only -- Mya's own permission/approval system in
+// command-center-ask-mya.ts still applies to every tool call afterward,
+// unchanged. Reads env vars per call (not into module-level consts) so
+// every importing file sees the same live values without needing its own
+// copy.
+export function isCommandCenterAuthenticated(req: {
+  headers: { [key: string]: string | string[] | undefined };
+}): boolean {
+  const apiKeyHeader = (req.headers["x-command-center-key"] as string | undefined) || "";
+  const commandCenterApiKey = process.env.COMMAND_CENTER_API_KEY || "";
+  if (commandCenterApiKey && apiKeyHeader && safeStringEqual(apiKeyHeader, commandCenterApiKey)) {
+    return true;
+  }
+
+  const cookieToken = extractSessionCookie(req.headers.cookie as string | undefined);
+  const sessionSigningSecret = process.env.SESSION_SIGNING_SECRET || "";
+  if (cookieToken && sessionSigningSecret && verifySessionToken(cookieToken, sessionSigningSecret)) {
+    return true;
+  }
+
+  return false;
+}
+
 export { SESSION_COOKIE_NAME };

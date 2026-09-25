@@ -273,6 +273,11 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, action })
       });
+      if (res.status === 401) {
+        showLoginOverlay();
+        buttons.forEach((b) => { b.disabled = false; });
+        return;
+      }
       if (!res.ok) throw new Error("Request failed");
       const result = await res.json();
       card.remove();
@@ -950,6 +955,11 @@
       btn.disabled = true;
       try {
         const res = await fetch(`/api/command-center-memory?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+        if (res.status === 401) {
+          showLoginOverlay();
+          btn.disabled = false;
+          return;
+        }
         if (!res.ok) throw new Error("Request failed");
         row.remove();
       } catch (err) {
@@ -1006,6 +1016,11 @@
             addedInCrm: document.getElementById("contractor-added-crm").checked
           })
         });
+        if (res.status === 401) {
+          closeModal();
+          showLoginOverlay();
+          return;
+        }
         if (!res.ok) throw new Error("Request failed");
         statusEl.textContent = "Contractor added.";
         statusEl.className = "modal-status success";
@@ -1032,6 +1047,11 @@
         const res = await fetch(`/api/command-center-contractors?id=${encodeURIComponent(id)}`, {
           method: "DELETE"
         });
+        if (res.status === 401) {
+          showLoginOverlay();
+          btn.disabled = false;
+          return;
+        }
         if (!res.ok) throw new Error("Request failed");
         row.remove();
       } catch (err) {
@@ -1098,6 +1118,11 @@
             dueAt: dueInput.value ? new Date(dueInput.value).toISOString() : null
           })
         });
+        if (res.status === 401) {
+          closeModal();
+          showLoginOverlay();
+          return;
+        }
         if (!res.ok) throw new Error("Request failed");
         statusEl.textContent = "Follow-up created.";
         statusEl.className = "modal-status success";
@@ -1252,6 +1277,11 @@
             notifyPhone: document.getElementById("settings-notify-phone").value
           })
         });
+        if (res.status === 401) {
+          closeModal();
+          showLoginOverlay();
+          return;
+        }
         if (!res.ok) throw new Error("Request failed");
         const result = await res.json();
         currentSettings = result.settings;
@@ -1833,7 +1863,11 @@
   // Clears the session cookie server-side and reloads -- no credential is
   // ever read or held by this code, it just asks the server to forget the
   // current session. Independent of the desktop app's own auth and MCP,
-  // neither of which this touches.
+  // neither of which this touches. A plain reload is now correct (and
+  // simpler than showing the overlay directly): every command-center-*
+  // endpoint requires a session, so the page-load auth check below will
+  // find no valid cookie and render only the login screen -- no stale
+  // business data is left in the DOM for a reload to expose.
   function initLogoutControl() {
     const btn = document.getElementById("logout-btn");
     if (!btn) return;
@@ -1846,52 +1880,84 @@
           body: JSON.stringify({ logout: true }),
         });
       } catch (err) {
-        /* best-effort -- show the login screen regardless, since the point
-           is to force re-authentication either way */
+        /* best-effort -- reload regardless, since the point is to force
+           re-authentication either way */
       }
-      // Not a reload: nothing on page load actually checks auth (only the
-      // chat/directTool endpoint does, and only once you use it), so a
-      // reload alone lands back on a dashboard that still looks logged in
-      // -- the KPI/leads/activity panels come from endpoints outside this
-      // security work and don't require a session. Showing the overlay
-      // directly is what actually re-locks the page immediately.
-      btn.disabled = false;
-      showLoginOverlay();
+      location.reload();
     });
   }
 
-  /* ---------------- Init ---------------- */
-  renderMyaMessage();
-  renderKPIs();
-  renderSchedule();
-  renderActivity();
-  renderApprovals();
-  renderWorkingNow();
-  renderLeads();
-  renderProjects();
-  renderMemory();
-  renderServices();
-  renderCallerDirectory();
-  renderDevices();
-  renderContractors();
-  renderMemoryFacts();
-  renderQuickActions();
-  loadLiveDataIfAvailable();
-  loadApprovalsIfAvailable();
-  loadFollowUpCountIfAvailable();
-  loadContractorsIfAvailable();
-  loadMemoryFactsIfAvailable();
-  loadProjectsIfAvailable();
-  loadSettingsIfAvailable();
-  initFollowUpModal();
-  initSettingsModal();
-  initContractorModal();
-  initMemoryPanel();
-  initCompanyContactsModal();
-  initSidenavJumpLinks();
-  initAskMya();
+  /* ---------------- Init ----------------
+     Every command-center-* endpoint now requires an authenticated session,
+     so none of the dashboard's own data loading may run until that's
+     confirmed -- otherwise an unauthenticated visitor would still see
+     rendered sample data and a live dashboard shell behind the (now
+     visible-by-default) login overlay, even though every fetch it makes
+     would fail. initAuthGate() below is the only thing that runs
+     unconditionally at load; everything else waits on it. */
+  function initDashboard() {
+    renderMyaMessage();
+    renderKPIs();
+    renderSchedule();
+    renderActivity();
+    renderApprovals();
+    renderWorkingNow();
+    renderLeads();
+    renderProjects();
+    renderMemory();
+    renderServices();
+    renderCallerDirectory();
+    renderDevices();
+    renderContractors();
+    renderMemoryFacts();
+    renderQuickActions();
+    loadLiveDataIfAvailable();
+    loadApprovalsIfAvailable();
+    loadFollowUpCountIfAvailable();
+    loadContractorsIfAvailable();
+    loadMemoryFactsIfAvailable();
+    loadProjectsIfAvailable();
+    loadSettingsIfAvailable();
+    initFollowUpModal();
+    initSettingsModal();
+    initContractorModal();
+    initMemoryPanel();
+    initCompanyContactsModal();
+    initSidenavJumpLinks();
+    initAskMya();
+    document.getElementById("login-overlay").hidden = true;
+  }
+
+  // Runs before anything else. Probes /api/command-center-settings (GET,
+  // now auth-gated like every other Command Center endpoint) purely to ask
+  // "do I already have a valid session?" -- it reads no response body, it
+  // just checks the status code. 200 reveals the dashboard; anything else
+  // (401, or the request failing outright) leaves the login overlay up,
+  // which is what the page shows by default before this ever resolves, and
+  // skips loading any dashboard data at all. Local offline preview (opening
+  // index.html directly as a file, with no server behind it) is the one
+  // deliberate exception, matching every loadXIfAvailable()'s own guard.
+  async function initAuthGate() {
+    if (location.protocol === "file:") {
+      initDashboard();
+      return;
+    }
+    try {
+      const res = await fetch("/api/command-center-settings");
+      if (res.ok) {
+        initDashboard();
+        return;
+      }
+    } catch (err) {
+      /* fail closed -- treat an unreachable server the same as "not
+         authenticated" rather than guessing and showing the dashboard */
+    }
+    showLoginOverlay();
+  }
+
   initLoginOverlay();
   initLogoutControl();
+  initAuthGate();
 
   document.getElementById("approvals-list").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-action]");

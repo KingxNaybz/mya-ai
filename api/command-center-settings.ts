@@ -1,16 +1,22 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
-import { createSessionToken, sessionCookieHeader, clearSessionCookieHeader, safeStringEqual } from "../lib/session";
+import {
+  createSessionToken,
+  sessionCookieHeader,
+  clearSessionCookieHeader,
+  safeStringEqual,
+  isCommandCenterAuthenticated,
+} from "../lib/session";
 
 /**
- * The settings GET/POST behavior below is intentionally unchanged and still
- * has no auth check of its own (out of scope for this remediation pass —
- * see the Production Endpoint Security Review). This file's new
- * responsibility is narrower: it issues and clears the dashboard session
- * cookie that /api/command-center-ask-mya requires, via the { login: true }
- * and { logout: true } branches below, and throttles repeated failed
- * logins against mya_login_attempts. Those branches are the only new auth
- * surface added here.
+ * The GET (settings read) and plain-update POST branches below now require
+ * a valid dashboard session or COMMAND_CENTER_API_KEY, same as every other
+ * command-center-*.ts endpoint -- checked before any Supabase query or
+ * mutation runs. The { login: true } and { logout: true } branches are the
+ * deliberate exception: they must stay reachable with NO credential, since
+ * you can't require a session to obtain one, and logout must work even with
+ * an expired or missing cookie. Those two branches are checked first, below,
+ * before the auth gate applies to everything else in this file.
  */
 
 const SUPABASE_URL =
@@ -133,6 +139,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "OPTIONS") return res.status(200).end();
 
   if (req.method === "GET") {
+    if (!isCommandCenterAuthenticated(req)) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
     const { data, error } = await supabase
       .from("mya_settings")
       .select(SETTINGS_COLUMNS)
@@ -187,6 +196,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const token = createSessionToken(SESSION_SIGNING_SECRET);
       res.setHeader("Set-Cookie", sessionCookieHeader(token));
       return res.status(200).json({ ok: true });
+    }
+
+    if (!isCommandCenterAuthenticated(req)) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const update: Record<string, unknown> = { updated_at: new Date().toISOString() };

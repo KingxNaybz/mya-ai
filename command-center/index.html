@@ -8,10 +8,13 @@
 </head>
 <body>
 
-<!-- Shown when a Command Center request comes back 401 (no valid session
-     cookie yet, or it expired). Password is never stored anywhere except
-     this in-memory form field for the moment it takes to submit it. -->
-<div class="login-overlay" id="login-overlay" hidden>
+<!-- Visible by default so the login screen -- not the dashboard behind it --
+     is the first thing a browser can ever paint. JS hides it only after
+     confirming an authenticated session (or a 401 in response to a Command
+     Center request, if the session expires mid-use). Password is never
+     stored anywhere except this in-memory form field for the moment it
+     takes to submit it. -->
+<div class="login-overlay" id="login-overlay">
   <form class="login-box" id="login-form">
     <div class="logo-word">MYA</div>
     <p>Enter the dashboard password to continue.</p>

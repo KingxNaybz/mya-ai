@@ -1,13 +1,13 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { isCommandCenterAuthenticated } from "../lib/session";
 
 /**
- * Same protection model as command-center-data.ts: no password/key check of
- * its own — relies entirely on Vercel's own "Deployment Protection" for the
- * environment this is deployed to. Unlike that endpoint, this one WRITES
- * (resolves an approval), so it's more consequential to leave unprotected.
- * Do not merge to main without Deployment Protection covering Production
- * too, or a proper page-level login in front of the Command Center.
+ * Requires a valid dashboard session cookie or COMMAND_CENTER_API_KEY (see
+ * isCommandCenterAuthenticated in lib/session.ts) -- checked before any
+ * Supabase query or mutation runs. This one WRITES (resolves an approval,
+ * can trigger an SMS), so an unauthenticated request must never reach the
+ * database at all, not just get a rejected response.
  */
 
 const SUPABASE_URL =
@@ -49,6 +49,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(200).end();
+
+  if (!isCommandCenterAuthenticated(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
 
   if (req.method === "GET") {
     const { data, error } = await supabase

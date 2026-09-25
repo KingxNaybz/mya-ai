@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
-import { verifySessionToken, extractSessionCookie, safeStringEqual } from "../lib/session";
+import { isCommandCenterAuthenticated } from "../lib/session";
 
 /**
  * Same protection model as the other command-center-*.ts endpoints: no
@@ -32,32 +32,12 @@ const SUPABASE_KEY =
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
-const SESSION_SIGNING_SECRET = process.env.SESSION_SIGNING_SECRET || "";
-const COMMAND_CENTER_API_KEY = process.env.COMMAND_CENTER_API_KEY || "";
 
-// Authentication (proving who's calling) is deliberately independent from
-// Mya's existing permission/approval system (what they're allowed to do,
-// enforced by getPermissionLevel()/logActionEvent() below) -- this only
-// gates entry to the endpoint at all, for the two legitimate callers:
-// the browser dashboard (a signed, HttpOnly session cookie issued by
-// /api/command-center-settings after a correct DASHBOARD_PASSWORD, but
-// signed with the independent SESSION_SIGNING_SECRET -- this file never
-// reads DASHBOARD_PASSWORD at all, only the signing secret) and the
-// desktop app (a static key sent as a header, from its own private .env,
-// independent of every other credential in this codebase). Neither path
-// grants any skill execution by itself -- permission levels still apply
-// to every tool call made afterward, unchanged.
-function isCommandCenterAuthenticated(req: VercelRequest): boolean {
-  const apiKeyHeader = (req.headers["x-command-center-key"] as string | undefined) || "";
-  if (COMMAND_CENTER_API_KEY && apiKeyHeader && safeStringEqual(apiKeyHeader, COMMAND_CENTER_API_KEY)) {
-    return true;
-  }
-  const cookieToken = extractSessionCookie(req.headers.cookie as string | undefined);
-  if (cookieToken && SESSION_SIGNING_SECRET && verifySessionToken(cookieToken, SESSION_SIGNING_SECRET)) {
-    return true;
-  }
-  return false;
-}
+// isCommandCenterAuthenticated is the shared entry gate for every Command
+// Center endpoint (imported from lib/session.ts) -- authentication only.
+// Mya's own permission/approval system (getPermissionLevel()/
+// logActionEvent() below) still applies to every tool call made afterward,
+// unchanged.
 const ANTHROPIC_MODEL = "claude-sonnet-5";
 const MAX_TOOL_ITERATIONS = 5;
 

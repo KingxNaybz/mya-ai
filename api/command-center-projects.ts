@@ -1,10 +1,11 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { isCommandCenterAuthenticated } from "../lib/session";
 
 /**
- * Same protection model as the other command-center-*.ts endpoints: no
- * password/key check of its own — relies entirely on Vercel's own
- * "Deployment Protection" for the environment this is deployed to.
+ * Requires a valid dashboard session cookie or COMMAND_CENTER_API_KEY (see
+ * isCommandCenterAuthenticated in lib/session.ts) -- checked before any
+ * Supabase query runs, for both branches below.
  * Read-only — projects are created/updated via Ask Mya's create_project/
  * update_project skills (command-center-ask-mya.ts).
  *
@@ -105,6 +106,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  if (!isCommandCenterAuthenticated(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
   if (req.query.type === "alerts") {

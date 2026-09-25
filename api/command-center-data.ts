@@ -1,16 +1,14 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { isCommandCenterAuthenticated } from "../lib/session";
 
 /**
- * IMPORTANT: this endpoint has no password/key check of its own. It relies
- * entirely on Vercel's own "Deployment Protection" (a login screen Vercel
- * puts in front of the whole deployment, configured in the Vercel dashboard
- * under Settings) to keep it from being publicly reachable. If that ever
- * gets turned off for the environment this is deployed to — and especially
- * before this is ever merged to `main` / production — this endpoint would
- * return real customer data to anyone with the URL. Do not merge this to
- * main without either Vercel Deployment Protection covering Production too,
- * or a proper page-level login in front of the Command Center itself.
+ * Requires a valid dashboard session cookie or COMMAND_CENTER_API_KEY (see
+ * isCommandCenterAuthenticated in lib/session.ts) -- checked before any
+ * Supabase query runs, so an unauthenticated request never touches the
+ * database. Vercel's own Deployment Protection is not a substitute for this:
+ * it does not reliably cover Production (confirmed directly against the
+ * live deployment), so this endpoint must not depend on it.
  */
 
 /* ── env ─────────────────────────────────────────────────────── */
@@ -152,6 +150,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  if (!isCommandCenterAuthenticated(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
   const todayIso = startOfTodayAtlanta();
