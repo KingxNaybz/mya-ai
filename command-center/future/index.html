@@ -4,7 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mya — Future Interface (Phase 1 Preview)</title>
-<link rel="stylesheet" href="styles.css">
+<!-- ?v=N cache-busts styles.css/app.js on every push. Vercel serves these
+     plain-named static files with no content-hash fingerprinting (there's
+     no build step to do that), so a browser that already cached them from
+     an earlier deployment at this same URL can otherwise keep serving
+     stale CSS/JS indefinitely even after a new, correct version is live --
+     bump N here every time either file changes. -->
+<link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
 
@@ -15,7 +21,10 @@
      correctly was the fastest way to unblock review). /command-center/
      itself is unmodified and remains the production experience. This page
      exists purely for visual-development safety and review. -->
-<div class="dev-badge">Phase 1 Preview — Not Production</div>
+<!-- Visible build tag -- if this doesn't match the number in the most
+     recent commit message, the browser is showing a stale cached page,
+     not the current code. Bump alongside the ?v= numbers above. -->
+<div class="dev-badge">Phase 1 Preview — Build 9 — Not Production</div>
 
 <!-- Same behavior as the existing dashboard's login overlay: visible by
      default, hidden only after a real session is confirmed against the
@@ -155,7 +164,7 @@
 
 </div>
 
-<script src="mya-events.js"></script>
-<script src="app.js"></script>
+<script src="mya-events.js?v=9"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>

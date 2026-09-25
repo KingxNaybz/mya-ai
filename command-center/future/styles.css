@@ -271,10 +271,10 @@ button, input { font-family: inherit; }
      spinning, not just something moving on top of it. */
   stroke-dasharray: 2 10;
 }
-.orbit-a { animation: orbitSpin calc(26s / var(--mf-anim-speed)) linear infinite; }
-.orbit-b { animation: orbitSpinReverse calc(34s / var(--mf-anim-speed)) linear infinite; }
-.orbit-c { animation: orbitSpin calc(21s / var(--mf-anim-speed)) linear infinite; }
-.orbit-d { animation: orbitSpinReverse calc(40s / var(--mf-anim-speed)) linear infinite; opacity: 0.6; }
+.orbit-a { animation: orbitSpin calc(9s / var(--mf-anim-speed)) linear infinite; }
+.orbit-b { animation: orbitSpinReverse calc(12s / var(--mf-anim-speed)) linear infinite; }
+.orbit-c { animation: orbitSpin calc(7s / var(--mf-anim-speed)) linear infinite; }
+.orbit-d { animation: orbitSpinReverse calc(14s / var(--mf-anim-speed)) linear infinite; opacity: 0.6; }
 @keyframes orbitSpin { to { transform: rotate(360deg); } }
 @keyframes orbitSpinReverse { to { transform: rotate(-360deg); } }
 
@@ -290,10 +290,10 @@ button, input { font-family: inherit; }
   fill: var(--core-node-color);
   filter: drop-shadow(0 0 4px var(--mf-accent-soft));
 }
-.traveler-a { animation: travelPath calc(9s / var(--mf-anim-speed)) linear infinite; animation-delay: -2s; }
-.traveler-b { animation: travelPath calc(13s / var(--mf-anim-speed)) linear infinite reverse; animation-delay: -6s; }
-.traveler-c { animation: travelPath calc(16s / var(--mf-anim-speed)) linear infinite; animation-delay: -11s; }
-.traveler-d { animation: travelPath calc(11.5s / var(--mf-anim-speed)) linear infinite reverse; animation-delay: -4s; }
+.traveler-a { animation: travelPath calc(5s / var(--mf-anim-speed)) linear infinite; animation-delay: -1s; }
+.traveler-b { animation: travelPath calc(7s / var(--mf-anim-speed)) linear infinite reverse; animation-delay: -3s; }
+.traveler-c { animation: travelPath calc(8.5s / var(--mf-anim-speed)) linear infinite; animation-delay: -6s; }
+.traveler-d { animation: travelPath calc(6s / var(--mf-anim-speed)) linear infinite reverse; animation-delay: -2s; }
 @keyframes travelPath { from { offset-distance: 0%; } to { offset-distance: 100%; } }
 
 /* Dense wireframe-sphere mesh, generated at load by app.js. Reacts to
@@ -311,7 +311,7 @@ button, input { font-family: inherit; }
    orbiting particles, since the mesh-link lines connect specific pairs of
    dots by index; splitting them into separately-rotating layers would tear
    connected dots apart from their lines as the layers diverged. */
-.mesh-group { animation: orbitSpin calc(16s / var(--mf-anim-speed)) linear infinite; transform-origin: 240px 240px; }
+.mesh-group { animation: orbitSpin calc(5.5s / var(--mf-anim-speed)) linear infinite; transform-origin: 240px 240px; }
 .mesh-node {
   fill: var(--core-node-color);
   /* Base opacity is the depth cue set inline per-particle in
@@ -394,7 +394,7 @@ button, input { font-family: inherit; }
 .mya-core[data-state="listening"] .node { fill: var(--core-listening); }
 .mya-core[data-state="listening"] .mesh-node { fill: var(--core-listening); }
 .mya-core[data-state="listening"] .mesh-link { stroke: var(--core-listening); }
-.mya-core[data-state="listening"] .mesh-group { animation-duration: calc(22s / var(--mf-anim-speed)); }
+.mya-core[data-state="listening"] .mesh-group { animation-duration: calc(8s / var(--mf-anim-speed)); }
 .mya-core[data-state="listening"] .orbit-group { animation: listenDrawIn calc(1.6s / var(--mf-anim-speed)) ease-in-out infinite; transform-origin: 240px 240px; }
 .mya-core[data-state="listening"] .orbit-traveler { fill: var(--core-listening); animation-duration: calc(20s / var(--mf-anim-speed)); }
 @keyframes coreListen { 0%, 100% { transform: scale(1); } 50% { transform: scale(0.93); } }
@@ -408,11 +408,11 @@ button, input { font-family: inherit; }
 .mya-core[data-state="thinking"] .link-4 { animation-delay: 0.36s; }
 .mya-core[data-state="thinking"] .link-5 { animation-delay: 0.48s; }
 .mya-core[data-state="thinking"] .link-6 { animation-delay: 0.60s; }
-.mya-core[data-state="thinking"] .orbit-a { animation-duration: calc(14s / var(--mf-anim-speed)); }
-.mya-core[data-state="thinking"] .orbit-b { animation-duration: calc(20s / var(--mf-anim-speed)); }
+.mya-core[data-state="thinking"] .orbit-a { animation-duration: calc(5s / var(--mf-anim-speed)); }
+.mya-core[data-state="thinking"] .orbit-b { animation-duration: calc(7s / var(--mf-anim-speed)); }
 .mya-core[data-state="thinking"] .core-center { animation: coreBreathe calc(1.1s / var(--mf-anim-speed)) ease-in-out infinite; }
 .mya-core[data-state="thinking"] .mesh-link { animation: linkFire calc(1.8s / var(--mf-anim-speed)) ease-in-out infinite; }
-.mya-core[data-state="thinking"] .mesh-group { animation-duration: calc(9s / var(--mf-anim-speed)); }
+.mya-core[data-state="thinking"] .mesh-group { animation-duration: calc(4s / var(--mf-anim-speed)); }
 .mya-core[data-state="thinking"] .orbit-traveler { animation-duration: calc(4.5s / var(--mf-anim-speed)); }
 .mya-core[data-state="thinking"] .mesh-node { animation-duration: calc(1.4s / var(--mf-anim-speed)); }
 @keyframes linkFire { 0%, 100% { opacity: 0.18; } 50% { opacity: 0.9; } }
