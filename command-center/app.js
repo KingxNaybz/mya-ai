@@ -1846,10 +1846,17 @@
           body: JSON.stringify({ logout: true }),
         });
       } catch (err) {
-        /* best-effort -- reload regardless, since the point is to force the
-           next request to re-authenticate either way */
+        /* best-effort -- show the login screen regardless, since the point
+           is to force re-authentication either way */
       }
-      location.reload();
+      // Not a reload: nothing on page load actually checks auth (only the
+      // chat/directTool endpoint does, and only once you use it), so a
+      // reload alone lands back on a dashboard that still looks logged in
+      // -- the KPI/leads/activity panels come from endpoints outside this
+      // security work and don't require a session. Showing the overlay
+      // directly is what actually re-locks the page immediately.
+      btn.disabled = false;
+      showLoginOverlay();
     });
   }
 
