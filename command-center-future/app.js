@@ -24,6 +24,20 @@
 (function () {
   "use strict";
 
+  // Explicit, absolute path to navigate back to after login/logout --
+  // deliberately NOT a bare location.reload(). Vercel's static hosting
+  // canonicalizes a request for ".../index.html" (redirecting it to
+  // ".../", the directory form) on the first load. location.reload()
+  // re-requests whatever the browser now considers "here" -- which, after
+  // that redirect, may be the canonicalized directory URL rather than the
+  // literal file path -- and that second form is a different request the
+  // static host resolves independently. Navigating to this exact,
+  // hard-coded file path every time removes that ambiguity entirely: both
+  // post-login and post-logout always land on the one URL already
+  // confirmed to serve this interface, never on whatever the address bar
+  // happened to normalize to.
+  var FUTURE_INTERFACE_PATH = "/command-center-future/index.html";
+
   /* ---------------- Wireframe sphere mesh (decorative, generated once) ----------------
      Procedurally distributes points over a sphere (a standard Fibonacci
      sphere) and projects them to 2D, so the dense "wireframe globe" look
@@ -192,10 +206,12 @@
               submitBtn.disabled = false;
             });
           }
-          // Same reasoning as the existing dashboard: reload so the
+          // Navigate (not reload -- see FUTURE_INTERFACE_PATH above) so the
           // page-load auth probe re-runs now that the session cookie is
           // set, rather than trying to hand-roll a post-login init path.
-          location.reload();
+          // location.replace() so this doesn't add a back-button entry,
+          // matching reload()'s history behavior.
+          location.replace(FUTURE_INTERFACE_PATH);
         })
         .catch(function () {
           errEl.textContent = "Couldn't reach the server — check your connection and try again.";
@@ -215,8 +231,8 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ logout: true }),
       })
-        .catch(function () { /* best-effort -- reload regardless */ })
-        .then(function () { location.reload(); });
+        .catch(function () { /* best-effort -- navigate back regardless */ })
+        .then(function () { location.replace(FUTURE_INTERFACE_PATH); });
     });
   }
 
