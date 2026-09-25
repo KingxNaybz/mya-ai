@@ -36,7 +36,7 @@
   // post-login and post-logout always land on the one URL already
   // confirmed to serve this interface, never on whatever the address bar
   // happened to normalize to.
-  var FUTURE_INTERFACE_PATH = "/command-center-future/index.html";
+  var FUTURE_INTERFACE_PATH = "/command-center/future/index.html";
 
   /* ---------------- Wireframe sphere mesh (decorative, generated once) ----------------
      Procedurally distributes points over a sphere (a standard Fibonacci
