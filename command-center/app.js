@@ -1792,9 +1792,6 @@
     passwordInput.value = "";
     passwordInput.focus();
   }
-  function hideLoginOverlay() {
-    document.getElementById("login-overlay").hidden = true;
-  }
   function initLoginOverlay() {
     const form = document.getElementById("login-form");
     form.addEventListener("submit", async (e) => {
@@ -1817,7 +1814,13 @@
           errEl.hidden = false;
           return;
         }
-        hideLoginOverlay();
+        // Reload rather than just hiding the overlay: every panel's own
+        // data-loading call already ran once at page load, before a valid
+        // session existed, and failed -- only a fresh load re-runs them
+        // now that the cookie is set. Mirrors the logout button's own
+        // location.reload() for the same reason, in the opposite direction.
+        location.reload();
+        return;
       } catch (err) {
         errEl.textContent = "Couldn't reach the server — check your connection and try again.";
         errEl.hidden = false;
