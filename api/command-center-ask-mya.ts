@@ -1545,7 +1545,7 @@ const MCP_BRIDGE_ENABLED = process.env.MCP_BRIDGE_ENABLED === "true";
 const MCP_BRIDGE_KEY = process.env.MCP_BRIDGE_KEY || "";
 const MCP_PROTOCOL_VERSION = "2024-11-05";
 // list_capabilities is level 0 (read-only) and stays exactly as available to
-// Mya's own Claude-driven chat as it's always been -- this exclusion is
+// Mya's own Claude-driven chat as it's always been -- excluding it here is
 // MCP-bridge-specific only. It's a different kind of skill from every other
 // level-0 one: the others each return one bounded slice of business data;
 // this one enumerates the entire internal skill set, including every
@@ -1553,15 +1553,53 @@ const MCP_PROTOCOL_VERSION = "2024-11-05";
 // there's no reason to hand over that map, and the bridge's own tools/list
 // already tells an authenticated caller exactly what it can call here --
 // a second listing that also reveals what it can't call is strictly worse
-// for this consumer, not more useful.
+// for this consumer, not more useful. Kept as an extra defense-in-depth
+// check below even though it's not the primary gate anymore (see next).
 const MCP_EXCLUDED_SKILLS = new Set(["list_capabilities"]);
-const MCP_EXPOSED_SKILLS: Skill[] = SKILLS.filter(
-  (s) => getPermissionLevel(s.name) === 0 && !MCP_EXCLUDED_SKILLS.has(s.name)
-);
 
-function findExposedMcpSkill(name: string): Skill | undefined {
-  return MCP_EXPOSED_SKILLS.find((s) => s.name === name);
+/**
+ * Phase 1 Hermes rollout: an explicit, hand-picked allowlist of external
+ * tool names, layered ON TOP OF (never instead of) the permission-level-0
+ * gate below -- "start with these three tools" was explicit, so every other
+ * already-level-0 skill (list_leads, get_dashboard_summary, etc.) stays
+ * reachable to Mya's own Claude-driven chat exactly as before, but is
+ * deliberately NOT yet exposed to the MCP bridge. Widening this later is
+ * one more line in this map, never a redesign -- the permission-level check
+ * inside findExposedMcpSkill() still applies to whatever's added.
+ *
+ * search_projects has no skill of that exact name in SKILLS -- list_projects
+ * already does the same "list/search projects, optionally by status or a
+ * name/client keyword" job, so this maps the requested external name to
+ * that existing skill's real name rather than duplicating its logic (or its
+ * SKILLS entry) under a second name. get_project/get_client are already
+ * named exactly what's requested, so they map to themselves.
+ */
+const MCP_TOOL_ALIASES: Record<string, string> = {
+  get_project: "get_project",
+  get_client: "get_client",
+  search_projects: "list_projects",
+};
+
+function findExposedMcpSkill(externalName: string): Skill | undefined {
+  const realName = MCP_TOOL_ALIASES[externalName];
+  if (!realName) return undefined;
+  const skill = findSkill(realName);
+  // Never trust the alias map alone -- an aliased name must still resolve
+  // to a real, currently level-0, non-excluded skill.
+  if (!skill || getPermissionLevel(skill.name) !== 0 || MCP_EXCLUDED_SKILLS.has(skill.name)) return undefined;
+  return skill;
 }
+
+// Rendered once, from the allowlist above, for the tools/list response --
+// each entry keeps the skill's own description/input_schema untouched (the
+// single-source-of-truth principle from the top of this file) under
+// whichever external name Hermes will actually call it by.
+const MCP_TOOLS_LIST = Object.keys(MCP_TOOL_ALIASES)
+  .map((externalName) => {
+    const skill = findExposedMcpSkill(externalName);
+    return skill ? { name: externalName, description: skill.description, inputSchema: skill.input_schema } : null;
+  })
+  .filter((t): t is { name: string; description: string; inputSchema: Record<string, unknown> } => t !== null);
 
 /** Light JSON-Schema-subset validation against a skill's own input_schema —
  * exactly the shape already used across every skill in SKILLS (type/object,
@@ -1656,13 +1694,7 @@ async function handleMcpRequest(
   if (method === "tools/list") {
     return {
       status: 200,
-      body: jsonRpcResult(id, {
-        tools: MCP_EXPOSED_SKILLS.map((s) => ({
-          name: s.name,
-          description: s.description,
-          inputSchema: s.input_schema,
-        })),
-      }),
+      body: jsonRpcResult(id, { tools: MCP_TOOLS_LIST }),
     };
   }
 
@@ -1684,16 +1716,22 @@ async function handleMcpRequest(
     }
 
     // Defense-in-depth: re-check permission level even though the tool
-    // could only have been found via MCP_EXPOSED_SKILLS above — this is
-    // the actual gate the requirement asks for, not just list filtering.
+    // could only have been found via findExposedMcpSkill's own allowlist +
+    // permission-level check above — this is the actual gate the
+    // requirement asks for, not just list filtering.
     if (getPermissionLevel(skill.name) !== 0) {
-      await logActionEvent({ toolName, input: toolArgs, result: { error: "permission denied" }, surface: "hermes_mcp" });
+      await logActionEvent({ toolName: skill.name, input: toolArgs, result: { error: "permission denied" }, surface: "hermes_mcp" });
       return { status: 403, body: jsonRpcError(id, -32002, "Permission denied for this tool.") };
     }
 
+    // Logged under skill.name (the real, resolved skill) rather than the
+    // possibly-aliased toolName from here on — search_projects has no
+    // "search_" entry in getPermissionLevel's read-prefix list, so logging
+    // the alias verbatim would misclassify its own audit row as a level-2
+    // (write) action instead of the level-0 read it actually is.
     const validationError = validateToolInput(skill, toolArgs);
     if (validationError) {
-      await logActionEvent({ toolName, input: toolArgs, result: { error: validationError }, surface: "hermes_mcp" });
+      await logActionEvent({ toolName: skill.name, input: toolArgs, result: { error: validationError }, surface: "hermes_mcp" });
       return { status: 400, body: jsonRpcError(id, -32602, validationError) };
     }
 
