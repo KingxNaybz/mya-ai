@@ -505,6 +505,24 @@ button, input { font-family: inherit; }
 }
 .mf-voice-toggle.is-muted { opacity: 0.5; }
 
+.mf-mic-toggle {
+  background: transparent !important;
+  color: var(--mf-text-mid) !important;
+}
+.mf-mic-toggle.is-on { color: var(--mf-accent) !important; }
+/* Pulses only while actively scanning for the wake word -- once she's
+   awake and expecting your command, the pulse stops so the button reads
+   as "listening to you right now" rather than "still just watching". */
+.mf-mic-toggle.is-listening { animation: micPulse calc(1.6s / var(--mf-anim-speed)) ease-in-out infinite; }
+@keyframes micPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+.mf-voice-status {
+  margin: 8px 4px 0;
+  font-size: 12px;
+  color: var(--mf-text-muted);
+  text-align: center;
+}
+
 .mf-command-log {
   margin-top: 14px;
   display: flex;
@@ -706,7 +724,8 @@ button, input { font-family: inherit; }
    higher specificity than a plain override could reach otherwise. -------- */
 @media (prefers-reduced-motion: reduce) {
   .orbit-path, .orbit-traveler, .mesh-group, .mesh-node, .mesh-link,
-  .node, .link, .core-depth-layer, .core-center, .core-halo, .orbit-group {
+  .node, .link, .core-depth-layer, .core-center, .core-halo, .orbit-group,
+  .mf-mic-toggle {
     animation: none !important;
   }
   .mya-core-stage.intro-play {

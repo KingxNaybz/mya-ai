@@ -10,16 +10,15 @@
  * /api/command-center-settings and rely on the one HttpOnly cookie the
  * browser already holds for this origin.
  *
- * REAL vs DEV state note: only three Mya Core states are driven by a real
- * signal in this milestone -- idle, thinking (a chat request is in
- * flight), and speaking (a reply just arrived). Every other state
- * (listening, memory-retrieval, tool-use, working, delegating,
- * awaiting-approval, completed, alert, error) has no real signal to drive
- * it yet in this shell -- listening depends on the voice/wake-word
- * pipeline (ported in a later milestone), the rest depend on backend
- * signal work that doesn't exist yet. Those are only reachable through the
- * "dev preview" button row, which sets a `dev: true` flag on the emitted
- * event so this is never confused with real activity.
+ * REAL vs DEV state note: four Mya Core states are driven by a real signal
+ * now -- idle, listening (the wake-word mic is on and not currently busy),
+ * thinking (a chat request is in flight), and speaking (a reply just
+ * arrived). Every other state (memory-retrieval, tool-use, working,
+ * delegating, awaiting-approval, completed, alert, error) has no real
+ * signal to drive it yet in this shell -- those depend on backend signal
+ * work that doesn't exist yet, and are only reachable through the "dev
+ * preview" button row, which sets a `dev: true` flag on the emitted event
+ * so this is never confused with real activity.
  */
 (function () {
   "use strict";
@@ -131,16 +130,26 @@
     stateLabelEl.textContent = stateName + (opts.dev ? " (dev preview)" : "");
   }
 
+  // Where a temporary state settles back to once its hold period ends.
+  // Plain idle by default; reassigned (not redeclared -- same closure) once
+  // the mic pipeline initializes below, so "she stopped talking" settles
+  // back to "listening" instead of "idle" whenever the mic is on.
+  var settleCore = function () { setCoreState("idle"); };
+
   // Real transitions auto-return to idle after a short settle period, same
   // idea as the existing orb's speaking animation not running forever.
   function setCoreStateTemporary(stateName, holdMs) {
     clearTimeout(idleTimer);
     setCoreState(stateName);
-    idleTimer = setTimeout(function () { setCoreState("idle"); }, holdMs);
+    idleTimer = setTimeout(function () { settleCore(); }, holdMs);
   }
 
   // Real event -> state wiring. Only these three emissions ever happen
-  // outside the dev-preview row in this milestone.
+  // outside the dev-preview row in this milestone. "listening" is also
+  // real (see the mic pipeline in initCommandBar below) but is driven
+  // directly by setCoreState/settleCore rather than through MyaEvents,
+  // since it's a standing condition (the mic is on and idle) rather than
+  // a one-off occurrence to broadcast.
   MyaEvents.on("mya.thinking", function () { clearTimeout(idleTimer); setCoreState("thinking"); });
   MyaEvents.on("mya.responding", function () { setCoreStateTemporary("speaking", 2200); });
   MyaEvents.on("mya.idle", function () { clearTimeout(idleTimer); setCoreState("idle"); });
@@ -255,17 +264,21 @@
      mya-voice-enabled localStorage key so muting on one page carries to
      the other -- same origin, same preference, not a new setting.
 
-     NOT ported in this pass: the always-listening wake-word microphone
-     pipeline (the existing dashboard's ~500-line SpeechRecognition/
-     "awake timer" subsystem). This adds real voice OUTPUT only -- typed
-     input, spoken reply. "Listening" remains a dev-preview-only state
-     until the mic pipeline itself is ported as its own piece of work. */
+     Voice input: the existing dashboard's always-listening "Mya" wake-word
+     pipeline (browser SpeechRecognition, no new dependency), ported here
+     behavior-for-behavior -- same wake word, same 45s conversation window,
+     same 3s quiet-period buffering so a mid-sentence pause doesn't cut you
+     off, same mic-pause-during-her-own-playback so she can't hear and
+     re-trigger herself. Shares the existing dashboard's mya-mic-enabled
+     localStorage key, same as voice output shares mya-voice-enabled. */
   function initCommandBar() {
     var form = document.getElementById("mf-command-form");
     var input = document.getElementById("mf-command-input");
     var log = document.getElementById("mf-command-log");
     var sendBtn = document.getElementById("mf-command-send");
     var voiceToggleBtn = document.getElementById("mf-voice-toggle");
+    var micBtn = document.getElementById("mf-mic-toggle");
+    var voiceStatusEl = document.getElementById("mf-voice-status");
     var history = [];
     var voiceEnabled = localStorage.getItem("mya-voice-enabled") !== "off";
     var currentAudio = null;
@@ -276,6 +289,16 @@
       line.textContent = text;
       log.appendChild(line);
       log.scrollTop = log.scrollHeight;
+    }
+
+    function setVoiceStatus(text) {
+      if (!text) {
+        voiceStatusEl.hidden = true;
+        voiceStatusEl.textContent = "";
+        return;
+      }
+      voiceStatusEl.hidden = false;
+      voiceStatusEl.textContent = text;
     }
 
     function applyVoiceToggleUI() {
@@ -294,37 +317,310 @@
       if (!voiceEnabled && currentAudio) currentAudio.pause();
     });
 
-    // Real audio, when present, drives the speaking->idle transition itself
-    // (ended/error) instead of the generic fixed-timeout fallback in
-    // mya.responding's default handler -- the Core stays visibly "speaking"
-    // for exactly as long as she's actually talking, not an approximation.
+    /* ---- Always-listen wake word ("Mya") -- ported from the existing
+       dashboard's SpeechRecognition subsystem. Declared here (rather than
+       as a separate top-level function) so it shares performSend() and the
+       voice-output state below without threading extra parameters through. */
+    var SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var recognition = null;
+    var micEnabled = localStorage.getItem("mya-mic-enabled") === "on";
+    var awake = false;
+    var awakeTimeout = null;
+    var pausedForPlayback = false;
+    var intentionalStop = false;
+    var pendingSpeechBuffer = "";
+    var pendingSendTimer = null;
+    var recognitionGeneration = 0; // see startRecognition()'s onend for why
+
+    function setMicUI() {
+      if (!SpeechRecognitionCtor) {
+        micBtn.disabled = true;
+        micBtn.title = "Voice input isn't supported in this browser — try Chrome or Edge.";
+        return;
+      }
+      micBtn.classList.toggle("is-on", micEnabled);
+      micBtn.classList.toggle("is-listening", micEnabled && !awake);
+      micBtn.title = micEnabled ? 'Always listening for "Mya" — click to turn off' : 'Click to always listen for "Mya"';
+    }
+
+    // Only flips the Core to "listening" if it's currently idle -- never
+    // steals the display away from a "thinking"/"speaking" transition that
+    // might be mid-flight (e.g. the mic being turned on right as a reply
+    // is arriving).
+    function showListeningIfIdle() {
+      if (coreEl.getAttribute("data-state") === "idle") setCoreState("listening");
+    }
+
+    // Returns a promise that resolves only once the mic has actually
+    // confirmed it stopped (recognition.onend fired) -- .stop() itself is
+    // async in every browser. Wraps the existing onend handler (rather
+    // than replacing it) so its normal side effects still run.
+    function pauseWakeListening() {
+      pausedForPlayback = true;
+      if (!recognition) return Promise.resolve();
+      return new Promise(function (resolve) {
+        intentionalStop = true;
+        var originalOnEnd = recognition.onend;
+        var settled = false;
+        var finish = function () {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+        recognition.onend = function (event) {
+          if (typeof originalOnEnd === "function") originalOnEnd(event);
+          finish();
+        };
+        // Safety net: some browsers never fire onend for a stop() call on
+        // an already-idle recognizer -- never let that hang block her from
+        // speaking at all.
+        setTimeout(finish, 500);
+        try {
+          recognition.stop();
+        } catch (e) {
+          finish();
+        }
+      });
+    }
+
+    // How long to keep listening for a follow-up without requiring the
+    // wake word again -- long enough for a real back-and-forth, not just
+    // one exchange.
+    var AWAKE_TIMEOUT_MS = 45000;
+
+    function resetAwakeTimer() {
+      clearTimeout(awakeTimeout);
+      awakeTimeout = setTimeout(function () {
+        awake = false;
+        clearTimeout(pendingSendTimer);
+        pendingSendTimer = null;
+        pendingSpeechBuffer = "";
+        setMicUI();
+        setVoiceStatus('Listening for "Mya"…');
+      }, AWAKE_TIMEOUT_MS);
+    }
+
+    function enterAwakeMode() {
+      awake = true;
+      setMicUI();
+      setVoiceStatus("Yes? I'm listening…");
+      resetAwakeTimer();
+    }
+
+    function wakeAndSend(text) {
+      awake = false;
+      clearTimeout(awakeTimeout);
+      setMicUI();
+      performSend(text);
+    }
+
+    // Chrome marks a segment "final" after any pause, including a normal
+    // mid-sentence breath, not just the end of a thought -- sending the
+    // instant a segment finalizes cuts people off mid-sentence. Buffer
+    // finalized text and wait for a real quiet period before sending; any
+    // further speech extends the wait instead of firing early.
+    var FINAL_RESULT_QUIET_PERIOD_MS = 3000;
+
+    function queueSpeechForSend(text) {
+      pendingSpeechBuffer = pendingSpeechBuffer ? pendingSpeechBuffer + " " + text : text;
+      extendPendingSend();
+    }
+
+    function extendPendingSend() {
+      clearTimeout(pendingSendTimer);
+      pendingSendTimer = setTimeout(function () {
+        var toSend = pendingSpeechBuffer;
+        pendingSpeechBuffer = "";
+        pendingSendTimer = null;
+        if (toSend) wakeAndSend(toSend);
+      }, FINAL_RESULT_QUIET_PERIOD_MS);
+    }
+
+    function startRecognition() {
+      if (!SpeechRecognitionCtor || pausedForPlayback || !micEnabled) return;
+      var myGeneration = ++recognitionGeneration;
+      recognition = new SpeechRecognitionCtor();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+
+      // Chrome's speech recognition often mishears "Mya" as a near
+      // homophone -- match those too.
+      var WAKE_WORD = /\b(mya|maya|mia|nia)\b/i;
+
+      recognition.onresult = function (event) {
+        var result = event.results[event.results.length - 1];
+        var transcript = result[0].transcript.trim();
+        if (!transcript) return;
+
+        if (!awake) {
+          if (!WAKE_WORD.test(transcript)) return;
+          // Flip into awake mode on an interim result already -- waiting
+          // for Chrome to finalize the segment risks losing the next few
+          // words if the speaker pauses right after saying "Mya".
+          enterAwakeMode();
+          if (!result.isFinal) return;
+        } else {
+          resetAwakeTimer();
+          if (pendingSendTimer) extendPendingSend();
+        }
+
+        if (!result.isFinal) return; // don't act on a still-changing transcript
+
+        var after = transcript.replace(new RegExp("^.*" + WAKE_WORD.source + "[,:]?\\s*", "i"), "").trim();
+        if (after) queueSpeechForSend(after);
+        // else: this segment was just the wake word alone -- already awake
+        // and waiting, the actual request arrives as the next result.
+      };
+
+      recognition.onerror = function (event) {
+        console.error("Mya mic error:", event.error);
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+          teardownMic(true);
+          setVoiceStatus('Mic permission denied — click the icon left of the address bar, allow microphone access, then click 🎙 again.');
+        } else if (event.error === "audio-capture") {
+          teardownMic(true);
+          setVoiceStatus("No microphone found — check that one is connected and try again.");
+        } else if (event.error === "network") {
+          setVoiceStatus("Having trouble reaching the speech recognition service — check your internet connection.");
+        }
+        /* other errors (no-speech, aborted): normal during continuous listening -- onend will retry silently */
+      };
+
+      recognition.onend = function () {
+        // A newer recognition instance has already taken over -- this is a
+        // stale, late-arriving event from an instance nobody's using
+        // anymore; touching the shared flags here would only interfere.
+        if (myGeneration !== recognitionGeneration) return;
+        if (intentionalStop) {
+          intentionalStop = false;
+          return;
+        }
+        if (micEnabled && !pausedForPlayback) {
+          setTimeout(startRecognition, 300);
+        }
+      };
+
+      try {
+        recognition.start();
+        setVoiceStatus(awake ? "Yes? I'm listening…" : 'Listening for "Mya"…');
+      } catch (e) {
+        if (e && e.name === "InvalidStateError") return; // already running -- harmless
+        console.error("Mya mic failed to start:", e);
+        teardownMic(true);
+        setVoiceStatus("Couldn't start the microphone — check Chrome's site permissions (click the icon left of the address bar) and try again.");
+      }
+    }
+
+    // Fully stops the current recognition instance and clears all mic
+    // timers/flags. persistOff also writes the "off" preference (a real
+    // user- or error-driven turn-off); a session-expiry teardown passes
+    // false so the preference survives and the mic resumes after the next
+    // login without the user having to re-enable it.
+    function teardownMic(persistOff) {
+      micEnabled = false;
+      if (persistOff) localStorage.setItem("mya-mic-enabled", "off");
+      awake = false;
+      clearTimeout(awakeTimeout);
+      clearTimeout(pendingSendTimer);
+      pendingSendTimer = null;
+      pendingSpeechBuffer = "";
+      intentionalStop = true;
+      if (recognition) {
+        try { recognition.stop(); } catch (e) { /* ignore */ }
+      }
+      setMicUI();
+      setVoiceStatus("");
+      if (coreEl.getAttribute("data-state") === "listening") setCoreState("idle");
+    }
+
+    function toggleMicListening() {
+      if (!SpeechRecognitionCtor) return;
+      if (micEnabled) {
+        teardownMic(true);
+        return;
+      }
+      micEnabled = true;
+      localStorage.setItem("mya-mic-enabled", "on");
+      setMicUI();
+      showListeningIfIdle();
+      startRecognition();
+    }
+    micBtn.addEventListener("click", toggleMicListening);
+
+    // Guards against restarting the mic twice for the same reply -- once
+    // from the early "she's about to finish" warm-up, and again from the
+    // normal "ended" handler.
+    var micRestartedForCurrentReply = false;
+
+    function restartMicForNextTurn() {
+      if (micRestartedForCurrentReply) return;
+      micRestartedForCurrentReply = true;
+      pausedForPlayback = false;
+      if (!micEnabled) return;
+      // She's finishing up -- stay in "listening for your answer" mode for
+      // a few seconds instead of requiring the wake word again.
+      enterAwakeMode();
+      startRecognition();
+    }
+
+    // settleCore is defined at module scope (see Mya Core state controller
+    // above) and drives what a temporary state (like "speaking") settles
+    // back to once its hold period ends. Point it at the mic here so that
+    // path also lands on "listening" instead of "idle" when appropriate.
+    settleCore = function () {
+      setCoreState(micEnabled ? "listening" : "idle");
+    };
+
+    function stopSpeakingAnimation() {
+      restartMicForNextTurn();
+      settleCore();
+    }
+
+    // Real audio, when present, drives the speaking->next-state transition
+    // itself (ended/error) instead of the generic fixed-timeout fallback --
+    // the Core stays visibly "speaking" for exactly as long as she's
+    // actually talking, not an approximation.
     function playReplyAudio(audioBase64) {
       if (!audioBase64 || !voiceEnabled) return false;
       try {
         if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; }
         currentAudio = new Audio("data:audio/mpeg;base64," + audioBase64);
         clearTimeout(idleTimer);
-        var finish = function () { setCoreState("idle"); };
-        currentAudio.addEventListener("ended", finish);
+        micRestartedForCurrentReply = false;
+        currentAudio.addEventListener("ended", stopSpeakingAnimation);
         currentAudio.addEventListener("error", function () {
           console.error("Mya voice playback error:", currentAudio && currentAudio.error);
-          finish();
+          stopSpeakingAnimation();
         });
-        currentAudio.play().catch(function (err) {
-          console.error("Mya voice play() failed:", err);
-          finish();
+        // Start warming the recognizer back up shortly before she actually
+        // finishes (real startup lag otherwise eats the first word or two
+        // of whatever's said next) -- close enough to the end that it's
+        // just her trailing silence, not her actual voice.
+        var EARLY_RESTART_SECONDS = 0.3;
+        currentAudio.addEventListener("timeupdate", function () {
+          var d = currentAudio.duration;
+          if (d && isFinite(d) && currentAudio.currentTime >= d - EARLY_RESTART_SECONDS) {
+            restartMicForNextTurn();
+          }
+        });
+        // recognition.stop() is async -- wait for onend's confirmation
+        // before playing, otherwise the still-live mic can hear the first
+        // few words of her own reply and mistake them for a new command.
+        pauseWakeListening().then(function () {
+          currentAudio.play().catch(function (err) {
+            console.error("Mya voice play() failed:", err);
+            stopSpeakingAnimation();
+          });
         });
         return true;
       } catch (e) {
+        stopSpeakingAnimation();
         return false;
       }
     }
 
-    form.addEventListener("submit", function (e) {
-      e.preventDefault();
-      var message = input.value.trim();
-      if (!message) return;
-      input.value = "";
+    function performSend(message) {
       sendBtn.disabled = true;
       addLine(message, "user");
       history.push({ role: "user", content: message });
@@ -339,6 +635,7 @@
         .then(function (res) {
           if (res.status === 401) {
             MyaEvents.emit("mya.idle", { dev: false });
+            teardownMic(false); // stop listening while logged out; preference survives the next login
             showLoginOverlay();
             return null;
           }
@@ -349,13 +646,15 @@
           if (!result.ok) {
             addLine(result.data.error || "Something went wrong — try again.", "mya");
             MyaEvents.emit("mya.idle", { dev: false });
+            settleCore();
             return;
           }
           var reply = result.data.reply || "(no reply)";
           addLine(reply, "mya");
           history.push({ role: "assistant", content: reply });
           MyaEvents.emit("mya.responding", { dev: false });
-          playReplyAudio(result.data.audioBase64); // no-op (falls back to the timed auto-idle) if no audio or muted
+          var playing = playReplyAudio(result.data.audioBase64);
+          if (!playing) restartMicForNextTurn(); // no audio (muted or unavailable) -- resume listening right away rather than waiting on the fallback timeout
 
           // Keep the workspace panels in sync with whatever Mya just did --
           // same tool-name matching the existing dashboard uses, just
@@ -371,11 +670,26 @@
         .catch(function () {
           addLine("Couldn't reach Mya — try again.", "mya");
           MyaEvents.emit("mya.idle", { dev: false });
+          settleCore();
         })
         .finally(function () {
           sendBtn.disabled = false;
         });
+    }
+
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var message = input.value.trim();
+      if (!message) return;
+      input.value = "";
+      performSend(message);
     });
+
+    setMicUI();
+    if (micEnabled) {
+      showListeningIfIdle();
+      startRecognition();
+    }
   }
 
   /* ---------------- Reveal the shell once a real session is confirmed ---------------- */
