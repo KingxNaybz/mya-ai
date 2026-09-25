@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { timingSafeEqual } from "crypto";
 
 const SUPABASE_URL =
   process.env.VITE_SUPABASE_URL ||
@@ -12,6 +13,80 @@ const SUPABASE_KEY =
   "";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/**
+ * WEBHOOK AUTHENTICATION — verifies this request actually came from our
+ * ElevenLabs "Conversation Initiation Client Data" webhook, not just
+ * anyone who found this URL. ElevenLabs does not offer an HMAC/signing-
+ * secret option for this particular webhook type (confirmed directly in
+ * the agent's own Security tab — only a "Request headers" configuration is
+ * available) — a shared static secret header is the correct,
+ * ElevenLabs-supported mechanism for this endpoint, not an invented one.
+ * The post-call webhook (mya-call-ended.ts) is a separate webhook type
+ * that DOES support ElevenLabs' official HMAC signing — that's a distinct,
+ * not-yet-implemented follow-up, and this mechanism must not be assumed to
+ * apply there.
+ *
+ * This is its own, dedicated credential — never COMMAND_CENTER_API_KEY or
+ * MCP_BRIDGE_KEY. A leak of this key only ever lets someone POST a phone
+ * number and get back the same limited, already customer-safe fields a
+ * real caller gets (see PHONE_SAFE_FIELDS below); it must never be able to
+ * reach anything Executive-Mya-side, and reusing an Executive credential
+ * here would blur that boundary for no benefit.
+ *
+ * Two independent env vars make turning this on a deliberate, two-step
+ * process rather than a single flag flip:
+ *  - MYA_CALL_START_WEBHOOK_KEY unset (its state today) -> the check is
+ *    skipped entirely. This file behaves exactly as it did before this
+ *    change until that key is actually set in Vercel.
+ *  - Key set, MYA_CALL_START_AUTH_MODE not exactly "enforce" (including
+ *    unset) -> LOG-ONLY. The outcome is logged — never the header value or
+ *    the expected secret — but the request proceeds exactly as before
+ *    regardless of whether it matched. This is for validating the header
+ *    is actually arriving correctly from real ElevenLabs calls before
+ *    anything can reject them.
+ *  - Key set AND MYA_CALL_START_AUTH_MODE=="enforce" -> a missing or
+ *    mismatched header gets a 401 before any Supabase call runs.
+ * Moving from log-only to enforce is a Vercel environment variable change
+ * only — no code change or redeploy of this file is needed to do it.
+ */
+const CALL_START_AUTH_HEADER = "x-mya-call-start-key";
+const MYA_CALL_START_WEBHOOK_KEY = process.env.MYA_CALL_START_WEBHOOK_KEY || "";
+const MYA_CALL_START_AUTH_MODE = process.env.MYA_CALL_START_AUTH_MODE || "log-only";
+
+// Constant-time where it actually matters (comparing the two secret
+// strings); a length mismatch short-circuits first since timingSafeEqual
+// throws on unequal-length buffers — the only thing that leaks via timing
+// here is whether the lengths happen to match, which reveals nothing
+// useful about a high-entropy secret's actual value.
+function secretsMatch(presented: string, expected: string): boolean {
+  const presentedBuf = Buffer.from(presented, "utf8");
+  const expectedBuf = Buffer.from(expected, "utf8");
+  if (presentedBuf.length !== expectedBuf.length) return false;
+  return timingSafeEqual(presentedBuf, expectedBuf);
+}
+
+function verifyCallStartAuth(req: VercelRequest): { configured: boolean; matched: boolean; enforced: boolean } {
+  if (!MYA_CALL_START_WEBHOOK_KEY) {
+    return { configured: false, matched: true, enforced: false };
+  }
+
+  const rawHeader = req.headers[CALL_START_AUTH_HEADER];
+  const presented = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
+  const headerPresent = typeof presented === "string" && presented.length > 0;
+  const matched = headerPresent ? secretsMatch(presented as string, MYA_CALL_START_WEBHOOK_KEY) : false;
+  const enforced = MYA_CALL_START_AUTH_MODE === "enforce";
+
+  // Booleans only, by design — never the header value or the expected
+  // secret, in either mode.
+  console.log("Mya call-start auth check:", {
+    mode: enforced ? "enforce" : "log-only",
+    headerPresent,
+    matched,
+  });
+
+  return { configured: true, matched, enforced };
+}
 
 /**
  * RECEPTION / EXECUTIVE DATA BOUNDARY — enforced here, not by prompting.
@@ -122,6 +197,11 @@ export default async function handler(
 ) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  const auth = verifyCallStartAuth(req);
+  if (auth.configured && auth.enforced && !auth.matched) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
   try {
