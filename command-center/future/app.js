@@ -89,6 +89,11 @@
       circle.setAttribute("r", (0.8 + depth * 1.4).toFixed(2));
       circle.setAttribute("class", "mesh-node");
       circle.style.opacity = (0.15 + depth * 0.55).toFixed(2);
+      // Randomized negative delay so the 72 particles' twinkle (see
+      // .mesh-node in styles.css) don't all pulse in lockstep -- a single
+      // shared phase would make the whole mesh flash together like one
+      // object instead of reading as independent, asynchronous activity.
+      circle.style.animationDelay = (-Math.random() * 3.4).toFixed(2) + "s";
       group.appendChild(circle);
     });
 
@@ -99,6 +104,7 @@
       line.setAttribute("x2", (cx + b.x * R).toFixed(1));
       line.setAttribute("y2", (cy + b.y * R * 0.92).toFixed(1));
       line.setAttribute("class", "mesh-link");
+      line.style.animationDelay = (-Math.random() * 4.2).toFixed(2) + "s";
       return line;
     }
   }

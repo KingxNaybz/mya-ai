@@ -68,10 +68,29 @@
              transform-box), which sent the ring flying off-stage -- this
              split avoids that entirely. -->
         <g class="orbit-group">
-          <g transform="rotate(12 240 240)"><ellipse class="orbit-path orbit-a" cx="240" cy="240" rx="172" ry="60"/></g>
-          <g transform="rotate(-28 240 240)"><ellipse class="orbit-path orbit-b" cx="240" cy="240" rx="162" ry="74"/></g>
-          <g transform="rotate(68 240 240)"><ellipse class="orbit-path orbit-c" cx="240" cy="240" rx="176" ry="52"/></g>
+          <g transform="rotate(12 240 240)">
+            <ellipse class="orbit-path orbit-a" cx="240" cy="240" rx="172" ry="60"/>
+            <!-- Traveler: a node that visibly moves ALONG this ring via
+                 CSS offset-path, rather than relying on the ring's own
+                 rotation to read as motion (an unmarked ellipse looks
+                 nearly identical at most rotation angles, which is why the
+                 core looked static before -- a moving dot is unambiguous). -->
+            <circle class="orbit-traveler traveler-a" r="5.5"
+              style="offset-path: path('M 68,240 A 172,60 0 1,0 412,240 A 172,60 0 1,0 68,240 Z');"/>
+          </g>
+          <g transform="rotate(-28 240 240)">
+            <ellipse class="orbit-path orbit-b" cx="240" cy="240" rx="162" ry="74"/>
+            <circle class="orbit-traveler traveler-b" r="4.5"
+              style="offset-path: path('M 78,240 A 162,74 0 1,0 402,240 A 162,74 0 1,0 78,240 Z');"/>
+          </g>
+          <g transform="rotate(68 240 240)">
+            <ellipse class="orbit-path orbit-c" cx="240" cy="240" rx="176" ry="52"/>
+            <circle class="orbit-traveler traveler-c" r="5"
+              style="offset-path: path('M 64,240 A 176,52 0 1,0 416,240 A 176,52 0 1,0 64,240 Z');"/>
+          </g>
           <ellipse class="orbit-path orbit-d" cx="240" cy="240" rx="148" ry="148"/>
+          <circle class="orbit-traveler traveler-d" r="4"
+            style="offset-path: path('M 92,240 A 148,148 0 1,0 388,240 A 148,148 0 1,0 92,240 Z');"/>
         </g>
 
         <!-- Dense wireframe sphere -- procedurally generated at load time by

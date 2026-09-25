@@ -268,19 +268,55 @@ button, input { font-family: inherit; }
   stroke-width: 1;
   transform-origin: 240px 240px;
 }
-.orbit-a { animation: orbitSpin calc(46s / var(--mf-anim-speed)) linear infinite; }
-.orbit-b { animation: orbitSpinReverse calc(64s / var(--mf-anim-speed)) linear infinite; }
-.orbit-c { animation: orbitSpin calc(80s / var(--mf-anim-speed)) linear infinite; }
-.orbit-d { animation: orbitSpinReverse calc(96s / var(--mf-anim-speed)) linear infinite; opacity: 0.6; }
+.orbit-a { animation: orbitSpin calc(26s / var(--mf-anim-speed)) linear infinite; }
+.orbit-b { animation: orbitSpinReverse calc(34s / var(--mf-anim-speed)) linear infinite; }
+.orbit-c { animation: orbitSpin calc(21s / var(--mf-anim-speed)) linear infinite; }
+.orbit-d { animation: orbitSpinReverse calc(40s / var(--mf-anim-speed)) linear infinite; opacity: 0.6; }
 @keyframes orbitSpin { to { transform: rotate(360deg); } }
 @keyframes orbitSpinReverse { to { transform: rotate(-360deg); } }
 
+/* Traveler nodes -- the actual "visible motion" signal. Each rides its
+   ring via offset-path (set inline in index.html, since it's pure
+   geometry) while this animates offset-distance from 0% to 100%.
+   Different durations, directions (plain vs "reverse" playback of the
+   same keyframe reverses travel direction along the path), and negative
+   delays (so they don't all start at the ring's path origin at once) are
+   what sell "different nodes, different speeds, different starting
+   positions" rather than one rigid object moving as a whole. */
+.orbit-traveler {
+  fill: var(--core-node-color);
+  filter: drop-shadow(0 0 4px var(--mf-accent-soft));
+}
+.traveler-a { animation: travelPath calc(9s / var(--mf-anim-speed)) linear infinite; animation-delay: -2s; }
+.traveler-b { animation: travelPath calc(13s / var(--mf-anim-speed)) linear infinite reverse; animation-delay: -6s; }
+.traveler-c { animation: travelPath calc(16s / var(--mf-anim-speed)) linear infinite; animation-delay: -11s; }
+.traveler-d { animation: travelPath calc(11.5s / var(--mf-anim-speed)) linear infinite reverse; animation-delay: -4s; }
+@keyframes travelPath { from { offset-distance: 0%; } to { offset-distance: 100%; } }
+
 /* Dense wireframe-sphere mesh, generated at load by app.js. Reacts to
    state only as a group (color + speed), unlike the six named links/nodes
-   above which react individually. */
-.mesh-group { animation: orbitSpin calc(140s / var(--mf-anim-speed)) linear infinite; transform-origin: 240px 240px; }
-.mesh-node { fill: var(--core-node-color); }
-.mesh-link { stroke: var(--core-link-color); stroke-width: 0.6; opacity: 0.16; }
+   above which react individually. The slow group rotation alone made this
+   read as one frozen rigid blob (rotating so slowly, and so uniformly,
+   that no individual part looked alive) -- the per-particle twinkle below
+   (delay randomized per element in generateCoreMesh()) is what actually
+   sells "subtle continuous activity" at the individual-node level. */
+.mesh-group { animation: orbitSpin calc(90s / var(--mf-anim-speed)) linear infinite; transform-origin: 240px 240px; }
+.mesh-node {
+  fill: var(--core-node-color);
+  /* Base opacity is the depth cue set inline per-particle in
+     generateCoreMesh() (front-facing nodes brighter than back-facing
+     ones) -- the twinkle below animates brightness/scale instead of
+     opacity directly, so it can't wash out that depth cue. */
+  animation: meshTwinkle calc(3.4s / var(--mf-anim-speed)) ease-in-out infinite;
+}
+.mesh-link {
+  stroke: var(--core-link-color);
+  stroke-width: 0.6;
+  opacity: 0.16;
+  animation: meshLinkPulse calc(4.2s / var(--mf-anim-speed)) ease-in-out infinite;
+}
+@keyframes meshTwinkle { 0%, 100% { filter: brightness(1); transform: scale(1); } 50% { filter: brightness(1.9); transform: scale(1.35); } }
+@keyframes meshLinkPulse { 0%, 100% { stroke-opacity: 0.5; } 50% { stroke-opacity: 1; } }
 
 .core-wordmark {
   font-family: -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
@@ -297,12 +333,33 @@ button, input { font-family: inherit; }
   stroke-width: 1.1;
   opacity: 0.22;
   transform-origin: 240px 240px;
+  /* A short dash chasing a long gap around the line's length, animated
+     continuously -- reads as a small pulse of energy traveling from the
+     center outward along each connection, then looping. */
+  stroke-dasharray: 8 300;
+  animation: linkEnergyPulse calc(3.6s / var(--mf-anim-speed)) linear infinite;
 }
+.link-1 { animation-delay: 0s; }
+.link-2 { animation-delay: -0.6s; }
+.link-3 { animation-delay: -1.2s; }
+.link-4 { animation-delay: -1.8s; }
+.link-5 { animation-delay: -2.4s; }
+.link-6 { animation-delay: -3.0s; }
+@keyframes linkEnergyPulse { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -308; } }
+
 .node {
   fill: var(--core-node-color);
   opacity: 0.7;
   transform-origin: center;
+  animation: nodeBrighten calc(3s / var(--mf-anim-speed)) ease-in-out infinite;
 }
+.node-1 { animation-delay: -0.4s; }
+.node-2 { animation-delay: -1.1s; }
+.node-3 { animation-delay: -1.8s; }
+.node-4 { animation-delay: -2.3s; }
+.node-5 { animation-delay: -0.8s; }
+.node-6 { animation-delay: -1.5s; }
+@keyframes nodeBrighten { 0%, 100% { filter: brightness(1); transform: scale(1); } 50% { filter: brightness(1.7); transform: scale(1.3); } }
 .particle {
   fill: var(--core-particle-color);
   opacity: calc(0.45 * var(--mf-particle-density));
@@ -317,7 +374,7 @@ button, input { font-family: inherit; }
 /* -------- IDLE (default) -- soft breathing, minimal motion -------- */
 .mya-core[data-state="idle"] .core-center { animation: coreBreathe calc(5.2s / var(--mf-anim-speed)) ease-in-out infinite; }
 .mya-core[data-state="idle"] .core-halo { animation: haloBreathe calc(5.2s / var(--mf-anim-speed)) ease-in-out infinite; }
-@keyframes coreBreathe { 0%, 100% { transform: scale(1); filter: brightness(1); } 50% { transform: scale(1.035); filter: brightness(1.08); } }
+@keyframes coreBreathe { 0%, 100% { transform: scale(1); filter: brightness(1); } 50% { transform: scale(1.06); filter: brightness(1.15); } }
 @keyframes haloBreathe { 0%, 100% { opacity: calc(0.30 * var(--mf-glow-strength)); } 50% { opacity: calc(0.42 * var(--mf-glow-strength)); } }
 
 /* -------- LISTENING -- energy pulls inward, attentive -------- */
@@ -327,7 +384,10 @@ button, input { font-family: inherit; }
 .mya-core[data-state="listening"] .mesh-node { fill: var(--core-listening); }
 .mya-core[data-state="listening"] .mesh-link { stroke: var(--core-listening); }
 .mya-core[data-state="listening"] .mesh-group { animation-duration: calc(60s / var(--mf-anim-speed)); }
+.mya-core[data-state="listening"] .orbit-group { animation: listenDrawIn calc(1.6s / var(--mf-anim-speed)) ease-in-out infinite; transform-origin: 240px 240px; }
+.mya-core[data-state="listening"] .orbit-traveler { fill: var(--core-listening); animation-duration: calc(20s / var(--mf-anim-speed)); }
 @keyframes coreListen { 0%, 100% { transform: scale(1); } 50% { transform: scale(0.93); } }
+@keyframes listenDrawIn { 0%, 100% { transform: scale(1); } 50% { transform: scale(0.92); } }
 
 /* -------- THINKING -- links fire in sequence, particles accelerate -------- */
 .mya-core[data-state="thinking"] .link { animation: linkFire calc(1.4s / var(--mf-anim-speed)) ease-in-out infinite; }
@@ -342,12 +402,16 @@ button, input { font-family: inherit; }
 .mya-core[data-state="thinking"] .core-center { animation: coreBreathe calc(1.1s / var(--mf-anim-speed)) ease-in-out infinite; }
 .mya-core[data-state="thinking"] .mesh-link { animation: linkFire calc(1.8s / var(--mf-anim-speed)) ease-in-out infinite; }
 .mya-core[data-state="thinking"] .mesh-group { animation-duration: calc(40s / var(--mf-anim-speed)); }
+.mya-core[data-state="thinking"] .orbit-traveler { animation-duration: calc(4.5s / var(--mf-anim-speed)); }
+.mya-core[data-state="thinking"] .mesh-node { animation-duration: calc(1.4s / var(--mf-anim-speed)); }
 @keyframes linkFire { 0%, 100% { opacity: 0.18; } 50% { opacity: 0.9; } }
 
 /* -------- SPEAKING -- rhythmic pulse (extends the original orb concept) -------- */
 .mya-core[data-state="speaking"] .core-center { fill: var(--core-speaking); animation: coreSpeak calc(0.5s / var(--mf-anim-speed)) ease-in-out infinite; }
 .mya-core[data-state="speaking"] .core-halo { fill: var(--core-speaking); animation: haloBreathe calc(0.5s / var(--mf-anim-speed)) ease-in-out infinite; }
 .mya-core[data-state="speaking"] .mesh-node { fill: var(--core-speaking); }
+.mya-core[data-state="speaking"] .orbit-traveler { fill: var(--core-speaking); animation-duration: calc(6s / var(--mf-anim-speed)); }
+.mya-core[data-state="speaking"] .link { stroke: var(--core-speaking); animation-duration: calc(1.4s / var(--mf-anim-speed)); }
 @keyframes coreSpeak { 0%, 100% { transform: scale(1); filter: brightness(1); } 50% { transform: scale(1.12); filter: brightness(1.3); } }
 
 /* -------- MEMORY-RETRIEVAL -- activity travels along the links -------- */
