@@ -1784,6 +1784,11 @@
   /* ---------------- Login overlay (shown on any 401 from the Command
      Center API) ---------------- */
   function showLoginOverlay() {
+    // TEMPORARY diagnostic for the current login-loop investigation --
+    // prints exactly what called this, so a real page reload that
+    // re-triggers the overlay shows up in the Console with its cause.
+    // Remove once resolved.
+    console.log("showLoginOverlay() called:", new Error().stack);
     const passwordInput = document.getElementById("login-password");
     const errEl = document.getElementById("login-error");
     document.getElementById("login-overlay").hidden = false;
