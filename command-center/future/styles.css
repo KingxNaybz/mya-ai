@@ -72,10 +72,6 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  :root { --mf-anim-speed: 0.001; }
-}
-
 /* ============================================================
    BASE
    ============================================================ */
@@ -556,4 +552,31 @@ button, input { font-family: inherit; }
 @media (max-width: 640px) {
   :root { --mf-core-size: 240px; }
   .mf-shell { padding: 32px 16px 60px; }
+}
+
+/* ============================================================
+   REDUCED MOTION
+   Placed last so it wins the cascade over every animation declared
+   above, regardless of which data-state selector set it.
+
+   The previous approach (scaling --mf-anim-speed down to 0.001, dividing
+   every "Xs" duration by it) was wrong: dividing a 9s animation by 0.001
+   doesn't produce gentle motion, it produces a 9000-second (2.5 hour)
+   cycle -- indistinguishable from a frozen image over any real viewing
+   session, which is what actually caused the Mya Core to look static
+   during review, not just for reduced-motion users. Correct reduced
+   motion means stopping the continuous decorative animation outright
+   (a fully static, valid appearance), not stretching it into something
+   that looks broken. !important is deliberate here: many of the
+   selectors this needs to beat are qualified by [data-state="..."] with
+   higher specificity than a plain override could reach otherwise. -------- */
+@media (prefers-reduced-motion: reduce) {
+  .orbit-path, .orbit-traveler, .mesh-group, .mesh-node, .mesh-link,
+  .node, .link, .core-depth-layer, .core-center, .core-halo, .orbit-group {
+    animation: none !important;
+  }
+  .mya-core-stage.intro-play {
+    animation: coreIntroReduced 0.3s ease-out both !important;
+  }
+  @keyframes coreIntroReduced { from { opacity: 0; } to { opacity: 1; } }
 }
