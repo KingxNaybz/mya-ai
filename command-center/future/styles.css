@@ -534,6 +534,120 @@ button, input { font-family: inherit; }
 }
 
 /* ============================================================
+   WORKSPACE -- panels as objects around Mya, not a fixed grid glued to
+   the page. Each .workspace-panel is deliberately self-contained (its own
+   wrapper, its own data-panel-id, its own scroll/overflow handling) so a
+   later pass can add drag/reposition/collapse without touching what's
+   inside any individual panel -- exactly the "isolated wrapper +
+   positioning abstraction" the spatial-workspace plan called for.
+   ============================================================ */
+.mf-workspace {
+  width: 100%;
+  max-width: 1040px;
+  margin: 40px auto 0;
+}
+
+.workspace-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.wp-kpi-card {
+  background: var(--mf-surface);
+  border: 1px solid var(--mf-border);
+  border-radius: var(--mf-radius);
+  padding: 16px 18px;
+  backdrop-filter: blur(var(--mf-glass-blur));
+}
+.wp-kpi-value { font-size: 28px; font-weight: 600; color: var(--mf-text-hi); line-height: 1.1; }
+.wp-kpi-label { font-size: 12.5px; color: var(--mf-text-mid); margin-top: 4px; }
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.workspace-panel {
+  background: var(--mf-surface);
+  border: 1px solid var(--mf-border);
+  border-radius: var(--mf-radius);
+  backdrop-filter: blur(var(--mf-glass-blur));
+  padding: 16px 18px 18px;
+  min-width: 0;
+}
+.wp-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.wp-header h3 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--mf-text-hi);
+  letter-spacing: 0.01em;
+}
+.wp-count {
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--mf-accent);
+  color: white;
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.wp-body { font-size: 13px; color: var(--mf-text-mid); }
+.wp-body:empty::before { content: "Nothing here yet."; color: var(--mf-text-muted); font-style: italic; }
+.wp-scroll { max-height: 220px; overflow-y: auto; }
+.wp-list-plain { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+
+.wp-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--mf-border);
+}
+.wp-row:last-child { border-bottom: none; }
+.wp-row-main strong { color: var(--mf-text-hi); font-weight: 600; }
+.wp-row-main span { display: block; color: var(--mf-text-muted); font-size: 12px; margin-top: 1px; }
+.wp-row-side { color: var(--mf-text-muted); font-size: 11.5px; white-space: nowrap; }
+
+.wp-approval-card { padding: 8px 0; border-bottom: 1px solid var(--mf-border); }
+.wp-approval-card:last-child { border-bottom: none; }
+.wp-approval-card strong { color: var(--mf-text-hi); }
+.wp-approval-card .wp-meta { font-size: 11.5px; color: var(--mf-text-muted); margin-top: 2px; }
+.wp-approval-actions { margin-top: 6px; display: flex; gap: 6px; }
+.wp-approval-actions button {
+  font-size: 11.5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--mf-border);
+  background: transparent;
+  color: var(--mf-text-mid);
+  cursor: pointer;
+}
+.wp-approval-actions button:hover { border-color: var(--mf-border-strong); color: var(--mf-text-hi); }
+.wp-approval-actions button:disabled { opacity: 0.5; cursor: default; }
+
+.wp-service-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; }
+.wp-service-status { font-size: 11.5px; display: flex; align-items: center; gap: 5px; }
+.wp-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.wp-dot.on { background: var(--core-listening); }
+.wp-dot.off { background: var(--mf-text-muted); }
+
+@media (max-width: 860px) {
+  .workspace-kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .workspace-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  .workspace-kpi-row { grid-template-columns: 1fr; }
+  .workspace-grid { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
    DEV-ONLY STATE PREVIEW STRIP
    Not part of the product experience -- a visual QA aid for reviewing all
    twelve Mya Core states before real signals exist for most of them.

@@ -356,6 +356,17 @@
           history.push({ role: "assistant", content: reply });
           MyaEvents.emit("mya.responding", { dev: false });
           playReplyAudio(result.data.audioBase64); // no-op (falls back to the timed auto-idle) if no audio or muted
+
+          // Keep the workspace panels in sync with whatever Mya just did --
+          // same tool-name matching the existing dashboard uses, just
+          // targeting the new panels' load functions.
+          var toolsUsed = Array.isArray(result.data.toolsUsed) ? result.data.toolsUsed : [];
+          if (toolsUsed.indexOf("add_contractor") !== -1 || toolsUsed.indexOf("remove_contractor") !== -1) loadContractors();
+          if (toolsUsed.indexOf("resolve_approval") !== -1) loadApprovals();
+          if (toolsUsed.indexOf("remember_fact") !== -1) loadMemoryFacts();
+          if (toolsUsed.indexOf("create_project") !== -1 || toolsUsed.indexOf("update_project") !== -1) loadProjects();
+          if (toolsUsed.indexOf("create_appointment") !== -1) loadKpis();
+          if (toolsUsed.indexOf("undo_last_action") !== -1) loadWorkspace();
         })
         .catch(function () {
           addLine("Couldn't reach Mya — try again.", "mya");
@@ -368,6 +379,193 @@
   }
 
   /* ---------------- Reveal the shell once a real session is confirmed ---------------- */
+  /* ---------------- Workspace panels (Milestone 4-5) ----------------
+     Each load* function below hits the EXACT same existing endpoint the
+     current Command Center uses, with the exact same response field
+     mapping -- no backend change, no new endpoint. Read-only in this
+     pass: the write actions these panels' old counterparts had (approve/
+     decline, add contractor, forget a memory) still work today through
+     natural-language chat below; wiring them as direct panel controls is
+     a further step, not done here. */
+  function escapeHtml(text) {
+    var div = document.createElement("div");
+    div.textContent = text == null ? "" : String(text);
+    return div.innerHTML;
+  }
+
+  function formatRelative(iso) {
+    if (!iso) return "";
+    var diffMs = Date.now() - new Date(iso).getTime();
+    var mins = Math.round(diffMs / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return mins + " min ago";
+    var hrs = Math.round(mins / 60);
+    if (hrs < 24) return hrs + " hr" + (hrs === 1 ? "" : "s") + " ago";
+    var days = Math.round(hrs / 24);
+    return days + " day" + (days === 1 ? "" : "s") + " ago";
+  }
+
+  async function loadKpis() {
+    try {
+      var res = await fetch("/api/command-center-data");
+      if (!res.ok) return;
+      var data = await res.json();
+      var container = document.getElementById("wp-kpis");
+      var items = [
+        { label: "Today's Calls", value: data.todaysCalls && data.todaysCalls.value },
+        { label: "New Leads", value: data.newLeads && data.newLeads.value },
+      ];
+      container.innerHTML = items.map(function (it) {
+        return '<div class="wp-kpi-card"><div class="wp-kpi-value">' + (it.value == null ? "—" : it.value) +
+          '</div><div class="wp-kpi-label">' + escapeHtml(it.label) + "</div></div>";
+      }).join("");
+
+      if (data.newLeads && Array.isArray(data.newLeads.recent)) {
+        var leadsEl = document.getElementById("wp-leads");
+        leadsEl.innerHTML = data.newLeads.recent.map(function (l) {
+          return '<div class="wp-row"><div class="wp-row-main"><strong>' + escapeHtml(l.name) +
+            '</strong><span>' + escapeHtml(l.interest || "—") + " · " + escapeHtml(l.source || "—") +
+            '</span></div><div class="wp-row-side">' + escapeHtml(formatRelative(l.receivedAt)) + "</div></div>";
+        }).join("");
+      }
+
+      if (Array.isArray(data.recentActivity)) {
+        var activityEl = document.getElementById("wp-activity");
+        activityEl.innerHTML = data.recentActivity.map(function (a) {
+          return '<div class="wp-row"><div class="wp-row-main"><span>' + escapeHtml(a.text) +
+            '</span></div><div class="wp-row-side">' + escapeHtml(formatRelative(a.time)) + "</div></div>";
+        }).join("");
+      }
+
+      if (data.memoryInsights) {
+        var m = data.memoryInsights;
+        var rows = [
+          [m.totalContactsRemembered, "Contacts remembered"],
+          [m.recurringCustomers, "Recurring customers"],
+          [m.notesLoggedThisWeek, "Notes logged this week"],
+        ];
+        document.getElementById("wp-memory-insights").innerHTML = rows.map(function (r) {
+          return '<div class="wp-row"><div class="wp-row-main"><strong>' + (r[0] == null ? "—" : r[0]) +
+            "</strong></div><div class=\"wp-row-side\">" + escapeHtml(r[1]) + "</div></div>";
+        }).join("");
+      }
+
+      if (Array.isArray(data.schedule)) {
+        document.getElementById("wp-schedule").innerHTML = data.schedule.map(function (s) {
+          return '<div class="wp-row"><div class="wp-row-main"><span>' + escapeHtml(s.label) +
+            '</span></div><div class="wp-row-side">' + escapeHtml(s.time) + "</div></div>";
+        }).join("");
+      }
+
+      if (Array.isArray(data.workingNow)) {
+        var workingEl = document.getElementById("wp-working-now");
+        workingEl.innerHTML = data.workingNow.length
+          ? data.workingNow.map(function (t) { return "<li>" + escapeHtml(t) + "</li>"; }).join("")
+          : "";
+      }
+
+      if (Array.isArray(data.services)) {
+        document.getElementById("wp-services").innerHTML = data.services.map(function (s) {
+          return '<div class="wp-service-row"><span>' + escapeHtml(s.name) + '</span><span class="wp-service-status">' +
+            '<span class="wp-dot ' + (s.connected ? "on" : "off") + '"></span>' + (s.connected ? "Connected" : "Not connected") + "</span></div>";
+        }).join("");
+      }
+    } catch (e) { /* leave panel empty rather than showing an error UI */ }
+  }
+
+  async function loadApprovals() {
+    try {
+      var res = await fetch("/api/command-center-approvals");
+      if (!res.ok) return;
+      var data = await res.json();
+      if (!Array.isArray(data.approvals)) return;
+      document.getElementById("wp-approvals-count").textContent = data.approvals.length;
+      document.getElementById("wp-approvals").innerHTML = data.approvals.map(function (a) {
+        return '<div class="wp-approval-card"><strong>' + escapeHtml(a.title) + "</strong><br><span>" +
+          escapeHtml(a.detail || "") + '</span><div class="wp-meta">Requested ' + escapeHtml(formatRelative(a.requested_at)) +
+          '</div><div class="wp-approval-actions">' +
+          '<button type="button" data-approval-id="' + a.id + '" data-action="approve">Approve</button>' +
+          '<button type="button" data-approval-id="' + a.id + '" data-action="decline">Decline</button></div></div>';
+      }).join("");
+    } catch (e) { /* leave panel empty */ }
+  }
+
+  async function loadProjects() {
+    try {
+      var res = await fetch("/api/command-center-projects");
+      if (!res.ok) return;
+      var data = await res.json();
+      if (!Array.isArray(data.projects)) return;
+      document.getElementById("wp-projects").innerHTML = data.projects.map(function (p) {
+        var name = p.client_name ? p.project_name + " — " + p.client_name : p.project_name;
+        var issue = p.next_action || p.outstanding_decisions || "No action set";
+        return '<div class="wp-row"><div class="wp-row-main"><strong>' + escapeHtml(name) + "</strong><span>" +
+          escapeHtml(issue) + '</span></div><div class="wp-row-side">' + escapeHtml(p.status || "") + "</div></div>";
+      }).join("");
+    } catch (e) { /* leave panel empty */ }
+  }
+
+  async function loadContractors() {
+    try {
+      var res = await fetch("/api/command-center-contractors");
+      if (!res.ok) return;
+      var data = await res.json();
+      if (!Array.isArray(data.contractors)) return;
+      document.getElementById("wp-contractors").innerHTML = data.contractors.map(function (c) {
+        return '<div class="wp-row"><div class="wp-row-main"><strong>' + escapeHtml(c.name) + " (" + escapeHtml(c.category || "—") +
+          ")</strong><span>" + escapeHtml(c.notes || "—") + (c.pricing_rate ? " · " + escapeHtml(c.pricing_rate) : "") +
+          '</span></div><div class="wp-row-side">' + escapeHtml(c.phone || "—") + "</div></div>";
+      }).join("");
+    } catch (e) { /* leave panel empty */ }
+  }
+
+  async function loadMemoryFacts() {
+    try {
+      var res = await fetch("/api/command-center-memory");
+      if (!res.ok) return;
+      var data = await res.json();
+      if (!Array.isArray(data.facts)) return;
+      document.getElementById("wp-memory-facts").innerHTML = data.facts.map(function (f) {
+        return '<div class="wp-row"><div class="wp-row-main"><span>' + escapeHtml(f.fact) +
+          '</span></div><div class="wp-row-side">' + escapeHtml(formatRelative(f.created_at)) + "</div></div>";
+      }).join("");
+    } catch (e) { /* leave panel empty */ }
+  }
+
+  function loadWorkspace() {
+    loadKpis();
+    loadApprovals();
+    loadProjects();
+    loadContractors();
+    loadMemoryFacts();
+  }
+
+  // Delegated click handler for approve/decline -- one listener on the
+  // panel container rather than one per card, so re-rendering the list
+  // (loadApprovals()) never leaves stale listeners behind.
+  document.getElementById("wp-approvals").addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-approval-id]");
+    if (!btn) return;
+    var id = btn.getAttribute("data-approval-id");
+    var action = btn.getAttribute("data-action");
+    var card = btn.closest(".wp-approval-card");
+    var buttons = card.querySelectorAll("button");
+    buttons.forEach(function (b) { b.disabled = true; });
+    fetch("/api/command-center-approvals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: id, action: action }),
+    })
+      .then(function (res) {
+        if (res.status === 401) { showLoginOverlay(); return; }
+        if (!res.ok) throw new Error("failed");
+        loadApprovals();
+      })
+      .catch(function () {
+        buttons.forEach(function (b) { b.disabled = false; });
+      });
+  });
+
   function initShell(settingsData) {
     var ownerName = (settingsData && settingsData.settings && settingsData.settings.owner_name) || "";
     document.getElementById("mf-greeting").textContent = ownerName
@@ -378,6 +576,7 @@
     playCoreIntro();
     initCommandBar();
     initLogoutControl();
+    loadWorkspace();
   }
 
   /* ---------------- Auth gate -- identical ordering to the existing

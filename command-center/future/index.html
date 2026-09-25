@@ -10,7 +10,7 @@
      an earlier deployment at this same URL can otherwise keep serving
      stale CSS/JS indefinitely even after a new, correct version is live --
      bump N here every time either file changes. -->
-<link rel="stylesheet" href="styles.css?v=10">
+<link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
 
@@ -24,7 +24,7 @@
 <!-- Visible build tag -- if this doesn't match the number in the most
      recent commit message, the browser is showing a stale cached page,
      not the current code. Bump alongside the ?v= numbers above. -->
-<div class="dev-badge">Phase 1 Preview — Build 10 — Not Production</div>
+<div class="dev-badge">Phase 1 Preview — Build 11 — Not Production</div>
 
 <!-- Same behavior as the existing dashboard's login overlay: visible by
      default, hidden only after a real session is confirmed against the
@@ -151,6 +151,75 @@
     <div class="mf-command-log" id="mf-command-log"></div>
   </div>
 
+  <!-- ============ WORKSPACE (Milestone 4-5) ============
+       Information "existing around Mya" rather than a traditional fixed
+       dashboard grid -- each panel below is a self-contained
+       .workspace-panel with a stable data-panel-id, exactly the
+       "isolated wrapper + positioning abstraction" the plan called for so
+       move/resize/dock/collapse can be added later without rebuilding
+       these panels' internals. Every panel below fetches from the exact
+       same existing API endpoint the current Command Center uses -- no
+       backend change, no new endpoint, same data. Read-only in this pass
+       (approve/decline, add contractor, forget a memory, etc. still work
+       today through natural-language chat below; wiring those same
+       actions as direct panel controls is a further, separate step). -->
+  <div class="mf-workspace" id="mf-workspace">
+
+    <div class="workspace-kpi-row" id="wp-kpis"></div>
+
+    <div class="workspace-grid">
+      <div class="workspace-panel" data-panel-id="schedule">
+        <div class="wp-header"><h3>Today's Schedule</h3></div>
+        <div class="wp-body" id="wp-schedule"></div>
+      </div>
+
+      <div class="workspace-panel" data-panel-id="activity">
+        <div class="wp-header"><h3>Recent Activity</h3></div>
+        <div class="wp-body" id="wp-activity"></div>
+      </div>
+
+      <div class="workspace-panel" data-panel-id="approvals">
+        <div class="wp-header"><h3>Needs Your Attention</h3><span class="wp-count" id="wp-approvals-count">0</span></div>
+        <div class="wp-body" id="wp-approvals"></div>
+      </div>
+
+      <div class="workspace-panel" data-panel-id="leads">
+        <div class="wp-header"><h3>New Leads</h3></div>
+        <div class="wp-body" id="wp-leads"></div>
+      </div>
+
+      <div class="workspace-panel" data-panel-id="projects">
+        <div class="wp-header"><h3>Projects Needing Attention</h3></div>
+        <div class="wp-body" id="wp-projects"></div>
+      </div>
+
+      <div class="workspace-panel" data-panel-id="memory-insights">
+        <div class="wp-header"><h3>Memory Insights</h3></div>
+        <div class="wp-body" id="wp-memory-insights"></div>
+      </div>
+
+      <div class="workspace-panel" data-panel-id="working-now">
+        <div class="wp-header"><h3>Mya Working Now</h3></div>
+        <ul class="wp-body wp-list-plain" id="wp-working-now"></ul>
+      </div>
+
+      <div class="workspace-panel" data-panel-id="contractors">
+        <div class="wp-header"><h3>Contractors &amp; Sub-Contractors</h3></div>
+        <div class="wp-body wp-scroll" id="wp-contractors"></div>
+      </div>
+
+      <div class="workspace-panel" data-panel-id="memory-facts">
+        <div class="wp-header"><h3>Mya's Memory</h3></div>
+        <div class="wp-body wp-scroll" id="wp-memory-facts"></div>
+      </div>
+
+      <div class="workspace-panel" data-panel-id="services">
+        <div class="wp-header"><h3>Connected Services</h3></div>
+        <div class="wp-body" id="wp-services"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- DEV ONLY: manual preview of the eight states that have no real
        signal wired up yet in this Phase 1 shell (listening depends on the
        voice pipeline, ported in a later milestone; the rest depend on
@@ -165,7 +234,7 @@
 
 </div>
 
-<script src="mya-events.js?v=10"></script>
-<script src="app.js?v=10"></script>
+<script src="mya-events.js?v=11"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>
