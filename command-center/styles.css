@@ -1166,6 +1166,14 @@ button{ font-family: inherit; cursor: pointer; }
   justify-content: center;
   background: var(--bg-deep);
 }
+/* Author CSS always overrides the browser's built-in [hidden] { display:
+   none } rule, even with equal specificity -- without this, the hidden
+   attribute on #login-overlay has no visual effect at all and the overlay
+   stays permanently on screen regardless of login state. This is the
+   actual root cause of the "always shows, reload does nothing" bug. */
+.login-overlay[hidden]{
+  display: none;
+}
 .login-box{
   display: flex;
   flex-direction: column;
