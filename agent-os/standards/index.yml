@@ -1,0 +1,39 @@
+# Agent OS Standards Index
+
+api:
+  endpoint-skeleton:
+    description: Handler order (CORS → auth → methods → 405), response/error shapes, idempotent writes
+  function-cap:
+    description: Vercel 12-function limit; extend via ?type= or SKILLS, never add api/ files
+  mya-skills-permissions:
+    description: SKILLS registry, name-based permission levels, undo/audit logging, MCP read-only exposure
+  secrets-and-session:
+    description: Fail-closed auth gate, independent secrets, timing-safe compares, session cookie rules
+
+frontend:
+  auth-and-service-worker:
+    description: Fail-closed session gate and app-shell-only service worker (never /api/)
+  data-honesty:
+    description: Command Center freshness states; never show fake, zeroed, or unknown data as real
+  module-data-flow:
+    description: No-build ES5 module layout, MyaData-only fetching, and cache-bust rules for future/
+  mya-core-and-dev-states:
+    description: Single Mya Core element, real vs dev-only states, core.css change rule
+
+testing:
+  preview-server:
+    description: Local-only preview server modes; fixtures live only in the server with a SYNTHETIC banner
+  static-guards:
+    description: Source-scanning invariant tests and how to update them deliberately
+  test-style:
+    description: node:test conventions, pure lib.js targets, fixed clock
+
+voice:
+  elevenlabs-payloads:
+    description: Unwrapping ElevenLabs envelopes and Data Collection objects, E.164 phones, text caps
+  kill-switches-ai:
+    description: Env kill switches, rules-before-AI, constrained AI output
+  reception-guardrails:
+    description: Reception pipeline needs owner approval, isolation from Executive data, webhook auth target + debt
+  webhook-resilience:
+    description: Call webhooks always 200 with string defaults; non-fatal side work; idempotent retries
