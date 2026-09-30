@@ -508,13 +508,15 @@
     for (var i = 0; i < pts.length; i++) {
       [1, 3].forEach(function (step) {
         var j = i + step;
-        if (j < pts.length) lines += '<line x1="' + pts[i].x + '" y1="' + pts[i].y + '" x2="' + pts[j].x + '" y2="' + pts[j].y + '"/>';
+        if (j < pts.length) lines += '<line data-a="' + i + '" data-b="' + j + '" x1="' + pts[i].x + '" y1="' + pts[i].y + '" x2="' + pts[j].x + '" y2="' + pts[j].y + '"/>';
       });
     }
     var stars = facts.map(function (f, idx) {
       var p = pts[idx];
       var r = idx < 5 ? 5 : idx < 15 ? 3.8 : 2.8; // newest facts glow brightest
-      return '<g class="star" tabindex="0" role="button" data-idx="' + idx + '" aria-label="' + h(f.fact) + '">' +
+      // Deterministic per-star twinkle offset, so stars don't pulse in step.
+      var delay = -((idx * 0.618) % 1) * 4.6;
+      return '<g class="star" tabindex="0" role="button" data-idx="' + idx + '" style="animation-delay:' + delay.toFixed(2) + 's" aria-label="' + h(f.fact) + '">' +
         '<circle class="star-halo" cx="' + p.x + '" cy="' + p.y + '" r="' + (r * 3) + '"/>' +
         '<circle class="star-core" cx="' + p.x + '" cy="' + p.y + '" r="' + r + '"/>' +
         "<title>" + h(f.fact) + "</title></g>";
@@ -523,11 +525,19 @@
     caption.textContent = facts.length + (facts.length === 1 ? " fact" : " facts") + " · newest at the center";
     focus.textContent = "Hover or tap a star to read it.";
 
+    // Focusing a star lights it and the threads it's connected by.
     function show(e) {
       var g = e.target.closest(".star");
       if (!g) return;
-      var f = facts[+g.getAttribute("data-idx")];
+      var idx = g.getAttribute("data-idx");
+      var f = facts[+idx];
       if (f) focus.textContent = f.fact + " — " + MyaLib.formatRelative(f.created_at);
+      var lit = svg.querySelectorAll(".is-focus, .is-lit");
+      for (var k = 0; k < lit.length; k++) lit[k].classList.remove("is-focus", "is-lit");
+      g.classList.add("is-focus");
+      var ls = svg.querySelectorAll('line[data-a="' + idx + '"], line[data-b="' + idx + '"]');
+      for (var m = 0; m < ls.length; m++) ls[m].classList.add("is-lit");
+      svg.classList.add("has-focus");
     }
     svg.onmouseover = show;
     svg.onfocusin = show;

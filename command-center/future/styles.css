@@ -1186,3 +1186,30 @@ a.metric:hover { border-color: var(--line-strong); transform: translateY(-1px); 
   .chat-empty-title { font-size: 19px; }
 }
 @media (prefers-reduced-motion: reduce) { .chat-line { animation: none; } }
+
+/* Approvals: every pending item is a decision, in the gold of "waiting on you". */
+#approvals-list .approval {
+  position: relative; margin: 10px 0; padding: 16px 16px 16px 18px; border: 1px solid rgba(217, 164, 65, 0.22); border-radius: var(--radius);
+  background: linear-gradient(90deg, rgba(217, 164, 65, 0.08), rgba(217, 164, 65, 0.015) 60%);
+}
+#approvals-list .approval::before { content: ""; position: absolute; left: -1px; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: var(--gold); box-shadow: 0 0 12px rgba(217, 164, 65, 0.7); }
+#approvals-list .approval:first-child { margin-top: 2px; }
+#approvals-list .approval-body strong { font-size: 15px; }
+#approvals-list .approval-actions { align-items: center; }
+.btn.approve {
+  background: linear-gradient(180deg, #f0cd86, var(--gold)); border-color: rgba(240, 205, 134, 0.8); color: #1c1300;
+  box-shadow: 0 6px 18px rgba(217, 164, 65, 0.22);
+}
+.btn.approve:hover { background: linear-gradient(180deg, #f7dca4, #e2b155); }
+.approval.resolved { opacity: 0.35; filter: saturate(0.4); }
+
+/* Constellation: alive, not a static chart. */
+.star { animation: starTwinkle 4.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes starTwinkle { 0%, 100% { opacity: 0.78; } 50% { opacity: 1; } }
+.constellation-links line { transition: stroke 0.3s, stroke-width 0.3s; }
+.constellation.has-focus .star:not(.is-focus) { opacity: 0.55; animation: none; }
+.constellation .star.is-focus .star-core { fill: #fff; filter: drop-shadow(0 0 8px #fff) drop-shadow(0 0 16px var(--violet)); }
+.constellation .star.is-focus .star-halo { fill: rgba(155, 123, 255, 0.3); }
+.constellation-links line.is-lit { stroke: rgba(195, 176, 255, 0.75); stroke-width: 1.4; }
+.constellation-wrap { background: radial-gradient(420px 240px at 50% 50%, rgba(74, 168, 255, 0.07), transparent 70%); border-radius: var(--radius); }
+@media (prefers-reduced-motion: reduce) { .star { animation: none; } }
