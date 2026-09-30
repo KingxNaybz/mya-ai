@@ -116,7 +116,9 @@
     var s = snapshot();
     var brief = MyaLib.buildBriefing(s);
     var anyStale = ["data", "approvals", "followups", "alerts"].some(function (n) { return fresh(n).state === "stale"; });
-    $("home-briefing").textContent = brief.text + (brief.known && anyStale ? " Some of this is out of date — see the tags below." : "");
+    // Escaped first, then the counts (and only the counts) are emphasized.
+    $("home-briefing").innerHTML = h(brief.text + (brief.known && anyStale ? " Some of this is out of date — see the tags below." : ""))
+      .replace(/\b(\d+\+?)(?=\s)/g, '<b class="brief-num">$1</b>');
     $("home-briefing").classList.toggle("is-unknown", !brief.known);
 
     var d = payload("data");

@@ -1213,3 +1213,10 @@ a.metric:hover { border-color: var(--line-strong); transform: translateY(-1px); 
 .constellation-links line.is-lit { stroke: rgba(195, 176, 255, 0.75); stroke-width: 1.4; }
 .constellation-wrap { background: radial-gradient(420px 240px at 50% 50%, rgba(74, 168, 255, 0.07), transparent 70%); border-radius: var(--radius); }
 @media (prefers-reduced-motion: reduce) { .star { animation: none; } }
+@media (max-width: 1279px) {
+  /* Tight clusters: Live as its dot alone (the word stays for screen readers). */
+  .metric-row.cluster .fresh.live { font-size: 0; gap: 0; }
+  .metric-row.cluster .metric { padding: 14px 16px; }
+  .metric-row.cluster .metric-label { letter-spacing: 0.06em; }
+}
+.brief-num { color: var(--text-hi); font-weight: 650; font-variant-numeric: tabular-nums; }
