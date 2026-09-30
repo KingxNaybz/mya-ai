@@ -364,7 +364,7 @@ async function handleComputerControl(req: VercelRequest, res: VercelResponse) {
   if (r.error) return res.status(502).json({ error: "Couldn't read Mya's computer session." });
   const nowIso = new Date().toISOString();
   const out = applyOwnerAction(r.session, action, nowIso);
-  if (!out.ok) return res.status(409).json({ error: out.error });
+  if (out.ok === false) return res.status(409).json({ error: (out as { error: string }).error });
   const { error } = await supabase.from("mya_computer_sessions").upsert(rowFromSession(out.session), { onConflict: "device_id" });
   if (error) return res.status(502).json({ error: "Couldn't change control. Nothing changed." });
   await logComputerEvents([out.event]);
@@ -379,7 +379,7 @@ async function handleComputerControl(req: VercelRequest, res: VercelResponse) {
 
 async function handleComputerReport(req: VercelRequest, res: VercelResponse) {
   const v = validateReport(req.body);
-  if (!v.ok) return res.status(400).json({ error: v.error });
+  if (v.ok === false) return res.status(400).json({ error: (v as { error: string }).error });
   const r = await readComputerSession();
   if (r.missing) return notConfigured(res);
   if (r.error) return res.status(502).json({ error: "Couldn't read the computer session." });
@@ -417,10 +417,11 @@ async function handleComputerReport(req: VercelRequest, res: VercelResponse) {
     await supabase.from("mya_computer_sessions").update({ control: "user", control_changed_at: nowIso, control_changed_by: "agent" })
       .eq("device_id", COMPUTER_DEVICE).neq("control", "user");
   }
-  await logComputerEvents((v.report.events || []).map((e) => ({ at: nowIso, kind: e.kind, text: e.text, app: e.app ?? next.app, by: "mya" as const }))
-    .concat(v.report.control === "user" && r.session.control !== "user"
-      ? [{ at: nowIso, kind: "control" as const, text: "Mya saw you use the computer and handed you control.", app: next.app, by: "agent" as const }]
-      : []));
+  const reported: ComputerEvent[] = (v.report.events || []).map((e) => ({ at: nowIso, kind: e.kind, text: e.text, app: e.app ?? next.app, by: "mya" }));
+  if (v.report.control === "user" && r.session.control !== "user") {
+    reported.push({ at: nowIso, kind: "control", text: "Mya saw you use the computer and handed you control.", app: next.app, by: "agent" });
+  }
+  await logComputerEvents(reported);
 
   // The agent obeys what's stored NOW, not what it just sent.
   const after = await readComputerSession();
