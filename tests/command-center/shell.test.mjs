@@ -269,7 +269,7 @@ test("voice goes to Executive Mya through the one chat path, never a fixture or 
   assert.match(voice, /MyaChat\.send\(text, \{ voice: true/);
   assert.doesNotMatch(voice, /fetch\(|XMLHttpRequest|\/api\//);
   // The dev simulation is gated to ?dev=1 and never writes to the conversation.
-  const sim = voice.slice(voice.indexOf("function simulate()"), voice.indexOf("function typeWords"));
+  const sim = voice.slice(voice.indexOf("function simulate("), voice.indexOf("function typeWords"));
   assert.match(sim, /dev=1/);
   assert.doesNotMatch(sim, /MyaChat\.send|addLine|chat\.line/);
   // Reception stays separate: no phone/Reception endpoints from the voice UI.
