@@ -1256,3 +1256,7 @@ html:not(.has-level) .voice-capsule[data-phase="listening"] .vc-meter i { animat
 .core-slot-dock .mya-core .link, .core-slot-tab .mya-core .link { stroke-width: 5; }
 .core-slot-dock .mya-core .mesh-link, .core-slot-tab .mya-core .mesh-link { stroke-width: 2.4; }
 .core-slot-dock .mya-core .core-halo, .core-slot-tab .mya-core .core-halo { opacity: 0.32; }
+
+/* While the Core flies between slots, nothing clips her. */
+.core-flying .rail, .core-flying .stage { overflow: visible; }
+.core-flying .tabbar { overflow: visible; }

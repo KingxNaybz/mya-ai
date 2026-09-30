@@ -36,14 +36,43 @@
   function placeCore() {
     var perspective = document.querySelector(".mya-core-perspective");
     var slot = coreSlotFor(currentRoute);
-    if (!perspective || !slot || perspective.parentNode === slot) return;
+    if (!perspective || !slot || perspective.parentNode === slot) return false;
     slot.appendChild(perspective);
     var slots = document.querySelectorAll(".core-slot");
     for (var i = 0; i < slots.length; i++) slots[i].classList.toggle("has-core", slots[i] === slot);
+    return true;
+  }
+
+  // She travels: when the one Core moves to another slot, it flies from
+  // where it was to where it lands (FLIP: measure, move, animate back from
+  // the old spot). Same element throughout; nothing is cloned.
+  var REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var flyTimer = null;
+  function coreRect() {
+    var p = document.querySelector(".mya-core-perspective");
+    if (!p || !p.offsetParent) return null;
+    var r = p.getBoundingClientRect();
+    return r.width ? r : null;
+  }
+  function flyCore(from) {
+    var p = document.querySelector(".mya-core-perspective");
+    var to = coreRect();
+    if (!from || !to || !p.animate || REDUCED_MOTION.matches) return;
+    var dx = (from.left + from.width / 2) - (to.left + to.width / 2);
+    var dy = (from.top + from.height / 2) - (to.top + to.height / 2);
+    var sc = from.width / to.width;
+    document.documentElement.classList.add("core-flying");
+    clearTimeout(flyTimer);
+    p.animate([
+      { transform: "translate(" + dx + "px, " + dy + "px) scale(" + sc + ")", opacity: 0.85 },
+      { transform: "translate(0, 0) scale(1)", opacity: 1 }
+    ], { duration: 560, easing: "cubic-bezier(0.22, 0.9, 0.24, 1)" });
+    flyTimer = setTimeout(function () { document.documentElement.classList.remove("core-flying"); }, 600);
   }
 
   /* ---------------- Routing ---------------- */
   function applyRoute(userInitiated) {
+    var from = currentRoute ? coreRect() : null;
     var route = MyaLib.parseRoute(location.hash, ROUTES, "home");
     var changed = route !== currentRoute;
     currentRoute = route;
@@ -62,7 +91,7 @@
 
     document.documentElement.setAttribute("data-route", route);
     document.title = (route === "home" ? "Mya — Command Center" : TITLES[route] + " · Mya");
-    placeCore();
+    var moved = placeCore();
     closeMore();
 
     if (changed && userInitiated) {
@@ -71,6 +100,7 @@
       if (route === "mya" && !MOBILE_QUERY.matches) $("mf-command-input").focus({ preventScroll: true });
       else $("stage").focus({ preventScroll: true });
     }
+    if (moved) flyCore(from);
   }
 
   /* ---------------- More sheet (mobile) ---------------- */
