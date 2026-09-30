@@ -144,10 +144,12 @@ class Reporter(threading.Thread):
     """Background heartbeat. Never raises; a failed report just means the
     gate goes stale, which blocks autonomous input (fail safe)."""
 
-    def __init__(self, base_url: str, api_key: str, gate: ControlGate, state: dict, device_name: str = "Windows PC"):
+    def __init__(self, base_url: str, api_key: str, gate: ControlGate, state: dict, device_name: str = "Windows PC", headers: Optional[dict] = None):
         super().__init__(daemon=True)
         self.url = base_url.rstrip("/") + "/api/command-center-data?type=computer-report"
         self.api_key = api_key
+        self.headers = dict(headers or {"x-command-center-key": api_key})
+        self.last_problem = None
         self.gate = gate
         self.state = state
         self.state.setdefault("deviceName", device_name)
@@ -198,9 +200,18 @@ class Reporter(threading.Thread):
             events, self.pending_events = self.pending_events, []
             body = build_report(self.state, frame=self._frame(), yield_control=takeover, events=events)
             try:
-                res = requests.post(self.url, json=body, headers={"x-command-center-key": self.api_key}, timeout=5)
+                res = requests.post(self.url, json=body, headers=self.headers, timeout=5)
+                problem = None
                 if res.ok:
-                    self.gate.update(res.json().get("control"))
-            except Exception:
-                pass  # stale gate = no autonomous input
+                    try:
+                        self.gate.update(res.json().get("control"))
+                    except ValueError:
+                        problem = "got a web page instead of JSON (likely Vercel Authentication: set VERCEL_PROTECTION_BYPASS)"
+                else:
+                    problem = f"HTTP {res.status_code}" + (" (check COMMAND_CENTER_API_KEY)" if res.status_code in (401, 403) else " (tables set up?)" if res.status_code == 503 else "")
+            except Exception as e:
+                problem = f"can't reach the dashboard ({type(e).__name__})"
+            if problem != self.last_problem:
+                print(f"[Mya] Watch Mya: {problem}" if problem else "[Mya] Watch Mya: connected — reporting to the Command Center.")
+                self.last_problem = problem
             self._stop.wait(REPORT_INTERVAL_S)

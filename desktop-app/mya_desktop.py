@@ -40,6 +40,18 @@ HOTKEY = os.environ.get("MYA_HOTKEY", "ctrl+alt+m")
 # in Vercel's COMMAND_CENTER_API_KEY environment variable.
 COMMAND_CENTER_API_KEY = os.environ.get("COMMAND_CENTER_API_KEY", "")
 
+# Optional: a Vercel "Protection Bypass for Automation" secret, only needed
+# when the dashboard is a Preview deployment behind Vercel Authentication
+# (a script can't sign in to Vercel). Sent as a header, never logged.
+VERCEL_PROTECTION_BYPASS = os.environ.get("VERCEL_PROTECTION_BYPASS", "")
+
+
+def api_headers() -> dict:
+    headers = {"x-command-center-key": COMMAND_CENTER_API_KEY} if COMMAND_CENTER_API_KEY else {}
+    if VERCEL_PROTECTION_BYPASS:
+        headers["x-vercel-protection-bypass"] = VERCEL_PROTECTION_BYPASS
+    return headers
+
 # The deployed web dashboard's own Ask Mya endpoint — same brain, same
 # skills, same memory, same voice as the browser version. Override in
 # .env if the dashboard ever moves to a different URL (e.g. once merged
@@ -345,8 +357,7 @@ def ask_dashboard_brain(message: str, history: List[dict]) -> dict:
     which shows up as an HTML login page instead of JSON)."""
     url = f"{DASHBOARD_BASE_URL}/api/command-center-ask-mya"
     payload = build_dashboard_payload(message, history, voice=True)
-    headers = {"x-command-center-key": COMMAND_CENTER_API_KEY} if COMMAND_CENTER_API_KEY else {}
-    res = requests.post(url, json=payload, headers=headers, timeout=45)
+    res = requests.post(url, json=payload, headers=api_headers(), timeout=45)
     if res.status_code == 401:
         raise RuntimeError(
             "Dashboard rejected this request as unauthorized — check that COMMAND_CENTER_API_KEY "
@@ -417,7 +428,7 @@ def start_watch() -> None:
         return
     WATCH_GATE = watch.ControlGate()
     WATCH_REPORTER = watch.Reporter(DASHBOARD_BASE_URL, COMMAND_CENTER_API_KEY, WATCH_GATE, {"status": "idle"},
-                                    device_name=os.environ.get("COMPUTERNAME", "Windows PC"))
+                                    device_name=os.environ.get("COMPUTERNAME", "Windows PC"), headers=api_headers())
     WATCH_REPORTER.start()
     print("[Mya] Watch Mya is on: reporting to the Command Center (outbound only; no port opened).")
 
