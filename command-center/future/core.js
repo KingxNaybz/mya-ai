@@ -113,7 +113,7 @@
     "awaiting-approval": "Awaiting approval",
     "completed": "Done",
     "alert": "Alert",
-    "error": "Error"
+    "error": "Didn't answer"
   };
 
   function setCoreState(stateName, opts) {

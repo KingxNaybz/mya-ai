@@ -19,8 +19,8 @@
      bump N in every tag below whenever any of them changes. The service
      worker (sw.js) is network-first for these, so a new N is picked up on
      the next online load. -->
-<link rel="stylesheet" href="styles.css?v=27">
-<link rel="stylesheet" href="core.css?v=27">
+<link rel="stylesheet" href="styles.css?v=28">
+<link rel="stylesheet" href="core.css?v=28">
 </head>
 <body>
 
@@ -183,7 +183,7 @@
           <div class="core-slot core-slot-conv" id="core-slot-mya"></div>
           <div class="core-state"><span class="state-dot" aria-hidden="true"></span><span data-core-state-label>Ready</span></div>
           <h1 id="mya-title" class="mya-title">Mya</h1>
-          <p class="muted small center">Your Executive Mya: private to you across the Command Center and your executive channels, and kept separate from the customer-facing receptionist.</p>
+          <p class="mya-role">Executive Mya · private to you</p>
           <button type="button" class="talk-hero" data-talk aria-pressed="false"><span class="talk-ring" aria-hidden="true"></span><svg class="icon"><use href="#i-mic"/></svg><span data-talk-label>Tap to talk</span></button>
           <div class="toggle-row">
             <button type="button" class="pill-btn" data-voice-toggle aria-pressed="true"><svg class="icon"><use href="#i-speaker"/></svg><span data-label>Voice on</span></button>
@@ -196,7 +196,8 @@
         <div class="chat-panel card">
           <div class="chat-empty" id="chat-empty">
             <p class="eyebrow">Conversation</p>
-            <p>Ask about your day, a project, or a customer — or tell her to remember something.</p>
+            <p class="chat-empty-title">Talk or type. It's one conversation.</p>
+            <p class="chat-empty-sub">Ask about your day, a project or a customer, or tell her to remember something. She keeps this separate from the customer-facing receptionist.</p>
             <div class="chip-row" id="chat-suggestions">
               <button type="button" class="chip" data-suggest>What needs my attention today?</button>
               <button type="button" class="chip" data-suggest>Summarize today's calls</button>
@@ -577,16 +578,16 @@
   </div>
 </div>
 
-<script src="lib.js?v=27"></script>
-<script src="mya-events.js?v=27"></script>
-<script src="core.js?v=27"></script>
-<script src="data.js?v=27"></script>
-<script src="chat.js?v=27"></script>
-<script src="voice.js?v=27"></script>
-<script src="presence.js?v=27"></script>
-<script src="ask-about.js?v=27"></script>
-<script src="views.js?v=27"></script>
-<script src="shell.js?v=27"></script>
-<script src="app.js?v=27"></script>
+<script src="lib.js?v=28"></script>
+<script src="mya-events.js?v=28"></script>
+<script src="core.js?v=28"></script>
+<script src="data.js?v=28"></script>
+<script src="chat.js?v=28"></script>
+<script src="voice.js?v=28"></script>
+<script src="presence.js?v=28"></script>
+<script src="ask-about.js?v=28"></script>
+<script src="views.js?v=28"></script>
+<script src="shell.js?v=28"></script>
+<script src="app.js?v=28"></script>
 </body>
 </html>

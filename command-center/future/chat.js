@@ -179,6 +179,28 @@
       MyaEvents.emit("chat.line", { role: role, text: text, inline: Boolean(meta && meta.inline), voice: Boolean(meta && meta.voice) });
     }
 
+    // While a request is out, the log shows her working on it (real: it
+    // exists exactly as long as the request does).
+    var pendingEl = null;
+    function showPending() {
+      clearPending();
+      pendingEl = document.createElement("div");
+      pendingEl.className = "chat-line mya pending";
+      pendingEl.setAttribute("aria-label", "Mya is thinking");
+      pendingEl.innerHTML = '<div class="chat-who">Mya<span class="pending-label">Thinking</span></div>' +
+        '<div class="chat-text"><span class="typing"><i></i><i></i><i></i></span></div>';
+      log.appendChild(pendingEl);
+      log.scrollTop = log.scrollHeight;
+    }
+    function clearPending() {
+      if (pendingEl && pendingEl.parentNode) pendingEl.parentNode.removeChild(pendingEl);
+      pendingEl = null;
+    }
+    MyaEvents.on("mya.waiting", function () {
+      var lbl = pendingEl && pendingEl.querySelector(".pending-label");
+      if (lbl) lbl.textContent = "Still working · waiting on her runtime";
+    });
+
     function setVoiceStatus(text) {
       for (var i = 0; i < voiceStatusEls.length; i++) {
         voiceStatusEls[i].hidden = !text;
@@ -577,6 +599,7 @@
       stopSpeaking(); // a new question interrupts the last answer
       addLine(message, "user", { about: opts.label, inline: opts.inline, voice: opts.voice });
       MyaEvents.emit("mya.thinking", { dev: false, voice: Boolean(opts.voice) });
+      showPending();
       var waitTimer = setTimeout(function () { MyaEvents.emit("mya.waiting", { dev: false }); }, MyaLib.WAITING_AFTER_MS);
 
       var priorHistory = history.slice(-20);
@@ -588,6 +611,7 @@
         body: JSON.stringify({ message: outbound, history: priorHistory, voice: voiceEnabled }),
       })
         .then(function (res) {
+          clearPending();
           if (res.status === 401) {
             MyaEvents.emit("mya.idle", { dev: false });
             teardownMic(false); // stop listening while logged out; preference survives the next login
@@ -627,6 +651,7 @@
           return { ok: true, reply: reply };
         })
         .catch(function () {
+          clearPending();
           addLine("Couldn't reach Executive Mya — try again.", "mya error");
           MyaEvents.emit("mya.idle", { dev: false });
           MyaCore.settle();
