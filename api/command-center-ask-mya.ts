@@ -1725,7 +1725,7 @@ async function synthesizeSpeech(text: string): Promise<string | null> {
           // Matches the "V3 Conversational" model the phone agent's voice
           // uses — the older turbo model here sounded noticeably flatter
           // and more robotic than the same voice on a real call.
-          model_id: "eleven_v3",
+          model_id: "eleven_flash_v2_5",  // Flash: ~300ms TTFB vs ~2s for v3 — same voice, much faster
         }),
       }
     );
@@ -1779,7 +1779,7 @@ async function callAnthropic(messages: any[]): Promise<any> {
  * vars set later, directly in the dashboard, never through this codebase.
  */
 type ModelProvider = "anthropic" | "hermes";
-const DEFAULT_MODEL_PROVIDER: ModelProvider = "anthropic";
+const DEFAULT_MODEL_PROVIDER: ModelProvider = "hermes";  // Route through Hermes bridge (real Mya) — requires HERMES_BRIDGE_KEY in Vercel env
 const HERMES_BRIDGE_URL = process.env.HERMES_BRIDGE_URL || "https://mya-api.gaelevate.com/p/mya/v1";
 const HERMES_BRIDGE_KEY = process.env.HERMES_BRIDGE_KEY || "";
 
