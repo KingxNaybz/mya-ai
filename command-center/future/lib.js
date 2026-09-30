@@ -289,7 +289,7 @@
     if (s.core === "waiting") {
       return { state: "waiting", label: "Still working", detail: "Waiting on her runtime" + (s.pendingText ? " · “" + snippet(s.pendingText, 40) + "”" : "") };
     }
-    if (s.core === "speaking") return { state: "speaking", label: "Speaking", detail: "Replying now · tap to stop" };
+    if (s.core === "speaking") return { state: "speaking", label: "Speaking", detail: "Replying now" };
     if (s.capturing) {
       return { state: "listening", label: "Listening", detail: s.transcript ? "“" + snippet(s.transcript, 60) + "”" : "Go ahead, I'm listening" };
     }

@@ -1237,3 +1237,14 @@ a.metric:hover { border-color: var(--line-strong); transform: translateY(-1px); 
   .metric-row.cluster .metric:first-child { border-radius: var(--radius-lg) 0 0 0; }
   .metric-row.cluster .metric:nth-child(2) { border-radius: 0 var(--radius-lg) 0 0; }
 }
+.vc-mute { flex: none; width: 34px; height: 34px; border-radius: 999px; }
+.voice-capsule:not([data-phase="speaking"]):not([data-phase="completed"]) .vc-mute { display: none; }
+/* No live level (e.g. the AudioContext wasn't running yet): a gentle meter. */
+html:not(.has-level) .voice-capsule[data-phase="speaking"] .vc-meter i,
+html:not(.has-level) .voice-capsule[data-phase="listening"] .vc-meter i { animation: meterIdle 1s ease-in-out infinite; }
+.vc-meter i:nth-child(2) { animation-delay: -0.2s; }
+.vc-meter i:nth-child(3) { animation-delay: -0.45s; }
+.vc-meter i:nth-child(4) { animation-delay: -0.65s; }
+.vc-meter i:nth-child(5) { animation-delay: -0.85s; }
+@keyframes meterIdle { 0%, 100% { transform: scaleY(0.25); } 50% { transform: scaleY(0.8); } }
+@media (prefers-reduced-motion: reduce) { .vc-meter i { animation: none !important; } }

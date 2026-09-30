@@ -484,7 +484,7 @@
     function stopLevel() {
       cancelAnimationFrame(levelRaf);
       levelRaf = 0;
-      MyaCore.el.classList.remove("has-level");
+      MyaCore.el.classList.remove("has-level"); document.documentElement.classList.remove("has-level");
       setVoiceLevel(0);
     }
     function trackLevel(audio) {
@@ -498,7 +498,7 @@
         analyser.connect(audioCtx.destination);
         var buf = new Uint8Array(analyser.fftSize);
         var smooth = 0;
-        MyaCore.el.classList.add("has-level");
+        MyaCore.el.classList.add("has-level"); document.documentElement.classList.add("has-level");
         var step = function () {
           if (audio !== currentAudio) return;
           analyser.getByteTimeDomainData(buf);

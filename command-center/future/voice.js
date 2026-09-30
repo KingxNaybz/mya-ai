@@ -121,7 +121,7 @@
       b.setAttribute("aria-pressed", capturing ? "true" : "false");
       b.title = !SR ? "Voice input isn't available in this browser (try Chrome or Edge)"
         : !available ? "Executive Mya is unavailable"
-        : capturing ? "Tap to send what you said" : "Tap to talk to Mya";
+        : capturing ? "Tap to send what you said" : "Tap to talk to Mya (Ctrl+Shift+Space)";
       b.classList.toggle("is-unavailable", !SR || !available);
       var lbl = b.querySelector("[data-talk-label]");
       if (lbl) lbl.textContent = capturing ? "Listening… tap to send" : "Tap to talk";
@@ -140,7 +140,7 @@
     // No second microphone stream: the Core's listening pulse follows the
     // recognizer's own results, rising on each word and easing back.
     levelDecay = 0.75;
-    MyaCore.el.classList.add("has-level");
+    MyaCore.el.classList.add("has-level"); document.documentElement.classList.add("has-level");
     var step = function () {
       if (!capturing) return;
       levelDecay *= 0.9;
@@ -218,7 +218,7 @@
       try { rec.abort(); } catch (e) { /* ignore */ }
       rec = null;
     }
-    MyaCore.el.classList.remove("has-level");
+    MyaCore.el.classList.remove("has-level"); document.documentElement.classList.remove("has-level");
     document.documentElement.style.setProperty("--voice-level", "0");
     MyaEvents.emit("voice.capture", { capturing: false, transcript: "" });
     MyaChat.resumeWake();
@@ -298,6 +298,8 @@
     });
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && (capturing || sim)) { e.preventDefault(); cancel(); }
+      // Ctrl/Cmd+Shift+Space: talk from anywhere (again to send).
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.code === "Space" || e.key === " ")) { e.preventDefault(); start(); }
     });
   }
 
@@ -343,14 +345,14 @@
   }
 
   function bumpSimLevel() {
-    MyaCore.el.classList.add("has-level");
+    MyaCore.el.classList.add("has-level"); document.documentElement.classList.add("has-level");
     document.documentElement.style.setProperty("--voice-level", (0.4 + Math.random() * 0.4).toFixed(3));
   }
 
   // A synthetic, clearly-not-audio level so the speaking Core can be reviewed.
   function synthLevel(ms) {
     var end = Date.now() + ms;
-    MyaCore.el.classList.add("has-level");
+    MyaCore.el.classList.add("has-level"); document.documentElement.classList.add("has-level");
     var step = function () {
       if (!sim || Date.now() > end) { document.documentElement.style.setProperty("--voice-level", "0"); return; }
       var t = Date.now() / 1000;
@@ -366,7 +368,7 @@
     sim.timers.forEach(clearTimeout);
     cancelAnimationFrame(sim.raf);
     sim = null;
-    MyaCore.el.classList.remove("has-level");
+    MyaCore.el.classList.remove("has-level"); document.documentElement.classList.remove("has-level");
     document.documentElement.style.setProperty("--voice-level", "0");
     MyaCore.setState(MyaCore.restingState());
     close();
