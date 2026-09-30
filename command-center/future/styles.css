@@ -229,6 +229,15 @@ a.strip-item:hover { border-color: var(--line-strong); color: var(--text-hi); }
 [data-mya-state="error"] .state-dot { background: var(--red); box-shadow: 0 0 10px var(--red); }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
+/* Resting approval Core. MyaPresence holds the Core in awaiting-approval
+   while real approvals are pending, so here it keeps the idle Core's soft
+   gradient, warmed to gold, instead of core.css's flat gold fill. It's an
+   override, not an edit: core.css stays byte-identical to Build 12. The
+   .core-slot prefix outranks core.css, which loads after this file. */
+.core-slot .mya-core[data-state="awaiting-approval"] .core-center { fill: url(#coreApprovalGrad); animation: coreBreathe calc(3.6s / var(--mf-anim-speed)) ease-in-out infinite; }
+.core-slot .mya-core[data-state="awaiting-approval"] .core-halo { fill: var(--core-approval); opacity: 0.16; animation: haloBreathe calc(3.6s / var(--mf-anim-speed)) ease-in-out infinite; }
+.core-slot .mya-core[data-state="awaiting-approval"] .orbit-path { stroke: var(--core-approval); opacity: 0.35; }
+
 /* ---------------- Mya presence ----------------
    One color language for "what is Mya doing", driven by html[data-presence]
    (MyaPresence, real signals only). Used by the rail dock, the strip, the
