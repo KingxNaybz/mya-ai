@@ -120,14 +120,17 @@
       }
     }
 
-    function ask(question) {
+    // focus: an optional extra line naming the one item asked about
+    // (e.g. a single approval), added after the screen summary.
+    function ask(question, focus) {
       question = String(question || "").trim();
       if (!question || !available) return;
       var c = MyaLib.buildScreenContext(view, snapshot());
+      if (focus) c.text += "\n" + focus;
       input.value = "";
       input.disabled = send.disabled = true;
       renderAnswer("thinking", question);
-      MyaChat.send(question, { label: c.label, context: c.text, inline: true }).then(function (r) {
+      MyaChat.send(question, { label: focusLabel || c.label, context: c.text, inline: true }).then(function (r) {
         if (r && r.ok) renderAnswer("done", question, r.reply);
         else if (r && r.auth) answer.hidden = true;
         else renderAnswer("error", question, "Executive Mya didn't answer. Nothing was sent to another assistant. Try again in a moment.");
@@ -138,7 +141,17 @@
     form.addEventListener("submit", function (e) { e.preventDefault(); ask(input.value); });
     bar.addEventListener("keydown", function (e) { if (e.key === "Escape") { open(false); btn.focus(); } });
 
-    bars[view] = { btn: btn, input: input, send: send, chips: chips };
+    var focusLabel = null;
+    bars[view] = {
+      btn: btn, input: input, send: send, chips: chips,
+      askAbout: function (question, focus, label) {
+        open(true);
+        bar.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        focusLabel = label || null;
+        ask(question, focus);
+        focusLabel = null;
+      }
+    };
   }
 
   function applyAvailability() {
@@ -150,6 +163,11 @@
       var cs = b.chips.querySelectorAll("button");
       for (var i = 0; i < cs.length; i++) cs[i].disabled = !available;
     });
+    var itemBtns = document.querySelectorAll("[data-ask-approval]");
+    for (var j = 0; j < itemBtns.length; j++) {
+      itemBtns[j].disabled = !available;
+      itemBtns[j].title = available ? "Ask Mya about this request" : "Executive Mya is unavailable";
+    }
   }
 
   function init() {
@@ -164,5 +182,11 @@
     applyAvailability();
   }
 
-  global.MyaAskAbout = { init: init };
+  // Ask about one item on a screen, e.g. a single approval. Opens that
+  // screen's bar so the answer shows there.
+  function askAbout(view, question, focus, label) {
+    if (bars[view] && available) bars[view].askAbout(question, focus, label);
+  }
+
+  global.MyaAskAbout = { init: init, askAbout: askAbout, isAvailable: function () { return available; } };
 })(window);

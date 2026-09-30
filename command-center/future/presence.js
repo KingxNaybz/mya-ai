@@ -47,8 +47,12 @@
     for (var i = 0; i < labels.length; i++) labels[i].textContent = p.label;
     var details = document.querySelectorAll("[data-presence-detail]");
     for (var j = 0; j < details.length; j++) details[j].textContent = p.detail;
+    // Waiting on you? Every presence surface leads to what she's waiting on.
+    var target = p.state === "approval" ? "#/approvals" : "#/mya";
+    var links = document.querySelectorAll("#presence-dock, .strip-mya, #session-now");
+    for (var k = 0; k < links.length; k++) links[k].setAttribute("href", target);
     var dock = $("presence-dock");
-    if (dock) dock.setAttribute("aria-label", "Mya: " + p.label + ". " + p.detail + ". Open Mya.");
+    if (dock) dock.setAttribute("aria-label", "Mya: " + p.label + ". " + p.detail + ". " + (p.state === "approval" ? "Open Approvals." : "Open Mya."));
     // The Core rests in its approval state only while approvals are really pending.
     MyaCore.setResting(p.state === "approval" ? "awaiting-approval" : "idle");
     renderToast(p);

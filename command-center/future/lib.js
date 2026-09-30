@@ -254,7 +254,7 @@
     if (out && !out.ok && age < FAILED_HOLD_MS) {
       return { state: "error", label: "Didn't answer", detail: "Her last reply failed. Nothing was sent elsewhere." };
     }
-    if (out && out.ok && age < COMPLETED_HOLD_MS) return { state: "completed", label: "Replied", detail: "Just now · open to read" };
+    if (out && out.ok && age < COMPLETED_HOLD_MS) return { state: "completed", label: "Replied", detail: "Just now" };
     if (s.availability === "unavailable") {
       return { state: "blocked", label: "Unavailable", detail: "Executive Mya isn't configured here" };
     }

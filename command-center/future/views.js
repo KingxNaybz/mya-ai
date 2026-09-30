@@ -342,6 +342,7 @@
         '<div class="approval-actions">' +
         '<button type="button" class="btn approve" data-approval-id="' + h(x.id) + '" data-action="approve">Approve</button>' +
         '<button type="button" class="btn ghost" data-approval-id="' + h(x.id) + '" data-action="decline">Decline</button>' +
+        '<button type="button" class="ask-btn sm" data-ask-approval="' + h(x.id) + '"' + (MyaAskAbout.isAvailable() ? ' title="Ask Mya about this request"' : ' disabled title="Executive Mya is unavailable"') + '><span class="ask-orb" aria-hidden="true"></span><span>Ask Mya</span></button>' +
         "</div></div>";
     }, "Nothing is waiting on your approval.", "Approvals");
 
@@ -360,6 +361,16 @@
 
   function initApprovalActions() {
     $("approvals-list").addEventListener("click", function (e) {
+      var askBtn = e.target.closest("button[data-ask-approval]");
+      if (askBtn) {
+        var p = payload("approvals");
+        var item = p && Array.isArray(p.approvals) && p.approvals.filter(function (x) { return String(x.id) === askBtn.getAttribute("data-ask-approval"); })[0];
+        if (!item) return;
+        MyaAskAbout.askAbout("approvals", "Tell me about this request before I decide: " + item.title,
+          "Asking about the pending approval: " + item.title + (item.detail ? " (" + item.detail + ")" : "") + ". Nothing is approved or declined by asking.",
+          "Approval: " + MyaLib.snippet(item.title, 40));
+        return;
+      }
       var btn = e.target.closest("button[data-approval-id]");
       if (!btn) return;
       var id = btn.getAttribute("data-approval-id");
