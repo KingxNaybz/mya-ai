@@ -300,8 +300,10 @@
       var entry = MyaData.get("projectDetail");
       var name = entry && entry.data && entry.data.project && entry.data.project.project_name;
       if (!name) return;
+      var d = entry && entry.data;
+      var c = MyaLib.buildScreenContext("projects", { projectDetail: { state: fresh("projectDetail").state, data: d } });
       location.hash = "#/mya";
-      MyaChat.send("What's the latest on " + name + "?");
+      MyaChat.send("What's the latest on " + name + "?", { label: name, context: c.text });
     });
     $("projects-search-form").addEventListener("submit", function (e) {
       e.preventDefault();

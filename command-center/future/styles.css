@@ -365,6 +365,52 @@ a.strip-item:hover { border-color: var(--line-strong); color: var(--text-hi); }
 @keyframes viewIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .view-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding: 4px 2px 2px; }
 .view-head h1 { font-size: 30px; margin-top: 4px; }
+.view-head-side { display: flex; align-items: center; gap: 10px; flex: none; }
+
+/* ---------------- Ask Mya about this ---------------- */
+.ask-orb {
+  width: 14px; height: 14px; border-radius: 50%; flex: none;
+  background: radial-gradient(circle at 40% 35%, #fff 0%, var(--accent-soft) 30%, var(--accent) 62%, transparent 74%);
+  box-shadow: 0 0 12px rgba(74, 168, 255, 0.55);
+}
+.ask-orb.lg { width: 20px; height: 20px; margin-left: 4px; }
+.ask-btn {
+  display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px 0 11px;
+  border-radius: 999px; border: 1px solid rgba(143, 202, 255, 0.28);
+  background: linear-gradient(180deg, rgba(74, 168, 255, 0.14), rgba(74, 168, 255, 0.04));
+  color: var(--text-hi); font-size: 12.5px; font-weight: 600;
+  transition: border-color var(--dur), box-shadow var(--dur), background var(--dur);
+}
+.ask-btn:hover:not(:disabled), .ask-btn.is-open { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(74, 168, 255, 0.10), 0 0 22px rgba(74, 168, 255, 0.18); }
+.ask-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.ask-btn:disabled .ask-orb { filter: grayscale(1); box-shadow: none; }
+.ask-about {
+  display: flex; flex-direction: column; gap: 12px; padding: 14px 16px;
+  border-color: rgba(143, 202, 255, 0.22);
+  box-shadow: 0 0 0 1px rgba(74, 168, 255, 0.05), 0 20px 50px rgba(0, 0, 0, 0.25);
+  opacity: 0; transform: translateY(-6px);
+  transition: opacity var(--dur), transform var(--dur) var(--ease);
+}
+.ask-about.is-in { opacity: 1; transform: none; }
+.ask-form {
+  display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 10px; border-radius: 14px;
+  background: rgba(5, 8, 14, 0.55); border: 1px solid var(--line-strong);
+  transition: border-color var(--dur), box-shadow var(--dur);
+}
+.ask-form:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(74, 168, 255, 0.12); }
+.ask-form input { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: var(--text-hi); font: inherit; font-size: 14.5px; }
+.ask-form input:disabled { cursor: not-allowed; }
+.ask-hint { margin: -2px 2px 0; }
+.ask-chips .chip:disabled { opacity: 0.45; cursor: not-allowed; }
+.ask-answer { border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.ask-q { font-size: 12px; color: var(--text-muted); }
+.ask-reply { font-size: 14.5px; line-height: 1.6; color: var(--text-hi); white-space: pre-wrap; }
+.ask-answer[data-state="error"] .ask-reply { color: #f1a39c; }
+.typing { display: inline-flex; gap: 5px; padding: 6px 0; }
+.typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-soft); animation: pulse 1s ease-in-out infinite; }
+.typing i:nth-child(2) { animation-delay: 0.15s; }
+.typing i:nth-child(3) { animation-delay: 0.3s; }
+.about-tag { margin-left: 8px; text-transform: none; letter-spacing: 0; font-weight: 600; }
 .view-sub { color: var(--text-mid); margin-top: 6px; max-width: 60ch; }
 
 .card {
@@ -656,6 +702,7 @@ a.metric:hover { border-color: var(--line-strong); transform: translateY(-1px); 
   #strip-approvals .strip-text { display: none; }
   .stage { padding: 18px var(--gutter) calc(var(--tab-h) + var(--safe-bottom) + 28px); }
   .view-head { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .view-head-side { width: 100%; justify-content: space-between; }
   .view-head h1 { font-size: 26px; }
 
   .home-hero { grid-template-columns: minmax(0, 1fr); gap: 18px; text-align: left; }
@@ -769,6 +816,7 @@ a.metric:hover { border-color: var(--line-strong); transform: translateY(-1px); 
 @media (prefers-reduced-motion: reduce) {
   .view, .state-dot, .fresh-dot, .skeleton, [data-mic-toggle] .icon, .icon-btn.spinning .icon { animation: none !important; }
   .sheet, .toast, .metric { transition: none !important; }
-  .presence-dot, .tab-core .core-slot-tab { animation: none !important; }
+  .presence-dot, .tab-core .core-slot-tab, .typing i { animation: none !important; }
+  .ask-about { transition: none !important; }
   .presence-toast { transition: none !important; }
 }

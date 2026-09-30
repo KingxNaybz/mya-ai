@@ -92,6 +92,8 @@
     applyProviderUI();
     var currentAudio = null;
 
+    // meta.about (your lines): which screen an "Ask Mya about this" question
+    // came from, shown as a small tag instead of the context text itself.
     // meta (Mya replies only): { toolsUsed } -- shown as small
     // chips so it's always visible what she actually looked at or changed.
     function addLine(text, role, meta) {
@@ -103,6 +105,12 @@
       var body = document.createElement("div");
       body.className = "chat-text";
       body.textContent = text;
+      if (meta && meta.about) {
+        var about = document.createElement("span");
+        about.className = "chip-tag about-tag";
+        about.textContent = "About: " + meta.about;
+        who.appendChild(about);
+      }
       line.appendChild(who);
       line.appendChild(body);
       if (meta && Array.isArray(meta.toolsUsed) && meta.toolsUsed.length) {
@@ -122,7 +130,7 @@
       log.appendChild(line);
       log.scrollTop = log.scrollHeight;
       document.getElementById("chat-empty").hidden = true;
-      MyaEvents.emit("chat.line", { role: role, text: text });
+      MyaEvents.emit("chat.line", { role: role, text: text, inline: Boolean(meta && meta.inline) });
     }
 
     function setVoiceStatus(text) {
@@ -420,35 +428,44 @@
       }
     }
 
-    function performSend(message) {
+    // opts (optional, from "Ask Mya about this"):
+    //   label    which screen it's about, shown as a tag on your line
+    //   context  MyaLib.buildScreenContext() text, sent to her after the
+    //            question and kept in history so follow-ups have it
+    //   inline   the asking screen shows the answer itself (no toast)
+    // Resolves { ok, reply } so a caller can show the answer where it asked.
+    function performSend(message, opts) {
+      opts = opts || {};
       // Covers every entry point: this form, Home quick-ask, chips and voice.
       if (!useHermes) {
         addLine("Executive Mya is unavailable, so nothing was sent.", "mya error");
-        return;
+        return Promise.resolve({ ok: false, unavailable: true });
       }
+      var outbound = opts.context ? message + "\n\n[Screen context from the Command Center]\n" + opts.context : message;
       inFlight = true;
       sendBtn.disabled = true;
-      addLine(message, "user");
-      history.push({ role: "user", content: message });
-
+      addLine(message, "user", { about: opts.label, inline: opts.inline });
       MyaEvents.emit("mya.thinking", { dev: false });
 
-      fetch("/api/command-center-ask-mya", {
+      var priorHistory = history.slice(-20);
+      history.push({ role: "user", content: outbound });
+
+      return fetch("/api/command-center-ask-mya", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: message, history: history.slice(-20), voice: voiceEnabled }),
+        body: JSON.stringify({ message: outbound, history: priorHistory, voice: voiceEnabled }),
       })
         .then(function (res) {
           if (res.status === 401) {
             MyaEvents.emit("mya.idle", { dev: false });
             teardownMic(false); // stop listening while logged out; preference survives the next login
             MyaEvents.emit("auth.expired", { source: "ask-mya" });
-            return null;
+            return { ok: false, auth: true };
           }
           return res.json().catch(function () { return {}; }).then(function (data) { return { ok: res.ok, status: res.status, data: data || {} }; });
         })
         .then(function (result) {
-          if (!result) return; // handled above (401)
+          if (result.auth) return result; // handled above (401)
           if (!result.ok) {
             var err = result.data.error;
             addLine(
@@ -459,8 +476,8 @@
             if (err === "executive_mya_unavailable" || result.status >= 500) { hermesFailed = true; hermesVerifiedAt = null; applyProviderUI(); }
             MyaEvents.emit("mya.idle", { dev: false });
             MyaCore.settle();
-            MyaEvents.emit("mya.outcome", { ok: false });
-            return;
+            MyaEvents.emit("mya.outcome", { ok: false, inline: opts.inline });
+            return { ok: false };
           }
           var reply = result.data.reply || "(no reply)";
           addLine(reply, "mya", { toolsUsed: result.data.toolsUsed });
@@ -468,18 +485,20 @@
           hermesVerifiedAt = Date.now();
           applyProviderUI();
           history.push({ role: "assistant", content: reply });
-          MyaEvents.emit("mya.outcome", { ok: true, reply: reply });
+          MyaEvents.emit("mya.outcome", { ok: true, reply: reply, inline: opts.inline });
           MyaEvents.emit("mya.responding", { dev: false });
           var playing = playReplyAudio(result.data.audioBase64);
           if (!playing) restartMicForNextTurn();
 
           MyaData.refreshForTools(result.data.toolsUsed);
+          return { ok: true, reply: reply };
         })
         .catch(function () {
           addLine("Couldn't reach Executive Mya — try again.", "mya error");
           MyaEvents.emit("mya.idle", { dev: false });
           MyaCore.settle();
-          MyaEvents.emit("mya.outcome", { ok: false });
+          MyaEvents.emit("mya.outcome", { ok: false, inline: opts.inline });
+          return { ok: false };
         })
         .finally(function () {
           inFlight = false;
@@ -511,9 +530,10 @@
     init: initChat,
     // Used by the Home quick-ask box and suggestion chips -- the exact same
     // request path as typing in the Mya view.
-    send: function (message) {
+    send: function (message, opts) {
       message = String(message || "").trim();
-      if (message && performSendRef) performSendRef(message);
+      if (!message || !performSendRef) return Promise.resolve({ ok: false });
+      return performSendRef(message, opts);
     }
   };
 })(window);

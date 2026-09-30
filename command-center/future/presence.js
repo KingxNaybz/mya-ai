@@ -19,6 +19,7 @@
   var s = { core: "idle", availability: "loading", lastOutcome: null, approvals: null, micOn: false, pendingText: "" };
   var lastReply = "";
   var seen = {};
+  var inlineAsk = false;
   var shownKey = null, timedKey = null;
   var hideTimer = null, seenTimer = null;
 
@@ -59,7 +60,8 @@
     var toast = $("presence-toast");
     if (!toast) return;
     var key = toastKey(p);
-    if (route() === "mya" || !key || seen[key]) { hideToast(); return; }
+    // Asked from a module's "Ask Mya" bar: the answer shows right there.
+    if (route() === "mya" || !key || seen[key] || inlineAsk) { hideToast(); return; }
     toast.setAttribute("data-state", p.state);
     toast.querySelector("[data-toast-label]").textContent =
       p.state === "thinking" ? "Mya is thinking" : p.state === "completed" ? "Mya replied" : "Mya didn't answer";
@@ -96,7 +98,7 @@
       render();
     });
     MyaEvents.on("chat.line", function (line) {
-      if (line && line.role === "user") s.pendingText = line.text;
+      if (line && line.role === "user") { s.pendingText = line.text; inlineAsk = Boolean(line.inline); }
     });
     MyaEvents.on("mya.outcome", function (o) {
       s.lastOutcome = { ok: Boolean(o && o.ok), at: Date.now() };

@@ -226,6 +226,21 @@ test("presence comes only from real signals, in priority order", () => {
   assert.match(lib.derivePresence({ core: "thinking", pendingText: "x".repeat(200) }, now).detail, /…/);
 });
 
+test("screen context only describes data that actually loaded", () => {
+  const off = lib.buildScreenContext("approvals", { approvals: { state: "offline", data: null } });
+  assert.equal(off.label, "Approvals");
+  assert.match(off.text, /not connected on this screen/);
+  const stale = lib.buildScreenContext("projects", { projects: { state: "stale", data: { projects: [{ project_name: "A", status: "lead" }] } } });
+  assert.match(stale.text, /may be stale/);
+  assert.match(stale.text, /- A \(lead\)/);
+  const many = Array.from({ length: 12 }, (_, i) => ({ project_name: "P" + i }));
+  const capped = lib.buildScreenContext("projects", { projects: { state: "live", data: { projects: many } } });
+  assert.match(capped.text, /and 4 more/);
+  assert.doesNotMatch(capped.text, /P9/);
+  // Screens with no data source say only which screen it is.
+  assert.equal(lib.buildScreenContext("files", {}).text, "The owner is looking at the Command Center Files screen.");
+});
+
 /* ---------------- Phase 2 static guards ---------------- */
 const BASELINE = "59e8c0d";
 const readRoot = (f) => fs.readFileSync(path.join(ROOT, f), "utf8");

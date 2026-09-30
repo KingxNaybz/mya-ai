@@ -271,6 +271,70 @@
     };
   }
 
+  /* ---------------- "Ask Mya about this" context ----------------
+     A short, plain-text note of what the owner is looking at, sent to
+     Executive Mya along with the question so she knows which screen it's
+     about. Only data that actually loaded is included: stale data is
+     labeled stale, and a source that never loaded is described as not
+     connected. It's never guessed or filled in. Capped so a big list
+     can't swamp the question.
+       src[name] = { state: "live"|"stale"|"offline"|"loading", data } */
+  var CONTEXT_VIEWS = {
+    projects: "Projects", approvals: "Approvals", memory: "Memory", files: "Files",
+    operations: "Operations", devices: "Devices", systems: "Systems"
+  };
+  var CONTEXT_MAX_ITEMS = 8;
+
+  function sourceNote(entry, what) {
+    if (!entry || (entry.state !== "live" && entry.state !== "stale")) return what + ": not connected on this screen right now.";
+    return null;
+  }
+
+  function buildScreenContext(view, src) {
+    src = src || {};
+    var title = CONTEXT_VIEWS[view] || "Command Center";
+    var lines = ["The owner is looking at the Command Center " + title + " screen."];
+    var stale = function (e) { return e && e.state === "stale" ? " (last known, may be stale)" : ""; };
+
+    if (view === "projects") {
+      var d = src.projectDetail;
+      var p = d && d.data && d.data.project;
+      if (p && (d.state === "live" || d.state === "stale")) {
+        lines.push("Open project" + stale(d) + ": " + p.project_name + (p.client_name ? " for " + p.client_name : "") +
+          (p.status ? ", status " + p.status : "") + (p.next_action ? ", next action: " + p.next_action : "") + ".");
+      }
+      var pe = src.projects;
+      var note = sourceNote(pe, "Project list");
+      if (note) lines.push(note);
+      else {
+        var list = (pe.data && pe.data.projects) || [];
+        lines.push(list.length ? "Active projects on screen" + stale(pe) + ":" : "No active projects on screen" + stale(pe) + ".");
+        list.slice(0, CONTEXT_MAX_ITEMS).forEach(function (x) {
+          lines.push("- " + x.project_name + (x.status ? " (" + x.status + ")" : "") + (x.next_action ? ": next " + x.next_action : ""));
+        });
+        if (list.length > CONTEXT_MAX_ITEMS) lines.push("- …and " + (list.length - CONTEXT_MAX_ITEMS) + " more");
+      }
+    } else if (view === "approvals") {
+      var ae = src.approvals;
+      var an = sourceNote(ae, "Pending approvals");
+      if (an) lines.push(an);
+      else {
+        var al = (ae.data && ae.data.approvals) || [];
+        lines.push(al.length ? al.length + " pending approval(s) on screen" + stale(ae) + ":" : "No pending approvals on screen" + stale(ae) + ".");
+        al.slice(0, CONTEXT_MAX_ITEMS).forEach(function (x) { lines.push("- " + x.title + (x.detail ? ": " + x.detail : "")); });
+      }
+    } else if (view === "systems") {
+      var se = src.systems;
+      var sn = sourceNote(se, "System health");
+      if (sn) lines.push(sn);
+      else {
+        lines.push("System status on screen" + stale(se) + ":");
+        ((se.data && se.data.systems) || []).slice(0, 12).forEach(function (x) { lines.push("- " + x.name + ": " + String(x.status).replace(/_/g, " ")); });
+      }
+    }
+    return { label: title, text: lines.join("\n") };
+  }
+
   // Which runtime chat should use. Hermes has no health endpoint, so a
   // Systems report can only say whether the Hermes bridge key is set
   // ("not_observable" or, in theory, "up"). That's enough to route chat to
@@ -292,6 +356,7 @@
     toolLabel: toolLabel,
     executiveMyaRoute: executiveMyaRoute,
     derivePresence: derivePresence,
+    buildScreenContext: buildScreenContext,
     snippet: snippet,
     escapeHtml: escapeHtml,
     formatRelative: formatRelative,

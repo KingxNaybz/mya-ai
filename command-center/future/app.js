@@ -104,6 +104,7 @@
     MyaShell.init(settings);
     MyaViews.init();
     MyaPresence.init();
+    MyaAskAbout.init();
     MyaChat.init();
     initLogoutControls();
     MyaCore.playIntro();
