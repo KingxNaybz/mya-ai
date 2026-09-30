@@ -220,17 +220,26 @@
     return words.charAt(0).toUpperCase() + words.slice(1);
   }
 
-  function providerLabel(provider) {
-    return provider === "hermes"
-      ? "Answered by the Hermes runtime (text only, no Command Center tools)"
-      : "Answered by Claude with Command Center tools";
+  // Which runtime chat should use. Hermes has no health endpoint, so a
+  // Systems report can only say whether the Hermes bridge key is set
+  // ("not_observable" or, in theory, "up"). That's enough to route chat to
+  // Executive Mya. Whether she is actually reachable is shown by her replies,
+  // never assumed. Missing or failed Systems data counts as unknown.
+  function executiveMyaRoute(system, sourceFreshness) {
+    var f = sourceFreshness || { state: "offline" };
+    if (f.state === "loading") return "loading";
+    if (f.state !== "live" && f.state !== "stale") return "unknown";
+    var st = system && system.status;
+    if (st === "up" || st === "not_observable") return "hermes";
+    if (st === "not_configured") return "not_configured";
+    return "unknown";
   }
 
   return {
     integrationStatus: integrationStatus,
     systemsDown: systemsDown,
     toolLabel: toolLabel,
-    providerLabel: providerLabel,
+    executiveMyaRoute: executiveMyaRoute,
     escapeHtml: escapeHtml,
     formatRelative: formatRelative,
     formatAge: formatAge,

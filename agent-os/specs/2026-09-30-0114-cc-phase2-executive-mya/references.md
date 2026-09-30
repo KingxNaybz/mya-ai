@@ -51,3 +51,9 @@
 - **`bank_id`:** a user-chosen identifier for one memory space, such as the bank Mya's Hermes runtime retains into.
 - **Hermes integration:** the Hindsight plugin for hermes-agent uses `HINDSIGHT_API_URL`, `HINDSIGHT_API_KEY` and `HINDSIGHT_BANK_ID` (cloud, local_embedded and local_external modes). The Command Center uses the same variable names.
 - **Not verified:** which mode and bank the owner's Hermes actually uses, and whether a scoped read-only key exists. The owner supplies these as env vars.
+
+### Hermes chat endpoint identity: NOT verified (2026-09-30, second pass)
+- **Claim:** `https://mya-api.gaelevate.com/p/mya/v1` is "Open WebUI → Cloudflare → Hermes → the `mya` profile".
+- **Source of the claim:** only a code comment and the message of commit `9c2b9f0` (2026-09-24, an earlier cloud session), which calls it "externally verified" but records no evidence.
+- **Searched with no corroboration:** every local branch and `origin/*` ref, `.env.example`, the agent-os specs, `~/.hermes` (skills only), and the `~/.local/bin/hermes` launcher stub (hermes-agent isn't installed locally).
+- **Not established:** that the `mya` model on this endpoint is the same Hermes profile Telegram uses, and that requests through it get her Hermes tools and Hindsight. Only the VPS/Open WebUI config can settle this, and it wasn't touched.

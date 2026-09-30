@@ -69,7 +69,7 @@ function fixtures(route, url) {
     case "/api/command-center-data?type=systems":
       return { generatedAt: new Date().toISOString(), systems: [
         sys("supabase", "Database (Supabase)", "up", "Business data storage — responding."),
-        sys("anthropic", "Mya's brain (Anthropic)", "configured", "Command Center chat + tools"),
+        sys("anthropic", "Claude (background)", "configured", "Caller classification only. Not a Command Center assistant"),
         sys("voice", "Mya's voice (ElevenLabs)", "configured", "Spoken chat replies"),
         sys("phone", "Phone system (Twilio)", "not_configured", "Calls and SMS — not configured."),
         sys("hermes", "Mya runtime (Hermes VPS)", "not_observable", "Configured here, but Hermes exposes no documented read-only health check this dashboard can use."),
@@ -178,7 +178,7 @@ function handleApi(req, res, url) {
     return sendJson(res, 200, MODE === "fixtures" ? fixtures(route) : { settings: null });
   }
   if (url.pathname === "/api/command-center-ask-mya" && req.method === "POST") {
-    return sendJson(res, 503, { error: "not_configured", message: "Local preview — Mya's brain isn't connected here, so she can't answer." });
+    return sendJson(res, 503, { error: "executive_mya_unavailable", message: "Local preview — Executive Mya isn't connected here, so she can't answer." });
   }
   if (url.pathname === "/api/command-center-approvals" && req.method === "POST") {
     return sendJson(res, 503, { error: "Local preview — approvals can't be resolved here." });

@@ -197,10 +197,15 @@ test("tool labels are friendly, with a readable fallback for new tools", () => {
   assert.equal(lib.toolLabel("some_new_tool"), "Some new tool");
 });
 
-test("provider label says which runtime answered", () => {
-  assert.match(lib.providerLabel("hermes"), /Hermes runtime.*no Command Center tools/);
-  assert.match(lib.providerLabel("anthropic"), /Claude with Command Center tools/);
-  assert.match(lib.providerLabel(undefined), /Claude/);
+test("Executive Mya route follows configuration, never an invented health check", () => {
+  const live = { state: "live" };
+  assert.equal(lib.executiveMyaRoute({ status: "not_observable" }, live), "hermes");
+  assert.equal(lib.executiveMyaRoute({ status: "up" }, live), "hermes");
+  assert.equal(lib.executiveMyaRoute({ status: "not_observable" }, { state: "stale" }), "hermes");
+  assert.equal(lib.executiveMyaRoute({ status: "not_configured" }, live), "not_configured");
+  assert.equal(lib.executiveMyaRoute(undefined, live), "unknown");
+  assert.equal(lib.executiveMyaRoute({ status: "not_observable" }, { state: "offline" }), "unknown");
+  assert.equal(lib.executiveMyaRoute({ status: "not_observable" }, { state: "loading" }), "loading");
 });
 
 /* ---------------- Phase 2 static guards ---------------- */
@@ -222,6 +227,15 @@ test("MCP allowlist is exactly get_project, get_client, search_projects", () => 
   const block = src.match(/const MCP_TOOL_ALIASES[^{]*\{([^}]*)\}/)[1];
   const keys = [...block.matchAll(/^\s*([a-z_]+)\s*:/gm)].map((m) => m[1]).sort();
   assert.deepEqual(keys, ["get_client", "get_project", "search_projects"]);
+});
+
+test("chat has exactly one assistant: Executive Mya, with no Claude fallback", () => {
+  const src = readRoot("api/command-center-ask-mya.ts");
+  assert.doesNotMatch(src, /callAnthropic|callModel|DEFAULT_MODEL_PROVIDER|SYSTEM_PROMPT/);
+  assert.match(src, /if \(!HERMES_BRIDGE_KEY\) \{\s*return res\.status\(503\)\.json\(\{ error: "executive_mya_unavailable"/);
+  const chat = readRoot("command-center/future/chat.js");
+  assert.doesNotMatch(chat, /provider:\s*"/);
+  assert.doesNotMatch(readRoot("command-center/future/index.html"), /provider-toggle/);
 });
 
 test("MCP bearer key is compared timing-safe", () => {

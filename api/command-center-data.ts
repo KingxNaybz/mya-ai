@@ -210,7 +210,7 @@ async function handleSystems(res: VercelResponse) {
     const mcpConfigured = env.MCP_BRIDGE_ENABLED === "true" && Boolean(env.MCP_BRIDGE_KEY);
     const systems: SystemReport[] = [
       supabaseR,
-      configReport("anthropic", "Mya's brain (Anthropic)", Boolean(env.ANTHROPIC_API_KEY), "Command Center chat + tools"),
+      configReport("anthropic", "Claude (background)", Boolean(env.ANTHROPIC_API_KEY), "Caller classification only. Not a Command Center assistant"),
       configReport("voice", "Mya's voice (ElevenLabs)", Boolean(env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE_ID), "Spoken chat replies"),
       configReport("phone", "Phone system (Twilio)", Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_PHONE_NUMBER), "Calls and SMS"),
       ...hermesStatus(),

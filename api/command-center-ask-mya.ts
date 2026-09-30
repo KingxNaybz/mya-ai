@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
-import { isCommandCenterAuthenticated, commandCenterAuthMethod, safeStringEqual } from "../lib/session";
+import { isCommandCenterAuthenticated, safeStringEqual } from "../lib/session";
 import { hindsightRecall } from "../lib/integrations";
 
 /**
@@ -13,15 +13,14 @@ import { hindsightRecall } from "../lib/integrations";
  * without Deployment Protection covering Production too, or a proper
  * page-level login in front of the Command Center.
  *
- * This calls the Anthropic API directly with plain fetch (no SDK dependency
- * added to package.json, by explicit request). Requires an ANTHROPIC_API_KEY
- * env var set in Vercel — never read or logged here beyond passing it in the
- * request header.
+ * Chat and voice are answered by Executive Mya on the Hermes runtime (see
+ * callHermes). There is no other conversational model here. ANTHROPIC_API_KEY
+ * is used only for background caller classification. It's never read or
+ * logged beyond passing it in a request header.
  *
  * SKILL REGISTRY: every capability Mya has is one entry in SKILLS below —
  * name, description, input schema, and the function that runs it. This is
- * the single source of truth: the tool list sent to Claude, the dispatcher
- * that executes a tool call, and the list_capabilities skill (Mya's
+ * the single source of truth: the dispatcher that executes a tool call, and the list_capabilities skill (Mya's
  * "runtime self-knowledge" — what it can do, read live from this array
  * rather than a hardcoded description that can drift out of date) are all
  * derived from it. Adding a new capability means adding one entry here.
@@ -40,7 +39,6 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
 // logActionEvent() below) still applies to every tool call made afterward,
 // unchanged.
 const ANTHROPIC_MODEL = "claude-sonnet-5";
-const MAX_TOOL_ITERATIONS = 5;
 
 // Checks whether each integration is CONFIGURED (required env vars present),
 // not whether it's actually reachable right now — a live ping on every
@@ -211,27 +209,6 @@ async function classifyTranscriptWithAI(transcriptText: string): Promise<{ categ
     return null;
   }
 }
-
-const SYSTEM_PROMPT = `You are Mya, an AI operations assistant embedded in a dashboard for Elevate Construction, a construction company. The owner (Michael) talks to you here to check on the business and to make real changes using the tools you're given.
-
-Rules:
-- Only call a tool when the request actually needs an action or a lookup. For small talk or things no tool covers, just reply normally.
-- If a lookup tool (e.g. removing or approving something by name) returns more than one match, do not guess — list the matches in your reply and ask which one they mean.
-- If a tool returns zero matches, say so plainly rather than assuming.
-- After taking an action, confirm in one short sentence what you did.
-- If asked what you can do, what your capabilities are, or what you can't do yet, call list_capabilities rather than describing yourself from memory — that list is the real, current one.
-- If the user says "undo", "undo that", or asks to reverse the last thing you did, call undo_last_action. Don't guess which action they mean — that skill always reverses the single most recent reversible action.
-- If the user tells you to remember something, or shares a fact/preference/detail worth keeping for later ("remember that...", "the Rivers project needs..."), call remember_fact. If asked what you remember or know about something, call recall_memory rather than guessing. For longer-term memory (things learned in Telegram or earlier conversations), call recall_hindsight; if it says Hindsight isn't connected, say so plainly.
-- Projects are the company's real jobs (e.g. "3941 Briar Glen Ct" / "Courtney Vonwalsung"). When asked about a specific project, call get_project rather than guessing at details — it returns everything on file for that job. Use create_project when a new job should be tracked, update_project to record scope/status/pricing/decision changes, and list_projects to see what's open or in a given status.
-- The Company Brain holds standing business info (margin targets, payment terms, warranty language, estimating standards, insurance procedures, lessons learned) — call get_company_brain when asked about company policy/standards, and update_company_brain when told to change one.
-- Estimates are built from real cost line items, never guessed. Use add_estimate_item to log a real quantity x rate cost against a project, calculate_estimate to get its Direct Cost/True Cost/Floor Price/Target Price, and evaluate_bid_price for "what if we bid this at $X" questions. If a project has no line items yet, say so and offer to log some — never invent a price.
-- Keep replies brief and conversational — this can be read out loud or read at a glance on a dashboard, not a report.
-- You DO have a voice: replies can be spoken aloud in the same voice as the phone system, and there's an always-listen mic that wakes on your name. Neither is a tool you call — they run automatically in the dashboard. If asked whether you can talk or listen, say yes (unless list_capabilities' note says otherwise), don't claim you're text-only.
-- New leads (list_leads), recent activity (list_recent_activity), and aggregate memory stats (get_memory_insights, different from your own remembered facts) are all real, live tools — use them rather than only citing the count from get_dashboard_summary. "New Leads" only counts real prospective customers — vendors, bill collectors, job applicants, and other non-leads are filtered out and show up in Company Contacts instead.
-- Today's Schedule is real: use create_appointment for a site visit/walkthrough/meeting at a specific date+time, and list_schedule to see today's appointments plus any project whose next action is due today (set via update_project's nextActionDue).
-- get_recent_actions and get_services_status are also real, live tools now, matching the "Mya Working Now" and "Connected Services" dashboard panels. get_services_status checks whether each integration is configured, not whether it's live-reachable right now — say so if asked to be precise.
-- After every real phone call ends, it's automatically sorted into Company Contacts (a separate list from "New Leads," opened from its own nav item, not shown inline on the dashboard) as a lead, existing client, vendor, contractor, subcontractor, general contractor, bill collector, job applicant, wrong number/spam, or uncategorized. Bill collectors get flagged there but nothing is actually blocked yet — that's a manual step the owner does himself, later. Use list_caller_directory to answer questions about who's called (optionally filtered by category), and call open_contact_directory when asked to "pull up the contact spreadsheet," "show me company contacts," or similar — the dashboard itself handles opening that view and offering the Excel download. If told a caller was sorted into the wrong category, call reclassify_caller — same disambiguation rule as everything else: if the name/phone matches more than one caller, list them and ask which one instead of guessing. If asked about a past call/caller that isn't showing up in Company Contacts (it only auto-classifies calls that ended after this feature went live), call backfill_caller_classifications to go classify older calls on file — it's always safe to run, since it skips anything already classified.
-- Devices is the one dashboard panel still placeholder sample data with no tool behind it. If asked about it, say plainly you don't have that connected yet — never invent a plausible-sounding status to sound complete.`;
 
 /**
  * UNDO: reversible skills log how to reverse themselves to mya_undo_log
@@ -1528,7 +1505,6 @@ const SKILLS: Skill[] = [
   },
 ];
 
-const TOOLS = SKILLS.map(({ name, description, input_schema }) => ({ name, description, input_schema }));
 
 function findSkill(name: string): Skill | undefined {
   return SKILLS.find((s) => s.name === name);
@@ -1807,79 +1783,35 @@ async function synthesizeSpeech(text: string): Promise<string | null> {
   }
 }
 
-async function callAnthropic(messages: any[]): Promise<any> {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: ANTHROPIC_MODEL,
-      max_tokens: 1024,
-      output_config: { effort: "low" },
-      system: SYSTEM_PROMPT,
-      messages,
-      tools: TOOLS,
-    }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Anthropic API error ${res.status}: ${text.slice(0, 300)}`);
-  }
-  return res.json();
-}
-
 /**
- * MYA PROVIDER ROUTER — a thin seam, not a rewrite. callModel() is what the
- * tool loop below actually calls; DEFAULT_MODEL_PROVIDER pins it to
- * "anthropic" today, which just calls callAnthropic() exactly as before —
- * this file's production behavior is unchanged until something explicitly
- * routes elsewhere. The "hermes" branch talks to the real, externally
- * verified Hermes multiplex endpoint (Open WebUI → Cloudflare → Hermes →
- * the "mya" profile), but nothing currently sends requests down it — it has
- * no tools wired in yet (see the MCP bridge below) and isn't the default
- * for any request today. HERMES_BRIDGE_URL/HERMES_BRIDGE_KEY are Vercel env
- * vars set later, directly in the dashboard, never through this codebase.
+ * EXECUTIVE MYA — Command Center chat and voice go to the Hermes runtime and
+ * nowhere else. HERMES_BRIDGE_URL points at the Hermes multiplex endpoint
+ * (Open WebUI → Cloudflare → Hermes → the "mya" profile). Her identity,
+ * tools and Hindsight memory live in Hermes, so no system prompt or
+ * Command Center tool list is sent from here. If the bridge isn't configured
+ * or doesn't answer, chat is unavailable. It never falls back to another
+ * model. HERMES_BRIDGE_URL/HERMES_BRIDGE_KEY are Vercel env vars set in the
+ * dashboard, never through this codebase.
  */
-type ModelProvider = "anthropic" | "hermes";
-const DEFAULT_MODEL_PROVIDER: ModelProvider = "anthropic";
 const HERMES_BRIDGE_URL = process.env.HERMES_BRIDGE_URL || "https://mya-api.gaelevate.com/p/mya/v1";
 const HERMES_BRIDGE_KEY = process.env.HERMES_BRIDGE_KEY || "";
 
-async function callHermes(messages: any[]): Promise<any> {
-  if (!HERMES_BRIDGE_KEY) {
-    throw new Error("Hermes provider not configured — set HERMES_BRIDGE_KEY in Vercel's environment variables.");
-  }
+async function callHermes(messages: { role: string; content: string }[]): Promise<string> {
   const res = await fetch(`${HERMES_BRIDGE_URL}/chat/completions`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${HERMES_BRIDGE_KEY}`,
       "content-type": "application/json",
     },
-    body: JSON.stringify({
-      model: "mya",
-      messages: messages.map((m: any) => ({
-        role: m.role,
-        content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-      })),
-    }),
+    body: JSON.stringify({ model: "mya", messages }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`Hermes API error ${res.status}: ${text.slice(0, 300)}`);
   }
   const data = await res.json();
-  const text = data?.choices?.[0]?.message?.content || "";
-  // Normalized to the exact same shape callAnthropic() returns, so the tool
-  // loop below never needs to know which provider actually answered.
-  return { content: [{ type: "text", text }] };
-}
-
-async function callModel(provider: ModelProvider, messages: any[]): Promise<any> {
-  return provider === "hermes" ? callHermes(messages) : callAnthropic(messages);
+  const text = data?.choices?.[0]?.message?.content;
+  return typeof text === "string" ? text.trim() : "";
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -1895,7 +1827,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // MCP tool bridge: a JSON-RPC 2.0 body (jsonrpc:"2.0") is unmistakably not
   // the dashboard's own {message,...}/{directTool,...} shapes, so it's safe
   // to branch on that alone before anything else runs — including before
-  // the ANTHROPIC_API_KEY check below, since the bridge doesn't need it.
+  // the Executive Mya check below, since the bridge doesn't need it.
   if ((req.body || {}).jsonrpc === "2.0") {
     const { status, body } = await handleMcpRequest(req.body, req.headers?.authorization as string | undefined);
     if (status === 204) return res.status(204).end();
@@ -1911,13 +1843,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Fast path for the dashboard's own UI controls (the Company Contacts
-  // category dropdown) that already know exactly which tool to call —
-  // skips Claude entirely so a plain UI action doesn't cost a wasted API
-  // call or need ANTHROPIC_API_KEY at all. Chat/voice always goes through
-  // Claude below. Allowlisted to the one tool meant for direct UI use;
-  // undo_last_action was removed (see the Security Review) since it has no
-  // legitimate caller as a direct tool — it's only ever invoked through the
-  // normal chat path, which is unaffected by this allowlist.
+  // category dropdown) that already know exactly which tool to call. No
+  // model is involved. Chat/voice always goes to Executive Mya below.
+  // Allowlisted to the one tool meant for direct UI use; undo_last_action
+  // was removed (see the Security Review) since it has no legitimate caller
+  // as a direct tool.
   const DIRECT_TOOL_ALLOWLIST = new Set(["reclassify_caller"]);
   const directTool = (req.body || {}).directTool;
   if (typeof directTool === "string") {
@@ -1929,23 +1859,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ result });
   }
 
-  // Optional, off-by-default Hermes route (text only, no tools). Anthropic +
-  // SKILLS stays the default; "hermes" is accepted only when this deployment
-  // actually has HERMES_BRIDGE_KEY, so it can never silently fall back.
-  const requestedProvider = (req.body || {}).provider;
-  if (requestedProvider !== undefined && requestedProvider !== "anthropic" && requestedProvider !== "hermes") {
-    return res.status(400).json({ error: "Unknown provider." });
+  // Executive Mya is the only conversational runtime here. Without her
+  // bridge, chat is unavailable. There is deliberately no fallback.
+  if (!HERMES_BRIDGE_KEY) {
+    return res.status(503).json({ error: "executive_mya_unavailable", message: "Executive Mya isn't configured for the Command Center." });
   }
-  const provider: ModelProvider = requestedProvider === "hermes" ? "hermes" : DEFAULT_MODEL_PROVIDER;
-  if (provider === "hermes" && !HERMES_BRIDGE_KEY) {
-    return res.status(400).json({ error: "hermes_not_configured" });
-  }
-  if (provider === "anthropic" && !ANTHROPIC_API_KEY) {
-    return res.status(503).json({ error: "not_configured", message: "ANTHROPIC_API_KEY is not set." });
-  }
-  // Audit label only: the desktop app authenticates with its header key.
-  const chatSurface = commandCenterAuthMethod(req) === "api_key" ? "desktop_app" : "dashboard_or_desktop_chat";
-
   const userMessage = typeof (req.body || {}).message === "string" ? req.body.message.trim() : "";
   if (!userMessage) {
     return res.status(400).json({ error: "message is required" });
@@ -1964,48 +1882,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .slice(-20)
     .map((m: any) => ({ role: m.role, content: m.content }));
 
-  const messages: any[] = [...history, { role: "user", content: userMessage }];
-  const toolsUsed: string[] = [];
+  const messages = [...history, { role: "user", content: userMessage }];
 
   try {
-    for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-      const response = await callModel(provider, messages);
-      const toolUseBlocks = (response.content || []).filter((b: any) => b.type === "tool_use");
-
-      if (toolUseBlocks.length === 0) {
-        const reply = (response.content || [])
-          .filter((b: any) => b.type === "text")
-          .map((b: any) => b.text)
-          .join("\n")
-          .trim() || "Done.";
-        const audioBase64 = wantsVoice ? await synthesizeSpeech(reply) : null;
-        return res.status(200).json({ reply, toolsUsed, audioBase64, provider });
-      }
-
-      const toolResults = await Promise.all(
-        toolUseBlocks.map(async (tu: any) => {
-          const { result, toolUsed } = await executeTool(tu.name, tu.input || {});
-          toolsUsed.push(toolUsed);
-          await logActionEvent({ toolName: toolUsed, input: tu.input || {}, result, surface: chatSurface });
-          return { type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(result) };
-        })
-      );
-
-      messages.push({ role: "assistant", content: response.content });
-      messages.push({ role: "user", content: toolResults });
-    }
-
-    const tooManySteps = "That request took too many steps — try breaking it into something simpler.";
-    return res.status(200).json({
-      reply: tooManySteps,
-      toolsUsed,
-      audioBase64: wantsVoice ? await synthesizeSpeech(tooManySteps) : null,
-      provider,
-    });
+    const reply = await callHermes(messages);
+    if (!reply) return res.status(502).json({ error: "executive_mya_unavailable", message: "Executive Mya didn't answer." });
+    const audioBase64 = wantsVoice ? await synthesizeSpeech(reply) : null;
+    return res.status(200).json({ reply, toolsUsed: [], audioBase64, provider: "hermes" });
   } catch (err: any) {
     console.error("command-center-ask-mya error:", err);
-    // The Hermes route is new code: generic message, never upstream text.
-    if (provider === "hermes") return res.status(502).json({ error: "Hermes didn't answer." });
-    return res.status(500).json({ error: err?.message || "Internal server error" });
+    // Generic message only, never upstream text.
+    return res.status(502).json({ error: "executive_mya_unavailable", message: "Executive Mya didn't answer." });
   }
 }

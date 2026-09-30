@@ -35,31 +35,53 @@
     var voiceStatusEls = document.querySelectorAll("[data-voice-status]");
     var history = [];
     var voiceEnabled = localStorage.getItem("mya-voice-enabled") !== "off";
-    // Optional Hermes route: off by default, per-page (never persisted), and
-    // the toggle only appears while a live Systems check reports Hermes up.
+    // Executive Mya (Hermes) is the only assistant here. Chat is enabled only
+    // while Systems reports her bridge configured, and there's no fallback to
+    // another model. Once enabled, it stays enabled for the page unless
+    // Systems explicitly reports her not configured, so a Systems outage
+    // doesn't lock the owner out. "Connected" is claimed only after a real
+    // reply, and it's cleared again if she fails to answer.
     var useHermes = false;
-    var providerBtn = document.getElementById("mya-provider-toggle");
+    var hermesVerifiedAt = null;
+    var hermesFailed = false;
+    var inFlight = false;
     var runtimeLine = document.getElementById("mya-runtime");
 
-    function hermesUp() {
+    function hermesRoute() {
       var sys = MyaData.get("systems");
       var list = sys && sys.data && Array.isArray(sys.data.systems) ? sys.data.systems : [];
       var hermes = list.filter(function (x) { return x && x.id === "hermes"; })[0];
-      return MyaLib.integrationStatus(hermes, MyaData.freshness("systems")).state === "up";
+      return MyaLib.executiveMyaRoute(hermes, MyaData.freshness("systems"));
     }
+
+    function setRuntimeLine(text) { if (runtimeLine) runtimeLine.textContent = text; }
 
     function applyProviderUI() {
-      var available = hermesUp();
-      if (!available) useHermes = false;
-      providerBtn.hidden = !available;
-      providerBtn.setAttribute("aria-pressed", useHermes ? "true" : "false");
-      providerBtn.querySelector("[data-label]").textContent = useHermes ? "Asking Hermes (text only)" : "Ask the Hermes runtime";
+      var route = hermesRoute();
+      if (route === "hermes") useHermes = true;
+      else if (route === "not_configured") { useHermes = false; hermesVerifiedAt = null; }
+      sendBtn.disabled = inFlight || !useHermes;
+      input.disabled = !useHermes;
+      input.placeholder = useHermes ? "Message Mya…" : "Executive Mya is unavailable";
+      if (useHermes) {
+        setRuntimeLine(hermesFailed
+          ? "Executive Mya didn't answer the last message. Nothing was sent to another assistant."
+          : hermesVerifiedAt
+            ? "Connected to Executive Mya. Last reply at " + new Date(hermesVerifiedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + "."
+            : "Executive Mya (Hermes) is configured. Her first reply confirms the connection.");
+      } else if (route === "not_configured") {
+        setRuntimeLine("Executive Mya is unavailable: the Hermes bridge key isn't set on the server. Chat is off.");
+      } else if (route === "loading") {
+        setRuntimeLine("Checking Executive Mya's runtime…");
+      } else {
+        setRuntimeLine("Executive Mya: Not connected. Can't check her runtime right now, so chat is off.");
+      }
     }
-    providerBtn.addEventListener("click", function () { useHermes = !useHermes; applyProviderUI(); });
     MyaEvents.on("data.changed", function (d) { if (d && d.source === "systems") applyProviderUI(); });
+    applyProviderUI();
     var currentAudio = null;
 
-    // meta (Mya replies only): { toolsUsed, provider } -- shown as small
+    // meta (Mya replies only): { toolsUsed } -- shown as small
     // chips so it's always visible what she actually looked at or changed.
     function addLine(text, role, meta) {
       var line = document.createElement("div");
@@ -387,6 +409,12 @@
     }
 
     function performSend(message) {
+      // Covers every entry point: this form, Home quick-ask, chips and voice.
+      if (!useHermes) {
+        addLine("Executive Mya is unavailable, so nothing was sent.", "mya error");
+        return;
+      }
+      inFlight = true;
       sendBtn.disabled = true;
       addLine(message, "user");
       history.push({ role: "user", content: message });
@@ -396,9 +424,7 @@
       fetch("/api/command-center-ask-mya", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(useHermes
-          ? { message: message, history: history.slice(-20), voice: voiceEnabled, provider: "hermes" }
-          : { message: message, history: history.slice(-20), voice: voiceEnabled }),
+        body: JSON.stringify({ message: message, history: history.slice(-20), voice: voiceEnabled }),
       })
         .then(function (res) {
           if (res.status === 401) {
@@ -414,18 +440,20 @@
           if (!result.ok) {
             var err = result.data.error;
             addLine(
-              err === "not_configured" ? "Mya's brain isn't configured on the server yet, so she can't answer here."
-              : err === "hermes_not_configured" ? "The Hermes runtime isn't configured for the Command Center."
-              : result.status >= 500 ? "Mya hit a problem answering that — try again in a moment."
-              : err || "Something went wrong — try again.",
+              err === "executive_mya_unavailable" || result.status >= 500
+                ? "Executive Mya didn't answer. Nothing was sent to another assistant. Try again in a moment."
+                : err || "Something went wrong — try again.",
               "mya error");
+            if (err === "executive_mya_unavailable" || result.status >= 500) { hermesFailed = true; hermesVerifiedAt = null; applyProviderUI(); }
             MyaEvents.emit("mya.idle", { dev: false });
             MyaCore.settle();
             return;
           }
           var reply = result.data.reply || "(no reply)";
-          addLine(reply, "mya", { toolsUsed: result.data.toolsUsed, provider: result.data.provider });
-          if (runtimeLine) runtimeLine.textContent = MyaLib.providerLabel(result.data.provider) + ".";
+          addLine(reply, "mya", { toolsUsed: result.data.toolsUsed });
+          hermesFailed = false;
+          hermesVerifiedAt = Date.now();
+          applyProviderUI();
           history.push({ role: "assistant", content: reply });
           MyaEvents.emit("mya.responding", { dev: false });
           var playing = playReplyAudio(result.data.audioBase64);
@@ -434,12 +462,13 @@
           MyaData.refreshForTools(result.data.toolsUsed);
         })
         .catch(function () {
-          addLine("Couldn't reach Mya — try again.", "mya error");
+          addLine("Couldn't reach Executive Mya — try again.", "mya error");
           MyaEvents.emit("mya.idle", { dev: false });
           MyaCore.settle();
         })
         .finally(function () {
-          sendBtn.disabled = false;
+          inFlight = false;
+          sendBtn.disabled = !useHermes;
         });
     }
     performSendRef = performSend;
