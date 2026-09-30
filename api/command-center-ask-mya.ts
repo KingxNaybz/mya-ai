@@ -1767,7 +1767,7 @@ async function synthesizeSpeech(text: string): Promise<string | null> {
           // Matches the "V3 Conversational" model the phone agent's voice
           // uses — the older turbo model here sounded noticeably flatter
           // and more robotic than the same voice on a real call.
-          model_id: "eleven_v3",
+          model_id: "eleven_flash_v2_5",  // Flash: ~300ms TTFB vs ~2s for v3 — same voice, much faster for conversation
         }),
       }
     );
