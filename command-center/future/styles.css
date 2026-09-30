@@ -1296,3 +1296,9 @@ html:not(.has-level) .voice-capsule[data-phase="listening"] .vc-meter i { animat
 .vc-mute.is-muted { color: #e6b450; border-color: rgba(230, 180, 80, 0.5); }
 .vc-mute { position: relative; }
 .vc-mute.is-muted::after { content: ""; position: absolute; left: 8px; right: 8px; top: 50%; height: 2px; border-radius: 2px; background: currentColor; transform: rotate(-40deg); }
+/* Narrow phones: the strip Talk becomes a round mic so the Approvals count
+   stays visible; its color still says listening (green) or speaking (gold). */
+@media (max-width: 420px) {
+  .strip-talk { width: 32px; height: 32px; padding: 0; justify-content: center; }
+  .strip-talk [data-talk-short] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+}

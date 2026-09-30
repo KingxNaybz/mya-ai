@@ -22,6 +22,17 @@ nothing is pushed, merged or deployed.
 | a94c9cf | The Core flies between slots on route change |
 | 3c648a6 | Memory: "Ask Mya about “X”" on Hindsight search results, with the results as context |
 
+## Voice (priority #1, 2026-09-30)
+| Commit | What |
+|---|---|
+| 83d005f | Talk from any screen (strip control: Talk / Send / Interrupt); settled vs interim transcript; mic permission checked up front; the turn outlives navigation and its About tag follows the screen; the open project named in the context label; page-only Mute separate from saved Voice replies on/off |
+| 665124e | Capsule "approval" phase with Review; ?dev=1 simulations ending in approval or error |
+| (next) | Round mic in the strip on narrow phones |
+
+Verified locally with a scripted recognizer (fixtures): Idle → Listening → Thinking → (Waiting) → Speaking → Completed/Idle; interrupt by tapping Talk; mute mid-reply; the fixture 503 shows "Executive Mya didn't answer" and nothing is fabricated.
+"Working" has no real signal: `/api/command-center-ask-mya` is one non-streaming request, so the Core only shows Working in the dev simulation.
+Boundary: a real voice conversation needs a Preview deployment with HERMES_BRIDGE_KEY (+ HERMES_BRIDGE_URL once the endpoint is verified) and ELEVENLABS_API_KEY + ELEVENLABS_VOICE_ID scoped to Preview.
+
 Contracts are in `agent-os/standards/frontend/presence-and-ask-mya.md`.
 
 ## Deliberately not faked
