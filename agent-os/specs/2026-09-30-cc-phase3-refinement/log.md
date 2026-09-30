@@ -20,7 +20,7 @@ nothing is pushed, merged or deployed.
 | 3d04153 … e785c20 | Voice experience and Core states; quieter Live tags; gold decision cards; living Constellation; phone/tablet clusters; voice-capsule mute; Devices shows tap-to-talk, mic and wake word |
 | 18a2504 | Preview server: `--mode=fixtures` never drops to the login screen; a local "preview server stopped" screen reconnects by itself |
 | a94c9cf | The Core flies between slots on route change |
-| (this) | Memory: "Ask Mya about “X”" on Hindsight search results, with the results as context |
+| 3c648a6 | Memory: "Ask Mya about “X”" on Hindsight search results, with the results as context |
 
 Contracts are in `agent-os/standards/frontend/presence-and-ask-mya.md`.
 
