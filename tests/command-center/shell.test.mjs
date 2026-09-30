@@ -246,6 +246,21 @@ test("systems overview counts statuses; unknown never counts as up", () => {
   assert.deepEqual(c, { up: 1, down: 1, configured: 0, not_configured: 1, not_observable: 2 });
 });
 
+test("audit labels: surfaces and permission levels are never guessed", () => {
+  assert.match(lib.surfaceLabel("hermes_mcp"), /Hermes/);
+  assert.equal(lib.surfaceLabel("some_new_surface"), "some new surface");
+  assert.equal(lib.permissionLabel(0), "Read");
+  assert.equal(lib.permissionLabel(2), "Write");
+  assert.equal(lib.permissionLabel(3), "Needs approval");
+  assert.equal(lib.permissionLabel(undefined), "Unrated");
+});
+
+test("the audit read never returns tool input", () => {
+  const src = readRoot("api/command-center-data.ts");
+  const sel = src.match(/from\("mya_action_log"\)\s*\.select\("([^"]+)"\)\s*\.order/)[1];
+  assert.doesNotMatch(sel, /\binput\b|\*/);
+});
+
 /* ---------------- Phase 2 static guards ---------------- */
 const BASELINE = "59e8c0d";
 const readRoot = (f) => fs.readFileSync(path.join(ROOT, f), "utf8");

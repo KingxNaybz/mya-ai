@@ -247,6 +247,35 @@ async function handleSystems(res: VercelResponse) {
   }
 }
 
+/**
+ * ?type=audit — the most recent entries of Mya's audit trail
+ * (mya_action_log), read-only, for the Operations screen. Returns only what
+ * the screen needs: tool, permission level, which surface asked, and the
+ * outcome and time. The tool input is never returned. Attribution comes
+ * from requested_by (the surface that made the call). model_provider is not
+ * used, because the insert path (logActionEvent) still records "anthropic"
+ * for every entry.
+ */
+const AUDIT_LIMIT = 25;
+
+async function handleAudit(res: VercelResponse) {
+  try {
+    const { data, error } = await supabase
+      .from("mya_action_log")
+      .select("tool_name, permission_level, requested_by, result_summary, created_at")
+      .order("created_at", { ascending: false })
+      .limit(AUDIT_LIMIT);
+    if (error) {
+      console.error("command-center-data GET audit error:", error);
+      return res.status(502).json({ error: "Couldn't read the audit log." });
+    }
+    return res.status(200).json({ entries: data || [], limit: AUDIT_LIMIT });
+  } catch (err: any) {
+    console.error("command-center-data GET audit error:", err);
+    return res.status(500).json({ error: "Couldn't read the audit log." });
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -262,6 +291,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.query.type === "systems") return handleSystems(res);
+  if (req.query.type === "audit") return handleAudit(res);
 
   const todayIso = startOfTodayAtlanta();
   const tomorrowIso = startOfTomorrowAtlanta();

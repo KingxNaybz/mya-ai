@@ -225,6 +225,27 @@
     evaluate_bid_price: "Evaluated a bid price"
   };
 
+  // Who asked for an audited action: the surface recorded in
+  // mya_action_log.requested_by. An unknown surface is shown as-is, never
+  // guessed.
+  var SURFACE_LABELS = {
+    hermes_mcp: "Hermes, via the MCP read bridge",
+    dashboard_direct_ui: "You, in the Command Center",
+    desktop_app: "Windows desktop app",
+    dashboard_or_desktop_chat: "Command Center chat (before Executive Mya)"
+  };
+  function surfaceLabel(surface) {
+    return SURFACE_LABELS[surface] || String(surface || "Unknown source").replace(/_/g, " ");
+  }
+
+  // Permission levels as getPermissionLevel() assigns them
+  // (agent-os/standards/api/mya-skills-permissions.md): 0 read (by name
+  // prefix), 2 write (the default for everything else), 3 needs approval.
+  // Level 1 isn't assigned today.
+  function permissionLabel(level) {
+    return level === 0 ? "Read" : level === 1 || level === 2 ? "Write" : level >= 3 ? "Needs approval" : "Unrated";
+  }
+
   function toolLabel(name) {
     if (TOOL_LABELS[name]) return TOOL_LABELS[name];
     var words = String(name || "tool").replace(/_/g, " ").trim();
@@ -366,6 +387,8 @@
     systemsDown: systemsDown,
     countSystemStatuses: countSystemStatuses,
     toolLabel: toolLabel,
+    surfaceLabel: surfaceLabel,
+    permissionLabel: permissionLabel,
     executiveMyaRoute: executiveMyaRoute,
     derivePresence: derivePresence,
     buildScreenContext: buildScreenContext,

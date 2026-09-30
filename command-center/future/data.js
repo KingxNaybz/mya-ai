@@ -24,7 +24,8 @@
     followups:   { url: "/api/command-center-followups",           label: "Follow-ups" },
     contractors: { url: "/api/command-center-contractors",         label: "Contractors" },
     systems:     { url: "/api/command-center-data?type=systems",    label: "System health" },
-    approvalsRecent: { url: "/api/command-center-approvals?status=recent", label: "Approval history" }
+    approvalsRecent: { url: "/api/command-center-approvals?status=recent", label: "Approval history" },
+    audit:       { url: "/api/command-center-data?type=audit",      label: "Audit log" }
   };
 
   // External systems that live OUTSIDE this repo. These are descriptions

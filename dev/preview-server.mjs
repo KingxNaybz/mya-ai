@@ -66,6 +66,12 @@ function sys(id, name, status, detail, extra) {
 
 function fixtures(route, url) {
   switch (route) {
+    case "/api/command-center-data?type=audit":
+      return { limit: 25, entries: [
+        { tool_name: "get_project", permission_level: 0, requested_by: "hermes_mcp", result_summary: "success", created_at: ago(8) },
+        { tool_name: "reclassify_caller", permission_level: 2, requested_by: "dashboard_direct_ui", result_summary: "success", created_at: ago(95) },
+        { tool_name: "list_projects", permission_level: 0, requested_by: "hermes_mcp", result_summary: "error", created_at: ago(240) },
+      ] };
     case "/api/command-center-data?type=systems":
       return { generatedAt: new Date().toISOString(), systems: [
         sys("supabase", "Database (Supabase)", "up", "Business data storage — responding."),

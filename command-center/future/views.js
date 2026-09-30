@@ -547,6 +547,15 @@
     renderList("ops-activity", "data", d && d.recentActivity, function (a) {
       return row(h(a.text), "", '<span class="time">' + h(MyaLib.formatRelative(a.time)) + "</span>");
     }, "No recent calls or intakes.", "Activity");
+    var au = payload("audit");
+    renderList("ops-audit", "audit", au && au.entries && au.entries.slice(0, 8), function (x) {
+      var failed = x.result_summary === "error";
+      var level = typeof x.permission_level === "number" ? x.permission_level : null;
+      return row(h(MyaLib.toolLabel(x.tool_name)),
+        h(MyaLib.surfaceLabel(x.requested_by)) + " · " + h(MyaLib.formatRelative(x.created_at)),
+        (failed ? '<span class="chip-tag red">Failed</span>' : "") +
+        '<span class="chip-tag' + (level >= 2 ? " gold" : "") + '">' + h(MyaLib.permissionLabel(level)) + "</span>");
+    }, "Nothing recorded yet.", "The audit log");
     var al = payload("alerts");
     renderList("ops-alerts", "alerts", al && al.alerts, function (x) {
       return '<div class="row row-amber"><div class="row-main"><span class="alert-text"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>' + h(x.message) + "</span></div></div>";
