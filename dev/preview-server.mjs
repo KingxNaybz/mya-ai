@@ -24,6 +24,10 @@
  *                after the first load (so pressing Refresh shows Stale).
  *   login        Every API route returns 401 -- exercises the login overlay.
  *
+ * Watch Mya: --computer=active|offline|off (fixtures only) drives a SYNTHETIC
+ * computer session through the real lib/computer.ts rules; see computerFixture.
+ * /__preview/reset also restarts that task under Mya control.
+ *
  * Phase 2: --hindsight=down (fixtures mode only) makes the synthetic System
  * health report Hindsight as Down, to review that state; default is up.
  *
@@ -41,6 +45,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import * as computer from "../lib/computer.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const PORT = Number(process.env.PORT || 4173);
@@ -66,7 +71,7 @@ const BANNER = `<style>body{padding-top:${BANNER_H}px}.strip{top:${BANNER_H}px!i
 
 // Fixtures-only: replace the misleading Production login overlay with a
 // local-dev offline screen that reconnects by itself (see header comment).
-const KEEPALIVE = `<style>#mf-login-overlay{display:none!important}#pv-offline{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;background:#0b0d12;color:#e8eaf0;font:15px/1.5 system-ui,sans-serif}#pv-offline[hidden]{display:none}#pv-offline div{max-width:30rem}#pv-offline h1{font-size:18px;margin:0 0 8px}#pv-offline code{background:#1b1f29;padding:1px 5px;border-radius:4px}#pv-offline button{margin-top:14px;font:inherit;padding:6px 14px;border-radius:6px;border:1px solid #3a4152;background:#1b1f29;color:inherit;cursor:pointer}</style>` +
+const KEEPALIVE = `<style>#mf-login-overlay{display:none!important}.watch-viewport::before{content:"SYNTHETIC FIXTURE · NOT A REAL SCREEN";position:absolute;z-index:3;top:10px;left:10px;max-width:calc(100% - 130px);padding:3px 9px;border-radius:6px;background:#e6a23c;color:#1c1300;font:700 10.5px/1.2 system-ui,sans-serif;letter-spacing:.08em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}@media (max-width:560px){.watch-viewport::before{content:"SYNTHETIC · NOT REAL";font-size:9.5px}}#pv-offline{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;background:#0b0d12;color:#e8eaf0;font:15px/1.5 system-ui,sans-serif}#pv-offline[hidden]{display:none}#pv-offline div{max-width:30rem}#pv-offline h1{font-size:18px;margin:0 0 8px}#pv-offline code{background:#1b1f29;padding:1px 5px;border-radius:4px}#pv-offline button{margin-top:14px;font:inherit;padding:6px 14px;border-radius:6px;border:1px solid #3a4152;background:#1b1f29;color:inherit;cursor:pointer}</style>` +
   `<div id="pv-offline" role="alert" hidden><div><h1>Local preview server stopped</h1><p>This is the local fixture preview, and <code>node dev/preview-server.mjs --mode=fixtures</code> isn't responding. Start it again and this page reconnects on its own. Production isn't involved.</p><p id="pv-offline-status">Checking…</p><button type="button" id="pv-offline-retry">Retry now</button></div></div>` +
   `<script>(function(){var box=document.getElementById("pv-offline"),st=document.getElementById("pv-offline-status"),down=false;` +
   `function ping(){return fetch("/__preview/ping",{cache:"no-store"}).then(function(r){return r.ok&&r.json()}).then(function(j){return !!(j&&j.mode==="fixtures")},function(){return false})}` +
@@ -75,6 +80,90 @@ const KEEPALIVE = `<style>#mf-login-overlay{display:none!important}#pv-offline{p
   `new MutationObserver(function(){if(loginShown())check()}).observe(document.documentElement,{subtree:true,attributes:true,attributeFilter:["hidden"]});` +
   `document.getElementById("pv-offline-retry").onclick=check;setInterval(function(){if(down||document.visibilityState==="visible")check()},5000);` +
   `document.addEventListener("visibilitychange",function(){if(document.visibilityState==="visible")check()});addEventListener("focus",check);addEventListener("online",check);check()})()</script>`;
+
+/* ---------------- Watch Mya fixture (fixtures mode only) ----------------
+ * A SYNTHETIC computer session so the Watch Mya view can be reviewed. The
+ * control rules are the real ones: this imports lib/computer.ts, so Pause /
+ * Take control / Stop behave exactly as the API does. Every frame is an SVG
+ * drawing of a fake browser with "SYNTHETIC — NOT A REAL SCREEN" across it,
+ * and the injected KEEPALIVE style stamps the viewport too.
+ *   --computer=active (default)  a scripted task that steps forward while Mya has control
+ *   --computer=offline           heartbeat 10 minutes old
+ *   --computer=off               503 not_configured (storage not set up)
+ */
+const COMPUTER_FIXTURE = (process.argv.find((a) => a.startsWith("--computer=")) || "--computer=active").slice(11);
+const FX_APP = "Chrome · Houzz Pro (synthetic)";
+const FX_STEPS = [
+  { step: "Opening Fixture Project 2", page: "Projects" },
+  { step: "Opening the estimate", page: "Estimate" },
+  { step: "Reading the line items", page: "Estimate" },
+  { step: "Changing drywall to 44 sheets", page: "Edit line item" },
+  { step: "Ready to send the revised estimate to Fixture Client B", page: "Send estimate", status: "approval" },
+];
+let fxSeq = 1;
+const fx = { session: null, events: [], stepIdx: 0, stepAt: 0, doneAt: 0 };
+function fxEvent(kind, text, by = "mya") { fx.events.unshift({ at: new Date().toISOString(), kind, text, app: fx.session.app, by }); fx.events.length = Math.min(fx.events.length, 30); }
+function fxNewTask(control) {
+  const t = Date.now();
+  fx.session = { ...computer.emptySession(), deviceName: "Fixture PC (synthetic)", taskId: "fx-" + fxSeq++,
+    task: "Update Fixture Project 2's estimate and send it (synthetic)", app: FX_APP, step: FX_STEPS[0].step,
+    status: "working", control, controlChangedAt: new Date(t).toISOString(), controlChangedBy: "owner", startedAt: new Date(t - 42000).toISOString() };
+  fx.stepIdx = 0; fx.stepAt = t; fx.doneAt = 0; fx.events = [];
+  fxEvent("step", "Opened Chrome and signed-in Houzz Pro (synthetic)");
+  fxEvent("step", FX_STEPS[0].step);
+}
+function fxTick() {
+  if (!fx.session) fxNewTask("mya");
+  const s = fx.session, now = Date.now();
+  s.heartbeatAt = new Date(COMPUTER_FIXTURE === "offline" ? now - 600000 : now).toISOString();
+  s.frameAt = s.heartbeatAt;
+  if ((s.status === "stopped" || s.status === "completed") && fx.doneAt && now - fx.doneAt > 20000) return fxNewTask("paused");
+  if ((s.status === "stopped" || s.status === "completed") && !fx.doneAt) fx.doneAt = now;
+  if (s.control !== "mya" || s.status !== "working" || now - fx.stepAt < 4000) return;
+  fx.stepIdx += 1; fx.stepAt = now;
+  const st = FX_STEPS[Math.min(fx.stepIdx, FX_STEPS.length - 1)];
+  s.step = st.step;
+  if (st.status === "approval") { s.status = "approval"; s.approvalId = null; fxEvent("approval", "Needs your approval: send the revised estimate (synthetic)"); }
+  else fxEvent(fx.stepIdx === 3 ? "action" : "step", st.step);
+}
+function fxFrame() {
+  const s = fx.session, st = FX_STEPS[Math.min(fx.stepIdx, FX_STEPS.length - 1)];
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const rows = [["Wall framing", "120 lf", "$2,160"], ["Drywall", fx.stepIdx >= 3 ? "44 sheet" : "40 sheet", fx.stepIdx >= 3 ? "$2,420" : "$2,200"], ["Paint", "1 job", "$1,150"]];
+  const cursor = [[380, 170], [520, 210], [600, 300], [640, 352], [980, 560]][Math.min(fx.stepIdx, 4)];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" width="1280" height="800">
+<rect width="1280" height="800" fill="#f4f5f7"/><rect width="1280" height="44" fill="#dfe3ea"/>
+<rect x="14" y="10" width="150" height="26" rx="6" fill="#fff"/><text x="28" y="28" font-family="Arial" font-size="13" fill="#333">${esc(st.page)} — Houzz Pro</text>
+<rect x="190" y="10" width="760" height="26" rx="13" fill="#fff"/><text x="206" y="28" font-family="Arial" font-size="13" fill="#666">pro.houzz.example/projects/fixture-2 (synthetic)</text>
+<rect x="0" y="44" width="220" height="756" fill="#23303f"/>${["Dashboard", "Projects", "Estimates", "Clients", "Schedule"].map((t, i) => `<text x="28" y="${96 + i * 40}" font-family="Arial" font-size="15" fill="${i === 2 ? "#7fd0ff" : "#c9d3de"}">${t}</text>`).join("")}
+<text x="260" y="104" font-family="Arial" font-size="26" font-weight="bold" fill="#1d2733">Fixture Project 2 · ${esc(st.page)}</text>
+<text x="260" y="134" font-family="Arial" font-size="14" fill="#5b6773">Fixture Client B · Estimating</text>
+${rows.map((r, i) => `<rect x="260" y="${170 + i * 56}" width="960" height="46" rx="6" fill="${fx.stepIdx === 3 && i === 1 ? "#fff6d6" : "#fff"}" stroke="#dde2e8"/><text x="280" y="${199 + i * 56}" font-family="Arial" font-size="15" fill="#1d2733">${r[0]}</text><text x="700" y="${199 + i * 56}" font-family="Arial" font-size="15" fill="#5b6773">${r[1]}</text><text x="1110" y="${199 + i * 56}" font-family="Arial" font-size="15" fill="#1d2733">${r[2]}</text>`).join("")}
+<rect x="900" y="530" width="220" height="48" rx="8" fill="${s.status === "approval" ? "#d9a441" : "#1f7ae0"}"/><text x="1010" y="560" text-anchor="middle" font-family="Arial" font-size="16" font-weight="bold" fill="#fff">Send estimate</text>
+<path d="M${cursor[0]} ${cursor[1]} l0 26 l7 -7 l6 13 l5 -2 l-6 -13 l10 0 z" fill="#111" stroke="#fff" stroke-width="1.5"/>
+<g transform="rotate(-18 640 400)" opacity="0.2"><text x="640" y="380" text-anchor="middle" font-family="Arial" font-size="68" font-weight="bold" fill="#c0392b">SYNTHETIC</text><text x="640" y="450" text-anchor="middle" font-family="Arial" font-size="40" font-weight="bold" fill="#c0392b">NOT A REAL SCREEN</text></g>
+</svg>`;
+  return "data:image/svg+xml;base64," + Buffer.from(svg).toString("base64");
+}
+function computerFixture(route, req, body) {
+  if (COMPUTER_FIXTURE === "off") return { status: 503, body: { error: "not_configured", message: "Watch Mya's storage isn't set up yet." } };
+  fxTick();
+  if (route === "/api/command-center-data?type=computer" && req.method === "GET") {
+    return { status: 200, body: { generatedAt: new Date().toISOString(), session: fx.session, connection: computer.connectionState(fx.session.heartbeatAt, Date.now()), events: fx.events } };
+  }
+  if (route === "/api/command-center-data?type=computer-frame" && req.method === "GET") {
+    return { status: 200, body: { frame: COMPUTER_FIXTURE === "offline" ? null : fxFrame(), frameAt: fx.session.frameAt } };
+  }
+  if (route === "/api/command-center-data?type=computer-control" && req.method === "POST") {
+    const out = computer.applyOwnerAction(fx.session, body && body.action, new Date().toISOString());
+    if (!out.ok) return { status: 409, body: { error: out.error } };
+    fx.session = out.session;
+    if (body.action === "resume" || body.action === "return") fx.stepAt = Date.now();
+    fx.events.unshift({ ...out.event });
+    return { status: 200, body: { session: fx.session } };
+  }
+  return null;
+}
 
 const ago = (mins) => new Date(Date.now() - mins * 60000).toISOString();
 let approvalsCalls = 0;
@@ -208,6 +297,18 @@ function handleApi(req, res, url) {
     if (req.method === "POST") return sendJson(res, 200, { ok: true }); // logout / no-op; real login only exists on Vercel
     return sendJson(res, 200, MODE === "fixtures" ? fixtures(route) : { settings: null });
   }
+  if (MODE === "fixtures" && url.pathname === "/api/command-center-data" && /^computer/.test(type || "")) {
+    let raw = "";
+    req.on("data", (c) => { raw += c; if (raw.length > 1e5) req.destroy(); });
+    req.on("end", () => {
+      let body = null;
+      try { body = raw ? JSON.parse(raw) : null; } catch { body = null; }
+      const out = computerFixture(route, req, body);
+      if (!out) return sendJson(res, 405, { error: "Method not allowed" });
+      sendJson(res, out.status, out.body);
+    });
+    return;
+  }
   if (url.pathname === "/api/command-center-ask-mya" && req.method === "POST") {
     return sendJson(res, 503, { error: "executive_mya_unavailable", message: "Local preview — Executive Mya isn't connected here, so she can't answer." });
   }
@@ -245,7 +346,7 @@ function serveStatic(res, url) {
 http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (url.pathname === "/__preview/ping") return sendJson(res, 200, { ok: true, mode: MODE }); // fixtures keepalive (see KEEPALIVE)
-  if (url.pathname === "/__preview/reset") { approvalsCalls = 0; return sendJson(res, 200, { ok: true }); } // lets a reviewer (or the checks) replay the Live -> Stale sequence
+  if (url.pathname === "/__preview/reset") { approvalsCalls = 0; if (MODE === "fixtures") fxNewTask("mya"); return sendJson(res, 200, { ok: true }); } // lets a reviewer (or the checks) replay the Live -> Stale sequence
   if (url.pathname.startsWith("/api/")) return handleApi(req, res, url);
   if (url.pathname === "/" ) { res.writeHead(302, { Location: "/command-center/future/index.html" }); return res.end(); }
   return serveStatic(res, url);

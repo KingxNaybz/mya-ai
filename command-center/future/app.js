@@ -9,7 +9,7 @@
  * rendered. This file introduces no second authentication mechanism.
  *
  * Load order (index.html): lib -> mya-events -> core -> data -> chat ->
- * voice -> presence -> ask-about -> views -> shell -> app.
+ * voice -> presence -> ask-about -> views -> watch -> shell -> app.
  */
 (function () {
   "use strict";
@@ -103,6 +103,7 @@
     MyaCore.setState("idle");
     MyaShell.init(settings);
     MyaViews.init();
+    MyaWatch.init();
     MyaPresence.init();
     MyaAskAbout.init();
     MyaChat.init();

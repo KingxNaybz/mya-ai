@@ -25,8 +25,14 @@
     contractors: { url: "/api/command-center-contractors",         label: "Contractors" },
     systems:     { url: "/api/command-center-data?type=systems",    label: "System health" },
     approvalsRecent: { url: "/api/command-center-approvals?status=recent", label: "Approval history" },
-    audit:       { url: "/api/command-center-data?type=audit",      label: "Audit log" }
+    audit:       { url: "/api/command-center-data?type=audit",      label: "Audit log" },
+    // Watch Mya. On demand: polled by watch.js at its own pace (fast only
+    // while a task is running or you're watching), never by the 60s
+    // refresh-all, and kept out of the status strip's worst-of.
+    computer:      { url: "/api/command-center-data?type=computer",       label: "Mya's computer session", onDemand: true },
+    computerFrame: { url: "/api/command-center-data?type=computer-frame", label: "Mya's screen", onDemand: true }
   };
+  function polled(name) { return !SOURCES[name].onDemand; }
 
   // External systems that live OUTSIDE this repo. These are descriptions
   // only -- never data. Their status comes exclusively from the "systems"
@@ -149,7 +155,7 @@
   }
 
   function refreshAll() {
-    return Promise.all(Object.keys(SOURCES).map(fetchSource));
+    return Promise.all(Object.keys(SOURCES).filter(polled).map(fetchSource));
   }
 
   function freshness(name, now) {
@@ -157,7 +163,7 @@
   }
 
   function allFreshness(now) {
-    return Object.keys(SOURCES).map(function (name) { return freshness(name, now); });
+    return Object.keys(SOURCES).filter(polled).map(function (name) { return freshness(name, now); });
   }
 
   function lastSyncAt() {

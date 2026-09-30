@@ -140,8 +140,9 @@
   // What the Core shows when nothing is happening. MyaPresence sets it to
   // "awaiting-approval" while real approvals are pending, so the Core itself
   // tells you she's waiting on you, and to "blocked" while Executive Mya
-  // can't be reached. Only ever idle, awaiting-approval or blocked.
-  var RESTING = ["idle", "awaiting-approval", "blocked"];
+  // can't be reached. While the Windows Agent reports a real computer task
+  // (Watch Mya), she rests in "working" or "waiting" for as long as it runs.
+  var RESTING = ["idle", "awaiting-approval", "blocked", "working", "waiting"];
   var resting = "idle";
   function restingState() { return resting; }
   function setResting(stateName) {

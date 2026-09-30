@@ -278,6 +278,8 @@
     return t.length > max ? t.slice(0, max - 1) + "…" : t;
   }
 
+  function extendObj(a, b) { for (var k in b) if (Object.prototype.hasOwnProperty.call(b, k)) a[k] = b[k]; return a; }
+
   function derivePresence(s, now) {
     s = s || {};
     now = now == null ? Date.now() : now;
@@ -292,6 +294,17 @@
     if (s.core === "speaking") return { state: "speaking", label: "Speaking", detail: "Replying now" };
     if (s.capturing) {
       return { state: "listening", label: "Listening", detail: s.transcript ? "“" + snippet(s.transcript, 60) + "”" : "Go ahead, I'm listening" };
+    }
+    // A real computer task (Watch Mya): only while the agent is reporting.
+    var c = s.computer;
+    if (c && c.active && c.connection !== "offline") {
+      var cs = c.session, where = cs.app ? " · " + snippet(cs.app, 28) : "";
+      var base = { computer: true };
+      if (cs.status === "approval") return extendObj(base, { state: "approval", label: "Needs your approval", detail: snippet(cs.step || cs.task, 60) });
+      if (cs.control === "user") return extendObj(base, { state: "waiting", label: "You have control", detail: "Mya is waiting" + where });
+      if (cs.control === "paused") return extendObj(base, { state: "waiting", label: "Paused", detail: snippet(cs.task, 60) });
+      if (cs.status === "blocked") return extendObj(base, { state: "blocked", label: "Blocked" + where, detail: snippet(cs.step || cs.task, 60) });
+      return extendObj(base, { state: cs.status === "waiting" ? "waiting" : "working", label: (cs.status === "waiting" ? "Waiting" : "Working") + where, detail: snippet(cs.step || cs.task, 60) });
     }
     if (out && !out.ok && age < FAILED_HOLD_MS) {
       return { state: "error", label: "Didn't answer", detail: "Her last reply failed. Nothing was sent elsewhere." };
@@ -393,6 +406,113 @@
     return out;
   }
 
+
+  /* ---------------- Watch Mya ----------------
+     What the Command Center shows about Mya's computer work, from the
+     "computer" source (GET ?type=computer; contract in lib/computer.ts).
+     Everything is derived from a real report: the connection comes from
+     the agent's heartbeat age, never assumed, and with no heartbeat the
+     control banner says Not connected rather than claiming anything. */
+  var CONTROL_INFO = {
+    mya: { cls: "mya", label: "Mya control", detail: "Mya is operating the computer. You're watching." },
+    user: { cls: "user", label: "Your control", detail: "You have the computer. Mya issues no mouse or keyboard input." },
+    paused: { cls: "paused", label: "Paused", detail: "Her task is kept. She issues no input until you resume." }
+  };
+  var TASK_ACTIVE = ["working", "waiting", "approval", "blocked"];
+  var WATCH_LIVE_MS = 15000, WATCH_STALE_MS = 120000;
+
+  function heartbeatState(iso, now) {
+    var t = iso ? Date.parse(iso) : NaN;
+    if (!isFinite(t)) return "offline";
+    var age = now - t;
+    return age < WATCH_LIVE_MS ? "live" : age < WATCH_STALE_MS ? "stale" : "offline";
+  }
+
+  // entry: MyaData.get("computer"). Returns a view model:
+  //   state       "ok" | "loading" | "not_configured" | "offline"
+  //   connection  "live" | "stale" | "offline" (agent heartbeat)
+  //   control     { cls, label, detail } -- the banner
+  //   active      a task is in progress
+  //   coreState   the Core state her real activity maps to, or null
+  function computerView(entry, now) {
+    now = now == null ? Date.now() : now;
+    var f = computeFreshness(entry, now);
+    var data = entry && entry.data;
+    if (!data || !data.session) {
+      if (f.state === "loading") return { state: "loading" };
+      var nc = entry && /\b503\b/.test(String(entry.lastError || ""));
+      return { state: nc ? "not_configured" : "offline" };
+    }
+    var s = data.session;
+    var connection = heartbeatState(s.heartbeatAt, now);
+    var active = TASK_ACTIVE.indexOf(s.status) !== -1 && Boolean(s.task);
+    var control = connection === "offline"
+      ? { cls: "offline", label: "Not connected", detail: "The Windows Agent isn't reporting, so nothing is being controlled from here." }
+      : CONTROL_INFO[s.control] || CONTROL_INFO.paused;
+    var coreState = null;
+    if (connection !== "offline" && active) {
+      coreState = s.status === "approval" ? "awaiting-approval"
+        : s.status === "blocked" ? "blocked"
+        : s.control !== "mya" ? "waiting"
+        : s.status === "waiting" ? "waiting" : "working";
+    }
+    var started = s.startedAt ? Date.parse(s.startedAt) : NaN;
+    return {
+      state: "ok",
+      stale: f.state === "stale",
+      session: s,
+      connection: connection,
+      control: control,
+      active: active,
+      coreState: coreState,
+      elapsedMs: active && isFinite(started) ? Math.max(0, now - started) : null,
+      events: Array.isArray(data.events) ? data.events : []
+    };
+  }
+
+  // Which owner controls apply right now. Take Control is always offered
+  // (fail safe: it's stored and obeyed the moment the agent next reports).
+  function computerControls(view) {
+    var s = view && view.session;
+    var hasTask = Boolean(s && s.task) && s.status !== "stopped" && s.status !== "completed";
+    var c = s ? s.control : null;
+    return {
+      pause: c === "mya",
+      resume: c === "paused" && hasTask,
+      take: c !== "user",
+      "return": c === "user" && hasTask,
+      stop: hasTask
+    };
+  }
+
+  // Spoken words that must act at once while she works, before (and as
+  // well as) going to Executive Mya. Only ever toward LESS control for
+  // her: "stop"/"wait"/"don't submit" pause her, "I'll take over" takes
+  // control. Giving control back ("continue") is never done by voice
+  // alone; that goes to Mya and the Resume button stays yours.
+  function watchVoiceIntent(text) {
+    var t = String(text || "").toLowerCase().replace(/[^a-z' ]+/g, " ").replace(/\s+/g, " ").trim();
+    if (!t) return null;
+    if (/\b(i'?ll take (it )?over|let me take over|i'?m taking over|take over|i'?ll do it|my turn|give me control|i have it)\b/.test(t)) return "take";
+    if (/^(mya )?(stop|stop that|stop it|wait|hold on|hold it|pause|freeze)\b/.test(t) || /\bdon'?t (submit|send|click|do that|press)\b/.test(t)) return "pause";
+    return null;
+  }
+
+  function formatElapsed(ms) {
+    if (ms == null) return "";
+    var sec = Math.floor(ms / 1000);
+    if (sec < 60) return sec + "s";
+    var m = Math.floor(sec / 60);
+    if (m < 60) return m + "m " + (sec % 60) + "s";
+    return Math.floor(m / 60) + "h " + (m % 60) + "m";
+  }
+
+  // What the frame source may render: raster data URLs from the agent, or
+  // SVG (drawn by the local preview only; an <img> never runs its script).
+  function safeFrameSrc(frame) {
+    return typeof frame === "string" && /^data:image\/(jpeg|png|webp|svg\+xml)(;base64)?,/.test(frame) ? frame : null;
+  }
+
   /* ---------------- "Ask Mya about this" context ----------------
      A short, plain-text note of what the owner is looking at, sent to
      Executive Mya along with the question so she knows which screen it's
@@ -403,7 +523,7 @@
        src[name] = { state: "live"|"stale"|"offline"|"loading", data } */
   var CONTEXT_VIEWS = {
     projects: "Projects", approvals: "Approvals", memory: "Memory", files: "Files",
-    operations: "Operations", devices: "Devices", systems: "Systems"
+    operations: "Operations", devices: "Devices", systems: "Systems", watch: "Watch Mya"
   };
   var CONTEXT_MAX_ITEMS = 8;
 
@@ -447,6 +567,20 @@
         lines.push(al.length ? al.length + " pending approval(s) on screen" + stale(ae) + ":" : "No pending approvals on screen" + stale(ae) + ".");
         al.slice(0, CONTEXT_MAX_ITEMS).forEach(function (x) { lines.push("- " + x.title + (x.detail ? ": " + x.detail : "")); });
       }
+    } else if (view === "watch") {
+      var ce = src.computer;
+      var cv = computerView(ce && { data: ce.data, lastSuccessAt: ce.state === "live" || ce.state === "stale" ? 1 : 0, lastAttemptAt: 0 }, Date.now());
+      if (cv.state !== "ok") lines.push("Mya's computer session: not connected on this screen right now.");
+      else {
+        var cs = cv.session;
+        lines.push("Mya's computer session" + (ce.state === "stale" ? " (last known, may be stale)" : "") + ": " + cv.control.label +
+          " (" + cv.connection + ")" + (cs.deviceName ? " on " + cs.deviceName : "") + ".");
+        if (cs.task) lines.push("Task: " + cs.task + " · status " + cs.status + ".");
+        if (cs.app) lines.push("Application: " + cs.app + ".");
+        if (cs.step) lines.push("Current step: " + cs.step + ".");
+        cv.events.slice(0, 5).forEach(function (e) { lines.push("- " + e.text); });
+        focus = cs.app || null;
+      }
     } else if (view === "systems") {
       var se = src.systems;
       var sn = sourceNote(se, "System health");
@@ -484,6 +618,11 @@
     executiveMyaRoute: executiveMyaRoute,
     derivePresence: derivePresence,
     voiceCapsule: voiceCapsule,
+    computerView: computerView,
+    computerControls: computerControls,
+    watchVoiceIntent: watchVoiceIntent,
+    formatElapsed: formatElapsed,
+    safeFrameSrc: safeFrameSrc,
     VOICE_ERRORS: VOICE_ERRORS,
     WAITING_AFTER_MS: WAITING_AFTER_MS,
     buildScreenContext: buildScreenContext,

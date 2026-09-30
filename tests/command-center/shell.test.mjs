@@ -405,3 +405,41 @@ test("voice capsule: approval needed leads to Approvals; dev simulations never t
   assert.match(sims, /dev=1/);
   assert.doesNotMatch(sims, /MyaChat\.send|addLine|chat\.line|fetch\(/);
 });
+
+test("Watch Mya: the banner and Core follow the real heartbeat and control, never assumed", () => {
+  const sess = (o) => ({ task: "Update estimate", status: "working", control: "mya", heartbeatAt: new Date(NOW - 2000).toISOString(), startedAt: new Date(NOW - 65000).toISOString(), ...o });
+  const V = (session, extra = {}) => lib.computerView({ data: { session, events: [] }, lastSuccessAt: NOW, lastAttemptAt: NOW, ...extra }, NOW);
+  const live = V(sess());
+  assert.equal(live.connection, "live");
+  assert.equal(live.control.label, "Mya control");
+  assert.equal(live.coreState, "working");
+  assert.equal(lib.formatElapsed(live.elapsedMs), "1m 5s");
+  assert.equal(V(sess({ control: "user" })).control.label, "Your control");
+  assert.equal(V(sess({ control: "user" })).coreState, "waiting");
+  assert.equal(V(sess({ status: "approval" })).coreState, "awaiting-approval");
+  // No heartbeat: Not connected, and the Core claims nothing.
+  const dead = V(sess({ heartbeatAt: new Date(NOW - 600000).toISOString() }));
+  assert.equal(dead.control.label, "Not connected");
+  assert.equal(dead.coreState, null);
+  assert.equal(lib.computerView({ data: null, lastError: "HTTP 503", lastAttemptAt: NOW }, NOW).state, "not_configured");
+  assert.equal(lib.computerView(null, NOW).state, "offline");
+});
+
+test("Watch Mya: controls on offer, and Take control is always there", () => {
+  const C = (o) => lib.computerControls({ session: { task: "t", status: "working", control: "mya", ...o } });
+  assert.deepEqual(C({}), { pause: true, resume: false, take: true, return: false, stop: true });
+  assert.deepEqual(C({ control: "user" }), { pause: false, resume: false, take: false, return: true, stop: true });
+  assert.deepEqual(C({ control: "paused" }), { pause: false, resume: true, take: true, return: false, stop: true });
+  assert.equal(C({ status: "stopped", control: "paused" }).take, true);
+  assert.equal(C({ status: "stopped", control: "paused" }).resume, false);
+});
+
+test("Watch Mya: spoken words only ever take control away from her", () => {
+  const I = lib.watchVoiceIntent;
+  for (const t of ["Stop.", "Mya, stop", "wait", "hold on", "Don't submit that", "don't click that"]) assert.equal(I(t), "pause", t);
+  for (const t of ["I'll take over", "let me take over", "my turn"]) assert.equal(I(t), "take", t);
+  for (const t of ["Continue", "go ahead", "resume", "open that project", "go back", "check the estimate", "", "stopwatch the timer"]) assert.equal(I(t), null, t);
+  assert.equal(lib.safeFrameSrc("javascript:alert(1)"), null);
+  assert.equal(lib.safeFrameSrc("data:text/html;base64,AAA"), null);
+  assert.ok(lib.safeFrameSrc("data:image/jpeg;base64,AAA"));
+});

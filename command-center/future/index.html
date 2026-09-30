@@ -19,8 +19,8 @@
      bump N in every tag below whenever any of them changes. The service
      worker (sw.js) is network-first for these, so a new N is picked up on
      the next online load. -->
-<link rel="stylesheet" href="styles.css?v=42">
-<link rel="stylesheet" href="core.css?v=42">
+<link rel="stylesheet" href="styles.css?v=44">
+<link rel="stylesheet" href="core.css?v=44">
 </head>
 <body>
 
@@ -45,6 +45,7 @@
     <symbol id="i-classic" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M9 4.5v15M9 10h11.5"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 21 19.5H3z"/><path d="M12 10v4.5M12 17h.01"/></symbol>
     <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3.5v4M15 3.5v4M7 7.5h10v3a5 5 0 0 1-10 0z"/><path d="M12 15.5v5"/></symbol>
+    <symbol id="i-watch" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12s-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
   </defs>
 </svg>
@@ -100,6 +101,7 @@
     <div class="rail-nav" id="rail-nav">
       <a href="#/home" data-route="home"><svg class="icon"><use href="#i-home"/></svg><span>Home</span></a>
       <a href="#/mya" data-route="mya"><svg class="icon"><use href="#i-mya"/></svg><span>Mya</span></a>
+      <a href="#/watch" data-route="watch" class="rail-watch"><svg class="icon"><use href="#i-watch"/></svg><span>Watch Mya</span><em class="live-pill" data-watch-live hidden>Live</em></a>
       <p class="rail-group" aria-hidden="true"><span>Work</span></p>
       <a href="#/approvals" data-route="approvals"><svg class="icon"><use href="#i-approvals"/></svg><span>Approvals</span><em class="badge" data-approvals-badge hidden></em></a>
       <a href="#/projects" data-route="projects"><svg class="icon"><use href="#i-projects"/></svg><span>Projects</span></a>
@@ -148,6 +150,7 @@
           <div class="core-slot core-slot-hero" id="core-slot-home"></div>
           <div class="core-state"><span class="state-dot" aria-hidden="true"></span><span data-core-state-label>Ready</span></div>
           <p class="core-presence" data-presence-detail></p>
+          <a class="watch-cta" href="#/watch" data-watch-cta hidden><svg class="icon" aria-hidden="true"><use href="#i-watch"/></svg>Watch Mya</a>
         </div>
         <div class="hero-side card">
           <div class="card-head"><h2>Mya's latest actions</h2><span data-fresh="data"></span></div>
@@ -392,9 +395,59 @@
         </div>
         <div class="card integration-card" data-integration="windows"></div>
         <div class="card unconnected-card span-2">
-          <div class="card-head"><h2>Computer access &amp; pause</h2><span class="fresh offline"><span class="fresh-dot"></span>Not connected</span></div>
-          <p class="muted small">A switch to allow or block computer control, and a Pause Mya kill switch that both the brain and the Windows bridge obey, arrive with the approvals and devices phases. They are not shown as controls here because they wouldn't do anything yet.</p>
+          <div class="card-head"><h2>Computer access &amp; pause</h2><span id="devices-watch-fresh"></span></div>
+          <p class="small" id="devices-watch-line">Pause Mya, Take control and Stop live in <a href="#/watch">Watch Mya</a>. The Windows Agent obeys them on its next report, about once a second, and stops at once if it sees you move the mouse.</p>
         </div>
+      </div>
+    </section>
+
+    <!-- WATCH MYA (watch.js) -->
+    <section class="view view-watch" data-view="watch" aria-labelledby="watch-title" hidden>
+      <header class="view-head">
+        <div><p class="eyebrow">Computer control · live</p><h1 id="watch-title">Watch Mya</h1>
+          <p class="view-sub">Mya working on your computer. Pause her or take over at any moment.</p></div>
+        <span id="watch-fresh"></span>
+      </header>
+      <div class="control-banner" id="watch-banner" data-control="offline" role="status" aria-live="polite">
+        <span class="cb-dot" aria-hidden="true"></span>
+        <div class="cb-text"><strong data-cb-label>Checking…</strong><span data-cb-detail></span></div>
+        <span class="cb-conn" data-cb-conn></span>
+      </div>
+      <div class="watch-layout">
+        <div class="watch-stage card">
+          <div class="watch-viewport" id="watch-viewport" data-conn="offline">
+            <img class="watch-frame" id="watch-frame" alt="Mya's screen" hidden>
+            <div class="watch-empty" id="watch-empty"><svg class="icon" aria-hidden="true"><use href="#i-watch"/></svg><p data-empty-text>Checking for Mya's computer session…</p></div>
+            <div class="watch-overlay">
+              <div class="core-slot core-slot-watch" id="core-slot-watch"><svg class="core-echo" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><circle class="ce-halo" cx="24" cy="24" r="16"/><g transform="rotate(14 24 24)"><ellipse class="ce-orbit ce-a" cx="24" cy="24" rx="21" ry="7.5"/></g><g transform="rotate(-30 24 24)"><ellipse class="ce-orbit ce-b" cx="24" cy="24" rx="20" ry="9"/></g><g transform="rotate(66 24 24)"><ellipse class="ce-orbit ce-c" cx="24" cy="24" rx="21" ry="6.5"/></g><circle class="ce-center" cx="24" cy="24" r="7.5"/><circle class="ce-hot" cx="24" cy="24" r="3.4"/></svg></div>
+              <div class="watch-overlay-text"><span data-presence-label>Ready</span><em id="watch-app"></em></div>
+            </div>
+            <span class="watch-frame-age" id="watch-frame-age" hidden></span>
+          </div>
+          <div class="watch-controls" id="watch-controls" role="group" aria-label="Control Mya">
+            <button type="button" class="wc-btn" data-computer="pause"><span class="wc-ico" aria-hidden="true">❚❚</span>Pause Mya</button>
+            <button type="button" class="wc-btn" data-computer="resume"><span class="wc-ico" aria-hidden="true">▶</span>Resume</button>
+            <button type="button" class="wc-btn wc-take" data-computer="take"><span class="wc-ico" aria-hidden="true">✋</span>Take control</button>
+            <button type="button" class="wc-btn wc-return" data-computer="return"><span class="wc-ico" aria-hidden="true">↩</span>Return control to Mya</button>
+            <button type="button" class="wc-btn wc-stop" data-computer="stop"><span class="wc-ico" aria-hidden="true">■</span>Stop task</button>
+          </div>
+          <p class="watch-note muted small" id="watch-note">Taking control is always available. The agent obeys within about a second, and stops at once if it sees you move the mouse.</p>
+        </div>
+        <aside class="watch-side">
+          <div class="card watch-task">
+            <div class="card-head"><h2>Current task</h2><span class="chip-tag" id="watch-status" hidden></span></div>
+            <dl class="kv" id="watch-task"></dl>
+          </div>
+          <div class="card watch-approval" id="watch-approval" hidden>
+            <div class="card-head"><h2>Needs your approval</h2></div>
+            <p class="small" id="watch-approval-text"></p>
+            <a class="link-btn" href="#/approvals">Review in Approvals →</a>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>Activity</h2><span class="muted small">newest first</span></div>
+            <ol class="watch-timeline" id="watch-timeline"></ol>
+          </div>
+        </aside>
       </div>
     </section>
 
@@ -475,6 +528,7 @@
   <div class="sheet" id="more-sheet" role="dialog" aria-modal="true" aria-label="More modules" hidden>
     <div class="sheet-grip" aria-hidden="true"></div>
     <div class="sheet-grid">
+      <a href="#/watch" data-route="watch"><svg class="icon"><use href="#i-watch"/></svg><span>Watch Mya</span></a>
       <a href="#/memory" data-route="memory"><svg class="icon"><use href="#i-memory"/></svg><span>Memory</span></a>
       <a href="#/files" data-route="files"><svg class="icon"><use href="#i-files"/></svg><span>Files</span></a>
       <a href="#/operations" data-route="operations"><svg class="icon"><use href="#i-ops"/></svg><span>Operations</span></a>
@@ -582,16 +636,17 @@
   </div>
 </div>
 
-<script src="lib.js?v=42"></script>
-<script src="mya-events.js?v=42"></script>
-<script src="core.js?v=42"></script>
-<script src="data.js?v=42"></script>
-<script src="chat.js?v=42"></script>
-<script src="voice.js?v=42"></script>
-<script src="presence.js?v=42"></script>
-<script src="ask-about.js?v=42"></script>
-<script src="views.js?v=42"></script>
-<script src="shell.js?v=42"></script>
-<script src="app.js?v=42"></script>
+<script src="lib.js?v=44"></script>
+<script src="mya-events.js?v=44"></script>
+<script src="core.js?v=44"></script>
+<script src="data.js?v=44"></script>
+<script src="chat.js?v=44"></script>
+<script src="voice.js?v=44"></script>
+<script src="presence.js?v=44"></script>
+<script src="ask-about.js?v=44"></script>
+<script src="views.js?v=44"></script>
+<script src="watch.js?v=44"></script>
+<script src="shell.js?v=44"></script>
+<script src="app.js?v=44"></script>
 </body>
 </html>

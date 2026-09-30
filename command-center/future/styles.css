@@ -1302,3 +1302,113 @@ html:not(.has-level) .voice-capsule[data-phase="listening"] .vc-meter i { animat
   .strip-talk { width: 32px; height: 32px; padding: 0; justify-content: center; }
   .strip-talk [data-talk-short] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 }
+
+/* ================= Watch Mya (watch.js) =================
+   Control ownership is the loudest thing on the screen: violet = Mya has
+   control, green = you do, gold = paused, grey = not connected. */
+.control-banner {
+  --cb: var(--text-muted);
+  display: flex; align-items: center; gap: 14px; padding: 14px 18px; margin-bottom: 16px;
+  border-radius: var(--radius-lg); border: 1px solid color-mix(in srgb, var(--cb) 55%, transparent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--cb) 18%, transparent), color-mix(in srgb, var(--cb) 5%, transparent));
+  transition: border-color 0.3s, background 0.3s;
+}
+.control-banner[data-control="mya"] { --cb: var(--violet); }
+.control-banner[data-control="user"] { --cb: var(--green); }
+.control-banner[data-control="paused"] { --cb: var(--gold); }
+.control-banner[data-control="offline"] { --cb: #6f7c91; }
+.control-banner.has-error { --cb: var(--red); }
+.cb-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; background: var(--cb); box-shadow: 0 0 12px var(--cb); }
+.control-banner[data-control="mya"] .cb-dot { animation: pulse 1.6s ease-in-out infinite; }
+.cb-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.cb-text strong { font-size: 15px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-hi); }
+.cb-text span { font-size: 13px; color: var(--text-mid); }
+.cb-conn { font-size: 12px; color: var(--text-muted); text-align: right; font-variant-numeric: tabular-nums; }
+
+.watch-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+.watch-stage { padding: 12px; }
+.watch-viewport {
+  position: relative; aspect-ratio: 16 / 10; border-radius: var(--radius); overflow: hidden;
+  background: #05080d; border: 2px solid rgba(111, 124, 145, 0.35);
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.watch-viewport[data-conn="live"][data-control="mya"] { border-color: color-mix(in srgb, var(--violet) 70%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--violet) 14%, transparent); }
+.watch-viewport[data-conn="live"][data-control="user"] { border-color: color-mix(in srgb, var(--green) 70%, transparent); }
+.watch-viewport[data-conn="live"][data-control="paused"] { border-color: color-mix(in srgb, var(--gold) 70%, transparent); }
+.watch-frame { width: 100%; height: 100%; object-fit: contain; display: block; }
+.watch-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 10px; padding: 24px; text-align: center; color: var(--text-muted); }
+.watch-empty .icon { width: 34px; height: 34px; opacity: 0.6; }
+.watch-empty p { max-width: 36ch; margin: 0; font-size: 13.5px; }
+.watch-overlay {
+  position: absolute; left: 12px; bottom: 12px; display: flex; align-items: center; gap: 8px;
+  padding: 4px 12px 4px 4px; border-radius: 999px; background: rgba(5, 8, 13, 0.72); backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.core-slot-watch { --mf-core-size: 54px; width: 54px; height: 54px; }
+.core-slot-watch .core-depth-layer { filter: blur(6px); inset: -6%; }
+.core-slot-watch .core-wordmark { display: none; }
+.core-slot-watch .mya-core .link { stroke-width: 5; }
+.core-slot-watch .mya-core .mesh-link { stroke-width: 2.4; }
+.watch-overlay-text { display: flex; flex-direction: column; font-size: 12.5px; font-weight: 650; color: var(--text-hi); line-height: 1.25; }
+.watch-overlay-text em { font-style: normal; font-weight: 500; font-size: 11.5px; color: var(--text-mid); max-width: 32ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.watch-frame-age {
+  position: absolute; top: 10px; right: 10px; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase; color: #06140f; background: var(--green);
+}
+.watch-frame-age.is-old { color: #1c1300; background: var(--gold); }
+
+.watch-controls { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.wc-btn {
+  display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--text-hi);
+  font: inherit; font-size: 13.5px; font-weight: 650; cursor: pointer; transition: background 0.2s, border-color 0.2s, opacity 0.2s;
+}
+.wc-btn:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--accent); }
+.wc-btn:disabled { opacity: 0.42; cursor: not-allowed; }
+.wc-btn.is-pending { opacity: 1; border-color: var(--accent); }
+.wc-ico { font-size: 11px; width: 14px; text-align: center; }
+.wc-take { border-color: color-mix(in srgb, var(--green) 55%, transparent); background: color-mix(in srgb, var(--green) 14%, var(--surface-2)); }
+.wc-take:hover:not(:disabled) { border-color: var(--green); }
+.wc-return { border-color: color-mix(in srgb, var(--violet) 55%, transparent); }
+.wc-stop { margin-left: auto; border-color: color-mix(in srgb, var(--red) 45%, transparent); color: #ffb4ad; }
+.watch-note { margin: 10px 2px 0; }
+
+.watch-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.watch-task .kv dd { overflow-wrap: anywhere; }
+#watch-status[data-status="working"] { color: #cdbdff; border-color: color-mix(in srgb, var(--violet) 45%, transparent); }
+#watch-status[data-status="approval"] { color: #ffd98a; border-color: color-mix(in srgb, var(--gold) 55%, transparent); }
+#watch-status[data-status="completed"] { color: #8ee8c7; }
+#watch-status[data-status="stopped"], #watch-status[data-status="blocked"] { color: #ffb4ad; }
+.watch-approval { border-color: color-mix(in srgb, var(--gold) 55%, transparent); background: linear-gradient(180deg, color-mix(in srgb, var(--gold) 12%, transparent), transparent); }
+.watch-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; max-height: 420px; overflow: auto; }
+.watch-timeline li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); align-items: start; }
+.watch-timeline li:last-child { border-bottom: 0; }
+.watch-timeline p { margin: 0; font-size: 13px; color: var(--text-hi); overflow-wrap: anywhere; }
+.watch-timeline time { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; }
+.tl-dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--violet); }
+.watch-timeline li[data-kind="control"] .tl-dot { background: var(--green); }
+.watch-timeline li[data-kind="approval"] .tl-dot { background: var(--gold); }
+.watch-timeline li[data-kind="note"] .tl-dot { background: var(--text-muted); }
+.watch-timeline .feed-empty { display: block; color: var(--text-muted); font-size: 13px; border: 0; }
+
+/* Home: "Watch Mya" under the Core while she works on the computer. */
+.watch-cta {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; height: 38px; padding: 0 16px; border-radius: 999px;
+  color: #f3edff; font-size: 13.5px; font-weight: 700; text-decoration: none;
+  border: 1px solid color-mix(in srgb, var(--violet) 60%, transparent); background: color-mix(in srgb, var(--violet) 20%, transparent);
+}
+.watch-cta:hover { background: color-mix(in srgb, var(--violet) 32%, transparent); }
+.watch-cta .icon { width: 16px; height: 16px; }
+.live-pill { margin-left: auto; font-style: normal; font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; color: #f3edff; background: color-mix(in srgb, var(--violet) 70%, transparent); }
+
+@media (max-width: 1100px) {
+  .watch-layout { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .control-banner { flex-wrap: wrap; padding: 12px 14px; }
+  .cb-conn { flex-basis: 100%; text-align: left; }
+  .watch-viewport { aspect-ratio: 4 / 3; }
+  .wc-btn { height: 44px; flex: 1 1 calc(50% - 8px); justify-content: center; padding: 0 10px; }
+  .wc-stop { margin-left: 0; }
+  .core-slot-watch { --mf-core-size: 44px; width: 44px; height: 44px; }
+}

@@ -13,9 +13,9 @@
 (function (global) {
   "use strict";
 
-  var ROUTES = ["home", "mya", "projects", "approvals", "memory", "files", "operations", "devices", "systems"];
+  var ROUTES = ["home", "mya", "watch", "projects", "approvals", "memory", "files", "operations", "devices", "systems"];
   var TITLES = {
-    home: "Home", mya: "Mya", projects: "Projects", approvals: "Approvals", memory: "Memory",
+    home: "Home", mya: "Mya", watch: "Watch Mya", projects: "Projects", approvals: "Approvals", memory: "Memory",
     files: "Files", operations: "Operations", devices: "Devices", systems: "Systems"
   };
   var ATLANTA_TZ = "America/New_York";
@@ -30,6 +30,8 @@
   function coreSlotFor(route) {
     if (route === "home") return $("core-slot-home");
     if (route === "mya") return $("core-slot-mya");
+    // Watching her work: the Core rides on the live view itself.
+    if (route === "watch") return $("core-slot-watch");
     return MOBILE_QUERY.matches ? $("core-slot-tab") : $("core-slot-rail");
   }
 

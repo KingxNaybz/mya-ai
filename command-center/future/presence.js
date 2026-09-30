@@ -20,7 +20,7 @@
 (function (global) {
   "use strict";
 
-  var s = { core: "idle", availability: "loading", lastOutcome: null, approvals: null, micOn: false, pendingText: "", capturing: false, transcript: "" };
+  var s = { core: "idle", availability: "loading", lastOutcome: null, approvals: null, micOn: false, pendingText: "", capturing: false, transcript: "", computer: null };
   var lastReply = "";
   var seen = {};
   var feed = [];
@@ -48,14 +48,16 @@
     var details = document.querySelectorAll("[data-presence-detail]");
     for (var j = 0; j < details.length; j++) details[j].textContent = p.detail;
     // Waiting on you? Every presence surface leads to what she's waiting on.
-    var target = p.state === "approval" ? "#/approvals" : "#/mya";
+    var target = p.state === "approval" ? "#/approvals" : p.computer ? "#/watch" : "#/mya";
     var links = document.querySelectorAll("#presence-dock, .strip-mya, #session-now");
     for (var k = 0; k < links.length; k++) links[k].setAttribute("href", target);
     var dock = $("presence-dock");
     if (dock) dock.setAttribute("aria-label", "Mya: " + p.label + ". " + p.detail + ". " + (p.state === "approval" ? "Open Approvals." : "Open Mya."));
     // The Core rests in its approval state only while approvals are really
     // pending, and dims to "blocked" only while Executive Mya is unreachable.
-    MyaCore.setResting(p.state === "approval" ? "awaiting-approval" : p.state === "blocked" ? "blocked" : "idle");
+    // A real computer task (Watch Mya) sets the resting state first.
+    var cc = s.computer && s.computer.coreState;
+    MyaCore.setResting(cc || (p.state === "approval" ? "awaiting-approval" : p.state === "blocked" ? "blocked" : "idle"));
     renderToast(p);
     renderFeed();
   }
@@ -64,6 +66,7 @@
   // once, briefly, then counts as seen, even though "Replied" stays on the
   // dock for a minute.
   function toastKey(p) {
+    if (p.computer) return null; // computer work has its own surfaces (Watch Mya)
     if (p.state === "thinking" || p.state === "waiting") return "thinking";
     if ((p.state === "completed" || p.state === "error") && s.lastOutcome) return p.state + ":" + s.lastOutcome.at;
     return null;
@@ -159,9 +162,12 @@
   function init() {
     MyaEvents.on("core.state", function (e) {
       if (!e || e.dev) return;
-      s.core = e.state;
+      // Resting states are derived from presence's own inputs (approvals,
+      // availability, the computer task), so they read as idle here.
+      s.core = e.state === MyaCore.restingState() ? "idle" : e.state;
       render();
     });
+    MyaEvents.on("computer.changed", function (view) { s.computer = view && view.state === "ok" ? view : null; render(); });
     MyaEvents.on("chat.line", function (line) {
       if (line && line.role === "user") {
         s.pendingText = line.text;

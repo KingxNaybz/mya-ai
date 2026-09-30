@@ -14,7 +14,7 @@
 (function (global) {
   "use strict";
 
-  var VIEWS = ["projects", "approvals", "memory", "files", "operations", "devices", "systems"];
+  var VIEWS = ["watch", "projects", "approvals", "memory", "files", "operations", "devices", "systems"];
   var SUGGESTIONS = {
     projects: ["Which projects need my attention?", "What's blocking progress right now?"],
     approvals: ["Summarize what's waiting on me", "Which of these is most urgent?"],
@@ -22,9 +22,10 @@
     files: ["What have you prepared for me recently?"],
     operations: ["What are you working on right now?", "What's scheduled next?"],
     devices: ["Can you reach my Windows PC right now?"],
-    systems: ["Is anything down or not connected?", "What should I fix first?"]
+    systems: ["Is anything down or not connected?", "What should I fix first?"],
+    watch: ["What are you doing right now?", "What's left on this task?"]
   };
-  var SOURCES = ["projects", "projectDetail", "approvals", "systems"];
+  var SOURCES = ["projects", "projectDetail", "approvals", "systems", "computer"];
   var available = false;
   var bars = {};
 
