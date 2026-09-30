@@ -19,8 +19,8 @@
      bump N in every tag below whenever any of them changes. The service
      worker (sw.js) is network-first for these, so a new N is picked up on
      the next online load. -->
-<link rel="stylesheet" href="styles.css?v=25">
-<link rel="stylesheet" href="core.css?v=25">
+<link rel="stylesheet" href="styles.css?v=26">
+<link rel="stylesheet" href="core.css?v=26">
 </head>
 <body>
 
@@ -109,7 +109,7 @@
     </div>
     <div class="rail-foot">
       <a class="rail-dock presence-dock" id="presence-dock" href="#/mya" title="Talk to Mya" aria-label="Talk to Mya">
-        <div class="core-slot core-slot-dock" id="core-slot-rail"></div>
+        <div class="core-slot core-slot-dock" id="core-slot-rail"><svg class="core-echo" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><circle class="ce-halo" cx="24" cy="24" r="16"/><g transform="rotate(14 24 24)"><ellipse class="ce-orbit ce-a" cx="24" cy="24" rx="21" ry="7.5"/></g><g transform="rotate(-30 24 24)"><ellipse class="ce-orbit ce-b" cx="24" cy="24" rx="20" ry="9"/></g><g transform="rotate(66 24 24)"><ellipse class="ce-orbit ce-c" cx="24" cy="24" rx="21" ry="6.5"/></g><circle class="ce-center" cx="24" cy="24" r="7.5"/><circle class="ce-hot" cx="24" cy="24" r="3.4"/></svg></div>
         <span class="presence-text">
           <span class="presence-label"><span class="presence-dot" aria-hidden="true"></span><span data-presence-label>Ready</span></span>
           <span class="presence-detail" data-presence-detail>Checking her runtime…</span>
@@ -134,7 +134,7 @@
           <form class="quick-ask" id="home-ask-form" autocomplete="off">
             <label class="sr-only" for="home-ask-input">Ask Mya</label>
             <input type="text" id="home-ask-input" placeholder="Ask Mya anything…">
-            <button type="button" class="icon-btn" data-mic-toggle aria-pressed="false"><svg class="icon"><use href="#i-mic"/></svg></button>
+            <button type="button" class="icon-btn talk-btn" data-talk aria-pressed="false" aria-label="Tap to talk to Mya"><svg class="icon"><use href="#i-mic"/></svg></button>
             <button type="submit" class="icon-btn primary" aria-label="Send to Mya"><svg class="icon"><use href="#i-send"/></svg></button>
           </form>
           <p class="voice-status" data-voice-status hidden></p>
@@ -181,12 +181,13 @@
           <div class="core-state"><span class="state-dot" aria-hidden="true"></span><span data-core-state-label>Ready</span></div>
           <h1 id="mya-title" class="mya-title">Mya</h1>
           <p class="muted small center">Your Executive Mya: private to you across the Command Center and your executive channels, and kept separate from the customer-facing receptionist.</p>
+          <button type="button" class="talk-hero" data-talk aria-pressed="false"><span class="talk-ring" aria-hidden="true"></span><svg class="icon"><use href="#i-mic"/></svg><span data-talk-label>Tap to talk</span></button>
           <div class="toggle-row">
-            <button type="button" class="pill-btn" data-mic-toggle aria-pressed="false"><svg class="icon"><use href="#i-mic"/></svg><span data-label>Mic off</span></button>
             <button type="button" class="pill-btn" data-voice-toggle aria-pressed="true"><svg class="icon"><use href="#i-speaker"/></svg><span data-label>Voice on</span></button>
+            <button type="button" class="pill-btn" data-mic-toggle aria-pressed="false"><svg class="icon"><use href="#i-mic"/></svg><span data-label>Wake word off</span></button>
           </div>
           <p class="voice-status" data-voice-status hidden></p>
-          <p class="muted small center">Say “Mya” when the mic is on. She keeps listening for 45 seconds after each reply.</p>
+          <p class="muted small center">Tap to talk, or tap her Core. Voice and text are one conversation with the same Executive Mya. Hands-free: turn on the wake word and say “Mya”.</p>
           <p class="runtime-line" id="mya-runtime">Checking Executive Mya's runtime…</p>
         </aside>
         <div class="chat-panel card">
@@ -204,7 +205,7 @@
           <form class="chat-input" id="mf-command-form" autocomplete="off">
             <label class="sr-only" for="mf-command-input">Message Mya</label>
             <input type="text" id="mf-command-input" placeholder="Message Mya…">
-            <button type="button" class="icon-btn" data-mic-toggle aria-pressed="false"><svg class="icon"><use href="#i-mic"/></svg></button>
+            <button type="button" class="icon-btn talk-btn" data-talk aria-pressed="false" aria-label="Tap to talk to Mya"><svg class="icon"><use href="#i-mic"/></svg></button>
             <button type="button" class="icon-btn" data-voice-toggle aria-pressed="true"><svg class="icon"><use href="#i-speaker"/></svg></button>
             <button type="submit" class="icon-btn primary" id="mf-command-send" aria-label="Send"><svg class="icon"><use href="#i-send"/></svg></button>
           </form>
@@ -424,7 +425,11 @@
         <div class="card-head"><h2>Mya Core states</h2><span class="fresh stale"><span class="fresh-dot"></span>Dev preview</span></div>
         <p class="muted small">Developer preview only — not real activity. Visible because the page was opened with <code>?dev=1</code>.</p>
         <div class="chip-row" id="mf-dev-states-row"></div>
-        <button type="button" class="chip" id="mf-replay-intro-btn">↻ Replay core intro</button>
+        <div class="chip-row">
+          <button type="button" class="chip" id="mf-simulate-voice-btn">▶ Simulate a voice turn (dev)</button>
+          <button type="button" class="chip" id="mf-replay-intro-btn">↻ Replay core intro</button>
+        </div>
+        <p class="muted small">The simulation walks listening → thinking → waiting → working → speaking → done with synthetic text. It adds nothing to the conversation and makes no request.</p>
       </div>
     </section>
 
@@ -434,10 +439,23 @@
   <nav class="tabbar" aria-label="Command Center">
     <a href="#/home" data-route="home"><svg class="icon"><use href="#i-home"/></svg><span>Home</span></a>
     <a href="#/approvals" data-route="approvals"><svg class="icon"><use href="#i-approvals"/></svg><span>Approvals</span><em class="badge" data-approvals-badge hidden></em></a>
-    <a href="#/mya" data-route="mya" class="tab-core" aria-label="Mya"><div class="core-slot core-slot-tab" id="core-slot-tab"></div></a>
+    <a href="#/mya" data-route="mya" class="tab-core" aria-label="Mya"><div class="core-slot core-slot-tab" id="core-slot-tab"><svg class="core-echo" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><circle class="ce-halo" cx="24" cy="24" r="16"/><g transform="rotate(14 24 24)"><ellipse class="ce-orbit ce-a" cx="24" cy="24" rx="21" ry="7.5"/></g><g transform="rotate(-30 24 24)"><ellipse class="ce-orbit ce-b" cx="24" cy="24" rx="20" ry="9"/></g><g transform="rotate(66 24 24)"><ellipse class="ce-orbit ce-c" cx="24" cy="24" rx="21" ry="6.5"/></g><circle class="ce-center" cx="24" cy="24" r="7.5"/><circle class="ce-hot" cx="24" cy="24" r="3.4"/></svg></div></a>
     <a href="#/projects" data-route="projects"><svg class="icon"><use href="#i-projects"/></svg><span>Projects</span></a>
     <button type="button" id="more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="more-sheet"><svg class="icon"><use href="#i-more"/></svg><span>More</span></button>
   </nav>
+
+  <!-- Voice capsule (voice.js): floats over every screen during a voice
+       turn or while she speaks, so Stop is always in reach. -->
+  <div class="voice-capsule" id="voice-capsule" role="status" aria-live="polite" hidden>
+    <span class="vc-orb" aria-hidden="true"><svg class="core-echo" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><circle class="ce-halo" cx="24" cy="24" r="16"/><g transform="rotate(14 24 24)"><ellipse class="ce-orbit ce-a" cx="24" cy="24" rx="21" ry="7.5"/></g><g transform="rotate(-30 24 24)"><ellipse class="ce-orbit ce-b" cx="24" cy="24" rx="20" ry="9"/></g><g transform="rotate(66 24 24)"><ellipse class="ce-orbit ce-c" cx="24" cy="24" rx="21" ry="6.5"/></g><circle class="ce-center" cx="24" cy="24" r="7.5"/><circle class="ce-hot" cx="24" cy="24" r="3.4"/></svg></span>
+    <span class="vc-meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+    <span class="vc-text">
+      <span class="vc-top"><strong data-vc-label>Listening</strong><span class="chip-tag vc-about" data-vc-about hidden></span><span class="chip-tag gold vc-dev" data-vc-dev hidden>Dev simulation · not Mya</span></span>
+      <span class="vc-detail" data-vc-detail></span>
+    </span>
+    <button type="button" class="vc-btn" data-vc-action hidden><span>Done</span></button>
+    <button type="button" class="toast-close vc-close" data-vc-close aria-label="Close"><svg class="icon"><use href="#i-close"/></svg></button>
+  </div>
 
   <a class="presence-toast" id="presence-toast" href="#/mya" role="status" aria-live="polite" hidden>
     <span class="presence-dot" aria-hidden="true"></span>
@@ -481,6 +499,33 @@
             <stop offset="0%" stop-color="#fff6e0"/>
             <stop offset="55%" stop-color="#f0cd86"/>
             <stop offset="100%" stop-color="var(--core-approval)" stop-opacity="0"/>
+          </radialGradient>
+          <!-- Phase 3 state gradients: the idle Core's soft white-hot center,
+               tinted per state (styles.css overrides; core.css unchanged). -->
+          <radialGradient id="coreListenGrad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#effff9"/>
+            <stop offset="55%" stop-color="#8fe9c9"/>
+            <stop offset="100%" stop-color="var(--core-listening)" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="coreSpeakGrad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#f6f1ff"/>
+            <stop offset="55%" stop-color="#c3b0ff"/>
+            <stop offset="100%" stop-color="var(--core-speaking)" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="coreCompletedGrad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#f0fff9"/>
+            <stop offset="55%" stop-color="#8fe9c9"/>
+            <stop offset="100%" stop-color="var(--core-completed)" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="coreBlockedGrad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#c9d2df"/>
+            <stop offset="55%" stop-color="#7c8aa1"/>
+            <stop offset="100%" stop-color="#5d6b82" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="coreErrorGrad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#fff0ee"/>
+            <stop offset="55%" stop-color="#f2a19a"/>
+            <stop offset="100%" stop-color="var(--core-error)" stop-opacity="0"/>
           </radialGradient>
         </defs>
         <g class="orbit-group">
@@ -529,15 +574,16 @@
   </div>
 </div>
 
-<script src="lib.js?v=25"></script>
-<script src="mya-events.js?v=25"></script>
-<script src="core.js?v=25"></script>
-<script src="data.js?v=25"></script>
-<script src="chat.js?v=25"></script>
-<script src="presence.js?v=25"></script>
-<script src="ask-about.js?v=25"></script>
-<script src="views.js?v=25"></script>
-<script src="shell.js?v=25"></script>
-<script src="app.js?v=25"></script>
+<script src="lib.js?v=26"></script>
+<script src="mya-events.js?v=26"></script>
+<script src="core.js?v=26"></script>
+<script src="data.js?v=26"></script>
+<script src="chat.js?v=26"></script>
+<script src="voice.js?v=26"></script>
+<script src="presence.js?v=26"></script>
+<script src="ask-about.js?v=26"></script>
+<script src="views.js?v=26"></script>
+<script src="shell.js?v=26"></script>
+<script src="app.js?v=26"></script>
 </body>
 </html>

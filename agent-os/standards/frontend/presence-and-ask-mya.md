@@ -9,7 +9,7 @@ Executive Mya is the one assistant, and she's present on every screen.
   - Executive Mya availability (`mya.availability`)
   - the mic (`mic.changed`)
   - live/stale approvals
-- Priority: thinking > speaking > error (5 min) > completed (60 s) > blocked > listening > approval > idle
+- Priority: thinking > waiting > speaking > recording (tap-to-talk) > error (5 min) > completed (60 s) > blocked > listening (wake word) > approval > idle
 - No "working" / background state until something actually reports background work to the Command Center
 - Unknown approvals (`null`) never count as zero, or as "waiting on you"
 - Surfaces:
@@ -36,3 +36,12 @@ Executive Mya is the one assistant, and she's present on every screen.
 - Item-level asks (`MyaAskAbout.askAbout(view, q, focus, label)`) add a focus line. Approvals state that asking doesn't approve or decline anything
 - Suggestions are fixed question templates, never data
 - Everything is disabled, and says so, when Executive Mya is unavailable
+
+## Voice (`voice.js`, `MyaLib.voiceCapsule`)
+- Voice is another interface to the same Executive Mya: a finished turn goes through `MyaChat.send(text, { voice: true, ... })`, the one chat path and one conversation
+- On a module screen a spoken question carries `MyaAskAbout.contextFor(route)`
+- The capsule shows for a voice turn, and whenever she speaks any reply (Stop must be reachable on every screen). It suppresses the presence toast
+- Failures name the cause (unsupported, mic blocked/missing, speech service, nothing heard, unavailable, didn't answer) and say nothing was sent elsewhere
+- The dev simulation is `?dev=1` only, labelled "Dev simulation · not Mya", sets `dev: true` on Core states, adds nothing to the conversation and makes no request
+- Hands-free is the existing wake word (chat.js). No always-on / wake-word claims beyond what the browser's speech recognition actually supports
+- Command Center voice never touches the Reception/phone pipeline

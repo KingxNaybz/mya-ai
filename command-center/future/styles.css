@@ -261,13 +261,6 @@ a.strip-item:hover { border-color: var(--line-strong); color: var(--text-hi); }
   margin: 0 0 8px; padding: 8px 10px 8px 6px; border-radius: var(--radius);
   border: 1px solid transparent; transition: background var(--dur), border-color var(--dur);
 }
-/* When the Core is hosted elsewhere (Home hero, Mya view), the dock's quiet
-   orb still glows in the presence color, so the state never disappears. */
-[data-presence]:not([data-presence="idle"]) .core-slot-dock:not(.has-core)::before {
-  box-shadow: 0 0 22px color-mix(in srgb, var(--presence) 75%, transparent);
-  border-color: color-mix(in srgb, var(--presence) 60%, transparent);
-}
-[data-presence="thinking"] .core-slot-dock:not(.has-core)::before { animation: pulse 1.1s ease-in-out infinite; }
 .rail-dock.presence-dock:hover { background: var(--surface); border-color: var(--line); }
 .presence-dock .core-slot-dock { --mf-core-size: 56px; width: 56px; height: 56px; flex: none; }
 .presence-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
@@ -360,14 +353,6 @@ a.strip-item:hover { border-color: var(--line-strong); color: var(--text-hi); }
 /* Small hosts: tighten the glow so the Core stays crisp, not a blur. */
 .core-slot-dock .core-depth-layer, .core-slot-tab .core-depth-layer { filter: blur(6px); inset: -6%; }
 .core-slot-dock .core-wordmark, .core-slot-tab .core-wordmark { display: none; }
-/* When the Core is hosted elsewhere, small slots show a quiet orb so the
-   presence cue never disappears. */
-.core-slot-dock:not(.has-core)::before, .core-slot-tab:not(.has-core)::before {
-  content: ""; width: 60%; height: 60%; border-radius: 50%;
-  background: radial-gradient(circle at 40% 35%, #fff 0%, var(--accent-soft) 30%, var(--accent) 60%, transparent 72%);
-  box-shadow: 0 0 22px rgba(74, 168, 255, 0.55);
-  opacity: 0.85;
-}
 .core-state {
   display: inline-flex; align-items: center; gap: 8px; margin-top: 10px;
   font-size: 11.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-mid);
@@ -905,4 +890,233 @@ a.metric:hover { border-color: var(--line-strong); transform: translateY(-1px); 
   .presence-dot, .tab-core .core-slot-tab, .typing i { animation: none !important; }
   .ask-about { transition: none !important; }
   .presence-toast { transition: none !important; }
+}
+
+/* ============================================================ PHASE 3 · PRESENCE + VOICE
+   Everything below refines behavior around the Mya Core; core.css stays
+   byte-identical. Core overrides use the .core-slot prefix so they outrank
+   core.css (which loads after this file). */
+
+/* ---------------- Core echo ----------------
+   When the one Core is hosted elsewhere (Home hero, Mya view), the rail
+   dock and the phone tab button show her echo: a small static emblem of
+   the same rings and white-hot center, colored and paced by the Core's
+   current state (html[data-mya-state]). It is not a second Core. */
+:root { --echo: var(--accent-soft); --echo-2: var(--accent); --voice-level: 0; }
+[data-mya-state="listening"]         { --echo: #8fe9c9; --echo-2: var(--core-listening); }
+[data-mya-state="waiting"]           { --echo: #b7c2ff; --echo-2: #7d8cff; }
+[data-mya-state="working"]           { --echo: #9fd3ff; --echo-2: var(--accent); }
+[data-mya-state="speaking"]          { --echo: #c3b0ff; --echo-2: var(--violet); }
+[data-mya-state="completed"]         { --echo: #8fe9c9; --echo-2: var(--core-completed); }
+[data-mya-state="awaiting-approval"] { --echo: #f0cd86; --echo-2: var(--gold); }
+[data-mya-state="blocked"]           { --echo: #8795ab; --echo-2: var(--offline); }
+[data-mya-state="error"]             { --echo: #f2a19a; --echo-2: var(--red); }
+
+.core-echo { width: 100%; height: 100%; display: block; overflow: visible; }
+.core-slot.has-core > .core-echo { display: none; }
+.core-slot-tab .core-echo { width: 80%; height: 80%; }
+.ce-halo { fill: var(--echo-2); opacity: 0.2; transform-origin: 24px 24px; animation: echoBreathe 5.2s ease-in-out infinite; transition: fill 0.5s; }
+.ce-orbit { fill: none; stroke: var(--echo); stroke-width: 0.9; stroke-dasharray: 1.4 3.2; opacity: 0.8; transform-origin: 24px 24px; animation: orbitSpin 9s linear infinite; transition: stroke 0.5s; }
+.ce-b { animation-duration: 12s; animation-direction: reverse; }
+.ce-c { animation-duration: 7s; }
+.ce-center { fill: var(--echo); transform-origin: 24px 24px; filter: drop-shadow(0 0 3px var(--echo-2)) drop-shadow(0 0 9px var(--echo-2)); animation: echoBreathe 5.2s ease-in-out infinite; transition: fill 0.5s; }
+.ce-hot { fill: #fff; opacity: 0.95; }
+@keyframes echoBreathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+@keyframes echoPop { 0% { transform: scale(1); } 35% { transform: scale(1.35); } 100% { transform: scale(1); } }
+[data-mya-state="thinking"] .ce-orbit { animation-duration: 3s; }
+[data-mya-state="thinking"] .ce-center, [data-mya-state="working"] .ce-center { animation-duration: 1.1s; }
+[data-mya-state="working"] .ce-orbit { animation-duration: 2.2s; }
+[data-mya-state="waiting"] .ce-orbit { animation-duration: 22s; }
+[data-mya-state="waiting"] .ce-center { animation-duration: 3.2s; }
+[data-mya-state="listening"] .ce-center { animation-duration: 1.6s; }
+[data-mya-state="speaking"] .ce-center { transform: scale(calc(1 + var(--voice-level) * 0.45)); animation: none; }
+[data-mya-state="speaking"] .ce-halo { opacity: calc(0.18 + var(--voice-level) * 0.5); animation: none; }
+[data-mya-state="completed"] .ce-center { animation: echoPop 0.9s ease-out 1; }
+[data-mya-state="blocked"] .ce-orbit, [data-mya-state="blocked"] .ce-center, [data-mya-state="blocked"] .ce-halo { animation-play-state: paused; }
+[data-mya-state="blocked"] .ce-hot { opacity: 0.35; }
+[data-mya-state="error"] .ce-center { animation: pulse 0.8s ease-in-out 2; }
+
+/* ---------------- The Core: state refinements ---------------- */
+.core-slot .mya-core .orbit-path, .core-slot .mya-core .mesh-link, .core-slot .mya-core .link { transition: stroke 0.6s ease, opacity 0.6s ease; }
+.core-slot .mya-core .mesh-node, .core-slot .mya-core .node, .core-slot .mya-core .orbit-traveler, .core-slot .mya-core .core-halo { transition: fill 0.6s ease, opacity 0.6s ease; }
+
+/* Listening: her soft center, cooled to green, drawing in. */
+.core-slot .mya-core[data-state="listening"] .core-center { fill: url(#coreListenGrad); }
+.core-slot .mya-core[data-state="listening"] .core-halo { fill: var(--core-listening); opacity: 0.12; }
+
+/* Waiting: a request is still out. Patient: everything slows and cools. */
+.core-slot .mya-core[data-state="waiting"] .core-center { animation: coreBreathe calc(3.2s / var(--mf-anim-speed)) ease-in-out infinite; }
+.core-slot .mya-core[data-state="waiting"] .core-halo { fill: #7d8cff; animation: haloBreathe calc(3.2s / var(--mf-anim-speed)) ease-in-out infinite; }
+.core-slot .mya-core[data-state="waiting"] .orbit-path { stroke: rgba(183, 194, 255, 0.55); }
+.core-slot .mya-core[data-state="waiting"] .orbit-a { animation-duration: calc(24s / var(--mf-anim-speed)); }
+.core-slot .mya-core[data-state="waiting"] .orbit-b { animation-duration: calc(30s / var(--mf-anim-speed)); }
+.core-slot .mya-core[data-state="waiting"] .orbit-c { animation-duration: calc(20s / var(--mf-anim-speed)); }
+.core-slot .mya-core[data-state="waiting"] .orbit-traveler { fill: #b7c2ff; animation-duration: calc(14s / var(--mf-anim-speed)); }
+.core-slot .mya-core[data-state="waiting"] .mesh-group { animation-duration: calc(12s / var(--mf-anim-speed)); }
+.core-slot .mya-core[data-state="waiting"] .link { animation: linkFire calc(2.8s / var(--mf-anim-speed)) ease-in-out infinite; stroke: #9aa6ff; }
+
+/* Working: her own gradient (not core.css's flat fill), busier and brighter. */
+.core-slot .mya-core[data-state="working"] .core-center { fill: url(#coreCenterGrad); animation: coreBreathe calc(0.9s / var(--mf-anim-speed)) ease-in-out infinite; }
+.core-slot .mya-core[data-state="working"] .mesh-group { animation-duration: calc(2.8s / var(--mf-anim-speed)); }
+.core-slot .mya-core[data-state="working"] .orbit-traveler { animation-duration: calc(2.6s / var(--mf-anim-speed)); }
+.core-slot .mya-core[data-state="working"] .mesh-node { animation-duration: calc(1s / var(--mf-anim-speed)); }
+.core-slot .mya-core[data-state="working"] .link { animation: linkFire calc(0.8s / var(--mf-anim-speed)) ease-in-out infinite; }
+.core-slot .mya-core[data-state="working"] .node-2, .core-slot .mya-core[data-state="working"] .node-4 { fill: #fff; }
+
+/* Speaking: the soft center tinted violet. */
+.core-slot .mya-core[data-state="speaking"] .core-center { fill: url(#coreSpeakGrad); }
+
+/* Completed: a green settle that blooms once. */
+.core-slot .mya-core[data-state="completed"] .core-center { fill: url(#coreCompletedGrad); }
+.core-slot .mya-core[data-state="completed"] .core-halo { fill: var(--core-completed); animation: haloBloom calc(1.2s / var(--mf-anim-speed)) ease-out 1 both; transform-origin: 240px 240px; }
+.core-slot .mya-core[data-state="completed"] .orbit-path { stroke: rgba(143, 233, 201, 0.55); }
+.core-slot .mya-core[data-state="completed"] .orbit-traveler, .core-slot .mya-core[data-state="completed"] .mesh-node { fill: #8fe9c9; }
+@keyframes haloBloom { 0% { opacity: 0.1; transform: scale(0.9); } 40% { opacity: 0.34; transform: scale(1.12); } 100% { opacity: 0.12; transform: scale(1); } }
+
+/* Error: contained to the Core, as before, with her soft gradient. */
+.core-slot .mya-core[data-state="error"] .core-center { fill: url(#coreErrorGrad); }
+.core-slot .mya-core[data-state="error"] .orbit-path { stroke: rgba(242, 161, 154, 0.5); }
+
+/* Blocked: Executive Mya can't be reached. Dimmed, still, honest. */
+.core-slot .mya-core[data-state="blocked"] .core-center { fill: url(#coreBlockedGrad); animation: none; opacity: 0.8; }
+.core-slot .mya-core[data-state="blocked"] .core-halo { fill: var(--offline); opacity: 0.1; animation: none; }
+.core-slot .mya-core[data-state="blocked"] .orbit-path { stroke: rgba(135, 149, 171, 0.35); animation-play-state: paused; }
+.core-slot .mya-core[data-state="blocked"] .orbit-traveler { opacity: 0; }
+.core-slot .mya-core[data-state="blocked"] .mesh-group { animation-duration: calc(40s / var(--mf-anim-speed)); }
+.core-slot .mya-core[data-state="blocked"] .mesh-node, .core-slot .mya-core[data-state="blocked"] .node { fill: #7c8aa1; animation: none; }
+.core-slot .mya-core[data-state="blocked"] .link, .core-slot .mya-core[data-state="blocked"] .mesh-link { stroke: #5d6b82; animation: none; opacity: 0.06; }
+.core-slot .mya-core[data-state="blocked"] .core-depth-layer { opacity: 0.12; filter: blur(30px) grayscale(1); }
+
+/* Her voice, live: with a real level (her audio while speaking; the words
+   arriving while listening), the center and halo follow it instead of the
+   canned pulse. transform-origin is the viewBox center. */
+.core-slot .mya-core.has-level[data-state="speaking"] .core-center,
+.core-slot .mya-core.has-level[data-state="listening"] .core-center {
+  animation: none; transform-origin: 240px 240px;
+  transform: scale(calc(1 + var(--voice-level) * 0.26));
+  filter: brightness(calc(1 + var(--voice-level) * 0.45));
+}
+.core-slot .mya-core.has-level[data-state="speaking"] .core-halo,
+.core-slot .mya-core.has-level[data-state="listening"] .core-halo {
+  animation: none; transform-origin: 240px 240px;
+  transform: scale(calc(1 + var(--voice-level) * 0.3));
+  opacity: calc(0.1 + var(--voice-level) * 0.24);
+}
+/* Sound rings on the big Core: outward while she speaks, inward while she listens. */
+.core-slot-hero .mya-core::after, .core-slot-conv .mya-core::after {
+  content: ""; position: absolute; inset: 30%; border-radius: 50%; pointer-events: none;
+  border: 1px solid transparent; opacity: 0;
+}
+.core-slot-hero .mya-core[data-state="speaking"]::after, .core-slot-conv .mya-core[data-state="speaking"]::after {
+  border-color: rgba(195, 176, 255, 0.55); animation: ringOut 1.6s ease-out infinite;
+}
+.core-slot-hero .mya-core[data-state="listening"]::after, .core-slot-conv .mya-core[data-state="listening"]::after {
+  border-color: rgba(143, 233, 201, 0.5); animation: ringIn 1.8s ease-in infinite;
+}
+@keyframes ringOut { 0% { transform: scale(0.8); opacity: 0.7; } 100% { transform: scale(1.9); opacity: 0; } }
+@keyframes ringIn { 0% { transform: scale(1.9); opacity: 0; } 70% { opacity: 0.55; } 100% { transform: scale(0.85); opacity: 0; } }
+
+/* Tap her Core to talk. */
+.core-slot-hero, .core-slot-conv { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.core-slot-hero .mya-core-stage, .core-slot-conv .mya-core-stage { transition: transform 0.4s var(--ease); }
+.core-slot-hero:hover .mya-core-stage, .core-slot-conv:hover .mya-core-stage { transform: scale(1.02); }
+.core-slot-hero:active .mya-core-stage, .core-slot-conv:active .mya-core-stage { transform: scale(0.985); }
+
+/* More state dots for the new states. */
+[data-mya-state="waiting"] .state-dot { background: #9aa6ff; box-shadow: 0 0 10px #7d8cff; animation: pulse 2.4s ease-in-out infinite; }
+[data-mya-state="working"] .state-dot { background: var(--accent); animation: pulse 0.7s ease-in-out infinite; }
+[data-mya-state="completed"] .state-dot { background: var(--green); box-shadow: 0 0 10px var(--green); }
+[data-mya-state="blocked"] .state-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--offline); }
+[data-presence="waiting"] { --presence: #9aa6ff; }
+[data-presence="waiting"] .presence-dot { animation: pulse 2.4s ease-in-out infinite; }
+
+/* ---------------- Talk ---------------- */
+.talk-btn.is-capturing { color: var(--core-listening); border-color: rgba(58, 208, 160, 0.55); background: rgba(58, 208, 160, 0.1); box-shadow: 0 0 0 4px rgba(58, 208, 160, 0.1); }
+.talk-btn.is-capturing .icon { animation: pulse 1.2s ease-in-out infinite; }
+.talk-btn.is-unavailable { opacity: 0.55; }
+.talk-hero {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  height: 48px; min-width: 190px; padding: 0 24px; border-radius: 999px;
+  border: 1px solid rgba(143, 202, 255, 0.4); color: var(--text-hi); font-weight: 600; font-size: 14px;
+  background: linear-gradient(180deg, rgba(74, 168, 255, 0.24), rgba(74, 168, 255, 0.06));
+  box-shadow: 0 10px 30px rgba(74, 168, 255, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: border-color var(--dur), box-shadow var(--dur), background var(--dur), transform var(--dur) var(--ease);
+}
+.talk-hero:hover { border-color: var(--accent); box-shadow: 0 12px 36px rgba(74, 168, 255, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.1); }
+.talk-hero:active { transform: scale(0.98); }
+.talk-hero .icon { width: 18px; height: 18px; }
+.talk-ring { position: absolute; inset: -5px; border-radius: inherit; border: 1px solid rgba(143, 202, 255, 0.18); pointer-events: none; }
+.talk-hero.is-capturing {
+  border-color: rgba(58, 208, 160, 0.6); color: #dffbf1;
+  background: linear-gradient(180deg, rgba(58, 208, 160, 0.26), rgba(58, 208, 160, 0.07));
+  box-shadow: 0 10px 34px rgba(58, 208, 160, 0.22);
+}
+.talk-hero.is-capturing .talk-ring { border-color: rgba(58, 208, 160, 0.45); animation: talkRing 1.4s ease-out infinite; }
+.talk-hero.is-unavailable { opacity: 0.55; }
+@keyframes talkRing { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(1.18, 1.5); opacity: 0; } }
+#strip-mic:not(.on) { display: none; }
+
+/* ---------------- Voice capsule ---------------- */
+.voice-capsule {
+  --vc: var(--accent);
+  position: fixed; z-index: 43; bottom: 22px; left: calc(50% + var(--rail-w) / 2);
+  display: flex; align-items: center; gap: 12px;
+  width: min(600px, calc(100vw - var(--rail-w) - 48px));
+  padding: 9px 9px 9px 10px; border-radius: 22px;
+  background: linear-gradient(180deg, rgba(18, 27, 43, 0.94), rgba(10, 16, 27, 0.94));
+  border: 1px solid color-mix(in srgb, var(--vc) 38%, var(--line-strong));
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), 0 0 44px color-mix(in srgb, var(--vc) 20%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  opacity: 0; transform: translate(-50%, 14px) scale(0.98);
+  transition: opacity var(--dur), transform 320ms var(--ease), border-color 0.4s, box-shadow 0.4s;
+}
+.voice-capsule.is-in { opacity: 1; transform: translate(-50%, 0) scale(1); }
+/* In the conversation, sit above the message box instead of on it. */
+[data-route="mya"] .voice-capsule { bottom: 104px; }
+.voice-capsule[data-phase="listening"], .voice-capsule[data-phase="completed"] { --vc: var(--core-listening); }
+.voice-capsule[data-phase="waiting"] { --vc: #8d9aff; }
+.voice-capsule[data-phase="speaking"] { --vc: var(--violet); }
+.voice-capsule[data-phase="error"] { --vc: var(--red); }
+.vc-orb { width: 42px; height: 42px; flex: none; display: grid; place-items: center; }
+.vc-meter { display: none; align-items: center; gap: 3px; height: 22px; flex: none; }
+.voice-capsule[data-phase="listening"] .vc-meter, .voice-capsule[data-phase="speaking"] .vc-meter { display: inline-flex; }
+.vc-meter i {
+  width: 3px; height: 100%; border-radius: 3px; background: var(--vc);
+  transform: scaleY(calc(0.18 + var(--voice-level) * var(--k, 1))); transition: transform 70ms linear;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--vc) 60%, transparent);
+}
+.vc-meter i:nth-child(1), .vc-meter i:nth-child(5) { --k: 0.5; }
+.vc-meter i:nth-child(2), .vc-meter i:nth-child(4) { --k: 0.85; }
+.vc-meter i:nth-child(3) { --k: 1.1; }
+.vc-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.vc-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.vc-top strong { font-size: 13.5px; font-weight: 650; color: var(--text-hi); white-space: nowrap; }
+.vc-top .chip-tag { text-transform: none; white-space: nowrap; font-size: 10.5px; padding: 1px 7px; }
+.vc-detail { font-size: 13px; line-height: 1.4; color: var(--text-mid); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.voice-capsule[data-phase="listening"] .vc-detail { color: var(--text-hi); }
+.vc-btn {
+  flex: none; height: 36px; padding: 0 18px; border-radius: 999px; border: 0;
+  background: var(--vc); color: #04111f; font-weight: 700; font-size: 13px;
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--vc) 35%, transparent);
+}
+.voice-capsule[data-phase="speaking"] .vc-btn { color: #fff; }
+.vc-btn:hover { filter: brightness(1.1); }
+.vc-close { flex: none; }
+
+@media (max-width: 899px) {
+  .voice-capsule {
+    left: 10px; right: 10px; width: auto; bottom: calc(var(--tab-h) + var(--safe-bottom) + 12px);
+    transform: translateY(14px) scale(0.98); border-radius: 18px;
+  }
+  .voice-capsule.is-in { transform: none; }
+  [data-route="mya"] .voice-capsule { bottom: calc(var(--tab-h) + var(--safe-bottom) + 86px); }
+  .vc-orb { width: 36px; height: 36px; }
+  .vc-meter { display: none !important; }
+  .talk-hero { height: 46px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ce-halo, .ce-orbit, .ce-center, .talk-ring, .talk-btn .icon,
+  .core-slot-hero .mya-core::after, .core-slot-conv .mya-core::after { animation: none !important; }
+  .voice-capsule, .core-slot-hero .mya-core-stage, .core-slot-conv .mya-core-stage { transition: none !important; }
 }

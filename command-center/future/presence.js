@@ -20,7 +20,7 @@
 (function (global) {
   "use strict";
 
-  var s = { core: "idle", availability: "loading", lastOutcome: null, approvals: null, micOn: false, pendingText: "" };
+  var s = { core: "idle", availability: "loading", lastOutcome: null, approvals: null, micOn: false, pendingText: "", capturing: false, transcript: "" };
   var lastReply = "";
   var seen = {};
   var feed = [];
@@ -53,8 +53,9 @@
     for (var k = 0; k < links.length; k++) links[k].setAttribute("href", target);
     var dock = $("presence-dock");
     if (dock) dock.setAttribute("aria-label", "Mya: " + p.label + ". " + p.detail + ". " + (p.state === "approval" ? "Open Approvals." : "Open Mya."));
-    // The Core rests in its approval state only while approvals are really pending.
-    MyaCore.setResting(p.state === "approval" ? "awaiting-approval" : "idle");
+    // The Core rests in its approval state only while approvals are really
+    // pending, and dims to "blocked" only while Executive Mya is unreachable.
+    MyaCore.setResting(p.state === "approval" ? "awaiting-approval" : p.state === "blocked" ? "blocked" : "idle");
     renderToast(p);
     renderFeed();
   }
@@ -63,7 +64,7 @@
   // once, briefly, then counts as seen, even though "Replied" stays on the
   // dock for a minute.
   function toastKey(p) {
-    if (p.state === "thinking") return "thinking";
+    if (p.state === "thinking" || p.state === "waiting") return "thinking";
     if ((p.state === "completed" || p.state === "error") && s.lastOutcome) return p.state + ":" + s.lastOutcome.at;
     return null;
   }
@@ -72,11 +73,13 @@
     var toast = $("presence-toast");
     if (!toast) return;
     var key = toastKey(p);
-    // Asked from a module's "Ask Mya" bar: the answer shows right there.
-    if (route() === "mya" || !key || seen[key] || inlineAsk) { hideToast(); return; }
+    // Asked from a module's "Ask Mya" bar: the answer shows right there. A
+    // voice turn has its own capsule, so no toast on top of it.
+    var voiceUp = Boolean(document.documentElement.getAttribute("data-voice"));
+    if (route() === "mya" || !key || seen[key] || inlineAsk || voiceUp) { hideToast(); return; }
     toast.setAttribute("data-state", p.state);
     toast.querySelector("[data-toast-label]").textContent =
-      p.state === "thinking" ? "Mya is thinking" : p.state === "completed" ? "Mya replied" : "Mya didn't answer";
+      p.state === "thinking" ? "Mya is thinking" : p.state === "waiting" ? "Mya is still working" : p.state === "completed" ? "Mya replied" : "Mya didn't answer";
     toast.querySelector("[data-toast-detail]").textContent =
       p.state === "completed" && lastReply ? MyaLib.snippet(lastReply, 120) : p.detail;
     clearTimeout(hideTimer);
@@ -163,7 +166,7 @@
       if (line && line.role === "user") {
         s.pendingText = line.text;
         inlineAsk = Boolean(line.inline);
-        logActivity("asked", "You asked", MyaLib.snippet(line.text, 140));
+        logActivity("asked", line.voice ? "You said" : "You asked", MyaLib.snippet(line.text, 140));
       }
     });
     MyaEvents.on("mya.outcome", function (o) {
@@ -192,6 +195,7 @@
       render();
     });
     MyaEvents.on("mic.changed", function (m) { s.micOn = Boolean(m.micEnabled && m.supported); render(); });
+    MyaEvents.on("voice.capture", function (c) { s.capturing = Boolean(c.capturing); s.transcript = c.transcript || ""; render(); });
     MyaEvents.on("data.changed", function (d) {
       if (d && d.source === "approvals") { s.approvals = approvalsCount(); render(); }
     });

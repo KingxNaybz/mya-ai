@@ -19,11 +19,29 @@
  *     drives and reflects the same single state.
  *   - Each log line is also broadcast as "chat.line" so Home can show the
  *     latest exchange.
+ *
+ * Voice experience (Phase 3): tap-to-talk lives in voice.js and sends
+ * through this same performSend, so text and voice share one conversation
+ * and one runtime (Executive Mya). Here:
+ *   - "speaking" lasts exactly as long as her audio plays; Stop
+ *     (MyaChat.stopSpeaking) interrupts it, and so does muting;
+ *   - her real audio drives the Core's --voice-level (Web Audio analyser),
+ *     only when the AudioContext is already running, so it can never
+ *     silence playback;
+ *   - a request with no answer after MyaLib.WAITING_AFTER_MS moves the Core
+ *     to "waiting";
+ *   - events: voice.speaking { on, interrupted }, voice.reply { audio,
+ *     muted, reply, toolsUsed }.
+ * The wake word ("Mya", always listening) is unchanged and is now labelled
+ * as what it is: the hands-free wake word.
  */
 (function (global) {
   "use strict";
 
   var performSendRef = null;
+  var stopSpeakingRef = null;
+  var isBusyRef = null;
+  var wakeRef = null;
 
   function initChat() {
     var form = document.getElementById("mf-command-form");
@@ -111,6 +129,13 @@
         about.textContent = "About: " + meta.about;
         who.appendChild(about);
       }
+      if (meta && meta.voice) {
+        var spoken = document.createElement("span");
+        spoken.className = "chip-tag spoken-tag";
+        spoken.textContent = "Spoken";
+        spoken.title = "You said this out loud";
+        who.appendChild(spoken);
+      }
       var when = new Date();
       var time = document.createElement("time");
       time.className = "chat-time";
@@ -151,7 +176,7 @@
       log.appendChild(line);
       log.scrollTop = log.scrollHeight;
       document.getElementById("chat-empty").hidden = true;
-      MyaEvents.emit("chat.line", { role: role, text: text, inline: Boolean(meta && meta.inline) });
+      MyaEvents.emit("chat.line", { role: role, text: text, inline: Boolean(meta && meta.inline), voice: Boolean(meta && meta.voice) });
     }
 
     function setVoiceStatus(text) {
@@ -180,7 +205,7 @@
       voiceEnabled = !voiceEnabled;
       localStorage.setItem("mya-voice-enabled", voiceEnabled ? "on" : "off");
       applyVoiceToggleUI();
-      if (!voiceEnabled && currentAudio) currentAudio.pause();
+      if (!voiceEnabled) stopSpeaking();
     }
     for (var vi = 0; vi < voiceToggleBtns.length; vi++) voiceToggleBtns[vi].addEventListener("click", onVoiceToggle);
 
@@ -207,9 +232,9 @@
         b.classList.toggle("is-on", micEnabled);
         b.classList.toggle("is-listening", micEnabled && !awake);
         b.setAttribute("aria-pressed", micEnabled ? "true" : "false");
-        b.title = micEnabled ? 'Always listening for "Mya" — click to turn off' : 'Click to always listen for "Mya"';
+        b.title = micEnabled ? 'Hands-free: always listening for "Mya". Click to turn off.' : 'Hands-free: click to always listen for the wake word "Mya"';
         var lbl = b.querySelector("[data-label]");
-        if (lbl) lbl.textContent = micEnabled ? "Mic on" : "Mic off";
+        if (lbl) lbl.textContent = micEnabled ? "Wake word on" : "Wake word off";
       }
       MyaEvents.emit("mic.changed", { micEnabled: micEnabled, supported: Boolean(SpeechRecognitionCtor) });
     }
@@ -412,21 +437,104 @@
       MyaCore.setState(micEnabled ? "listening" : MyaCore.restingState());
     });
 
+    /* ---- Her real voice level -> the Core (--voice-level, 0..1) ----
+       Routing an <audio> element through Web Audio sends its sound ONLY
+       through the graph, so a suspended AudioContext would mean silence.
+       The context is created and resumed on the first user gesture, and the
+       analyser is attached only if it's already running; otherwise she
+       speaks normally and the Core falls back to its CSS speaking pulse. */
+    var audioCtx = null;
+    var levelRaf = 0;
+    function primeAudioContext() {
+      var Ctor = window.AudioContext || window.webkitAudioContext;
+      if (!Ctor) return;
+      try {
+        if (!audioCtx) audioCtx = new Ctor();
+        if (audioCtx.state === "suspended") audioCtx.resume().catch(function () {});
+      } catch (e) { audioCtx = null; }
+    }
+    document.addEventListener("pointerdown", primeAudioContext, { passive: true });
+    document.addEventListener("keydown", primeAudioContext);
+
+    function setVoiceLevel(v) {
+      document.documentElement.style.setProperty("--voice-level", v.toFixed(3));
+    }
+    function stopLevel() {
+      cancelAnimationFrame(levelRaf);
+      levelRaf = 0;
+      MyaCore.el.classList.remove("has-level");
+      setVoiceLevel(0);
+    }
+    function trackLevel(audio) {
+      if (!audioCtx || audioCtx.state !== "running") return;
+      try {
+        var source = audioCtx.createMediaElementSource(audio);
+        var analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.6;
+        source.connect(analyser);
+        analyser.connect(audioCtx.destination);
+        var buf = new Uint8Array(analyser.fftSize);
+        var smooth = 0;
+        MyaCore.el.classList.add("has-level");
+        var step = function () {
+          if (audio !== currentAudio) return;
+          analyser.getByteTimeDomainData(buf);
+          var sum = 0;
+          for (var i = 0; i < buf.length; i++) { var x = (buf[i] - 128) / 128; sum += x * x; }
+          var rms = Math.min(1, Math.sqrt(sum / buf.length) * 3.2);
+          smooth = rms > smooth ? rms : smooth * 0.86 + rms * 0.14;
+          setVoiceLevel(smooth);
+          levelRaf = requestAnimationFrame(step);
+        };
+        levelRaf = requestAnimationFrame(step);
+      } catch (e) {
+        stopLevel();
+      }
+    }
+
+    var speaking = false;
+    function setSpeaking(on, interrupted) {
+      if (speaking === on) return;
+      speaking = on;
+      if (!on) stopLevel();
+      MyaEvents.emit("voice.speaking", { on: on, interrupted: Boolean(interrupted) });
+    }
+
+    // She finished (or couldn't play): a brief "completed", then settle.
     function stopSpeakingAnimation() {
       restartMicForNextTurn();
+      var wasSpeaking = speaking;
+      setSpeaking(false);
+      if (wasSpeaking) MyaCore.setTemporary("completed", 1200);
+      else MyaCore.settle();
+    }
+
+    // Stop button, Esc, muting, or talking over her.
+    function stopSpeaking() {
+      if (!currentAudio || !speaking) return false;
+      try { currentAudio.pause(); } catch (e) { /* ignore */ }
+      restartMicForNextTurn();
+      setSpeaking(false, true);
       MyaCore.settle();
+      return true;
     }
 
     function playReplyAudio(audioBase64) {
       if (!audioBase64 || !voiceEnabled) return false;
       try {
         if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; }
+        stopLevel();
         currentAudio = new Audio("data:audio/mpeg;base64," + audioBase64);
+        var audio = currentAudio;
         MyaCore.clearIdleTimer();
         micRestartedForCurrentReply = false;
-        currentAudio.addEventListener("ended", stopSpeakingAnimation);
-        currentAudio.addEventListener("error", function () {
-          console.error("Mya voice playback error:", currentAudio && currentAudio.error);
+        trackLevel(audio);
+        audio.addEventListener("playing", function () { if (audio === currentAudio) setSpeaking(true); });
+        audio.addEventListener("ended", function () { if (audio === currentAudio) stopSpeakingAnimation(); });
+        audio.addEventListener("error", function () {
+          if (audio !== currentAudio) return;
+          console.error("Mya voice playback error:", audio.error);
           stopSpeakingAnimation();
         });
         var EARLY_RESTART_SECONDS = 0.3;
@@ -437,7 +545,8 @@
           }
         });
         pauseWakeListening().then(function () {
-          currentAudio.play().catch(function (err) {
+          if (audio !== currentAudio) return;
+          audio.play().catch(function (err) {
             console.error("Mya voice play() failed:", err);
             stopSpeakingAnimation();
           });
@@ -465,8 +574,10 @@
       var outbound = opts.context ? message + "\n\n[Screen context from the Command Center]\n" + opts.context : message;
       inFlight = true;
       sendBtn.disabled = true;
-      addLine(message, "user", { about: opts.label, inline: opts.inline });
-      MyaEvents.emit("mya.thinking", { dev: false });
+      stopSpeaking(); // a new question interrupts the last answer
+      addLine(message, "user", { about: opts.label, inline: opts.inline, voice: opts.voice });
+      MyaEvents.emit("mya.thinking", { dev: false, voice: Boolean(opts.voice) });
+      var waitTimer = setTimeout(function () { MyaEvents.emit("mya.waiting", { dev: false }); }, MyaLib.WAITING_AFTER_MS);
 
       var priorHistory = history.slice(-20);
       history.push({ role: "user", content: outbound });
@@ -507,8 +618,9 @@
           applyProviderUI();
           history.push({ role: "assistant", content: reply });
           MyaEvents.emit("mya.outcome", { ok: true, reply: reply, inline: opts.inline });
-          MyaEvents.emit("mya.responding", { dev: false });
           var playing = playReplyAudio(result.data.audioBase64);
+          MyaEvents.emit("voice.reply", { audio: playing, muted: !voiceEnabled, reply: reply, toolsUsed: result.data.toolsUsed || [], voice: Boolean(opts.voice) });
+          MyaEvents.emit("mya.responding", { dev: false, audio: playing });
           if (!playing) restartMicForNextTurn();
 
           MyaData.refreshForTools(result.data.toolsUsed);
@@ -522,11 +634,25 @@
           return { ok: false };
         })
         .finally(function () {
+          clearTimeout(waitTimer);
           inFlight = false;
           sendBtn.disabled = !useHermes;
         });
     }
     performSendRef = performSend;
+    stopSpeakingRef = stopSpeaking;
+    isBusyRef = function () { return inFlight; };
+    wakeRef = {
+      // Tap-to-talk needs the mic to itself: two recognizers conflict.
+      pause: function () { return micEnabled ? pauseWakeListening() : Promise.resolve(); },
+      resume: function () {
+        pausedForPlayback = false;
+        if (micEnabled && !speaking) startRecognition();
+      }
+    };
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && speaking) stopSpeaking();
+    });
 
     form.addEventListener("submit", function (e) {
       e.preventDefault();
@@ -555,6 +681,11 @@
       message = String(message || "").trim();
       if (!message || !performSendRef) return Promise.resolve({ ok: false });
       return performSendRef(message, opts);
-    }
+    },
+    // Stop her mid-sentence. True if she was speaking.
+    stopSpeaking: function () { return stopSpeakingRef ? stopSpeakingRef() : false; },
+    isBusy: function () { return isBusyRef ? isBusyRef() : false; },
+    pauseWake: function () { return wakeRef ? wakeRef.pause() : Promise.resolve(); },
+    resumeWake: function () { if (wakeRef) wakeRef.resume(); }
   };
 })(window);

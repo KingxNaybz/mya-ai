@@ -265,6 +265,10 @@
        s.approvals     number | null (null = not known, never treated as 0)
        s.micOn         bool
        s.pendingText   what the owner last asked, while a request is in flight
+       s.capturing     bool: a tap-to-talk turn is recording right now
+       s.transcript    what she has heard so far in that turn (live)
+     "waiting" is real too: the Core moves to it once a request has been in
+     flight for WAITING_AFTER_MS with no answer yet (see chat.js).
      Returns { state, label, detail }. */
   var COMPLETED_HOLD_MS = 60 * 1000;
   var FAILED_HOLD_MS = 5 * 60 * 1000;
@@ -282,7 +286,13 @@
     if (s.core === "thinking") {
       return { state: "thinking", label: "Thinking", detail: s.pendingText ? "On: “" + snippet(s.pendingText, 60) + "”" : "Working on your request" };
     }
-    if (s.core === "speaking") return { state: "speaking", label: "Speaking", detail: "Replying now" };
+    if (s.core === "waiting") {
+      return { state: "waiting", label: "Still working", detail: "Waiting on her runtime" + (s.pendingText ? " · “" + snippet(s.pendingText, 40) + "”" : "") };
+    }
+    if (s.core === "speaking") return { state: "speaking", label: "Speaking", detail: "Replying now · tap to stop" };
+    if (s.capturing) {
+      return { state: "listening", label: "Listening", detail: s.transcript ? "“" + snippet(s.transcript, 60) + "”" : "Go ahead, I'm listening" };
+    }
     if (out && !out.ok && age < FAILED_HOLD_MS) {
       return { state: "error", label: "Didn't answer", detail: "Her last reply failed. Nothing was sent elsewhere." };
     }
@@ -301,6 +311,79 @@
       label: "Ready",
       detail: s.availability === "connected" ? "Connected · ask anything" : "Configured · her first reply confirms it"
     };
+  }
+
+  /* ---------------- Voice capsule ----------------
+     What the floating voice capsule says for one voice turn (or for any
+     reply she's speaking). Pure, so every phase and failure is testable.
+       v.phase       "listening" | "thinking" | "waiting" | "working" |
+                     "speaking" | "completed" | "error" | anything else = hidden
+       v.transcript  what she heard (live while listening)
+       v.reply       her reply text, once it arrives
+       v.error       a VOICE_ERRORS key
+       v.startedAt   when the request was sent (ms), for the waiting timer
+       v.muted       her voice is off, so the reply was text only
+       v.noAudio     voice was on but no audio came back
+       v.dev         a dev simulation, never real
+     Returns { visible, phase, label, detail, action, tone }. action is the
+     primary button: "send" (finish listening now), "stop" (stop speaking),
+     or null. */
+  var WAITING_AFTER_MS = 8000;
+  var VOICE_ERRORS = {
+    "unsupported": { label: "Voice input isn't available", detail: "This browser can't transcribe speech. Try Chrome or Edge, or type instead." },
+    "mic-denied": { label: "Microphone blocked", detail: "Allow microphone access for this site in the address bar, then tap to talk again." },
+    "no-mic": { label: "No microphone found", detail: "Check that a microphone is connected, then try again." },
+    "speech-network": { label: "Speech service unreachable", detail: "The browser couldn't reach its speech recognition service. Check your connection." },
+    "no-speech": { label: "I didn't catch that", detail: "Nothing was heard, so nothing was sent. Tap to talk and try again." },
+    "unavailable": { label: "Executive Mya is unavailable", detail: "Voice goes only to Executive Mya, and she can't be reached right now. Nothing was sent." },
+    "failed": { label: "Executive Mya didn't answer", detail: "Nothing was sent to another assistant. Try again in a moment." },
+    "busy": { label: "One moment", detail: "She's still answering your last request." }
+  };
+
+  function voiceCapsule(v, now) {
+    v = v || {};
+    now = now == null ? Date.now() : now;
+    var heard = v.transcript ? "“" + snippet(v.transcript, 90) + "”" : "";
+    var out = { visible: true, phase: v.phase, label: "", detail: "", action: null, tone: v.phase };
+    switch (v.phase) {
+      case "listening":
+        out.label = "Listening";
+        out.detail = heard || "Go ahead, I'm listening…";
+        out.action = "send";
+        break;
+      case "thinking":
+        out.label = "Thinking";
+        out.detail = heard || "Working on your request";
+        break;
+      case "waiting":
+        out.label = "Still working";
+        var secs = v.startedAt ? Math.max(0, Math.round((now - v.startedAt) / 1000)) : 0;
+        out.detail = "Waiting on Executive Mya" + (secs ? " · " + secs + "s" : "");
+        break;
+      case "working":
+        out.label = "Working";
+        out.detail = "Using her tools";
+        break;
+      case "speaking":
+        out.label = "Speaking";
+        out.detail = v.reply ? snippet(v.reply, 110) : "Replying now";
+        out.action = "stop";
+        break;
+      case "completed":
+        out.label = "Done";
+        out.detail = v.muted ? "Her voice is muted, so the reply is in the conversation."
+          : v.noAudio ? "Her voice reply didn't come through. The text is in the conversation."
+          : v.reply ? snippet(v.reply, 110) : "Replied";
+        break;
+      case "error":
+        var e = VOICE_ERRORS[v.error] || VOICE_ERRORS.failed;
+        out.label = e.label;
+        out.detail = e.detail;
+        break;
+      default:
+        return { visible: false, phase: null, label: "", detail: "", action: null, tone: null };
+    }
+    return out;
   }
 
   /* ---------------- "Ask Mya about this" context ----------------
@@ -391,6 +474,9 @@
     permissionLabel: permissionLabel,
     executiveMyaRoute: executiveMyaRoute,
     derivePresence: derivePresence,
+    voiceCapsule: voiceCapsule,
+    VOICE_ERRORS: VOICE_ERRORS,
+    WAITING_AFTER_MS: WAITING_AFTER_MS,
     buildScreenContext: buildScreenContext,
     snippet: snippet,
     escapeHtml: escapeHtml,

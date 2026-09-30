@@ -226,6 +226,56 @@ test("presence comes only from real signals, in priority order", () => {
   assert.match(lib.derivePresence({ core: "thinking", pendingText: "x".repeat(200) }, now).detail, /…/);
 });
 
+test("presence: waiting and a live voice turn are real states with honest wording", () => {
+  const now = 1_000_000;
+  const D = (s) => lib.derivePresence(s, now);
+  assert.equal(D({ core: "waiting", pendingText: "status?" }).state, "waiting");
+  assert.match(D({ core: "waiting" }).detail, /Waiting on her runtime/);
+  // Recording outranks resting states but never a request already in flight.
+  assert.equal(D({ core: "listening", capturing: true, availability: "connected", approvals: 2 }).state, "listening");
+  assert.equal(D({ core: "thinking", capturing: true }).state, "thinking");
+  assert.match(D({ core: "listening", capturing: true, transcript: "what's on today" }).detail, /what's on today/);
+  assert.match(D({ core: "listening", capturing: true, transcript: "" }).detail, /listening/);
+});
+
+test("voice capsule: every phase says what's happening, and hidden means hidden", () => {
+  const V = (v) => lib.voiceCapsule(v, NOW);
+  assert.equal(V({}).visible, false);
+  assert.equal(V({ phase: null }).visible, false);
+  assert.equal(V({ phase: "listening" }).action, "send");
+  assert.match(V({ phase: "listening", transcript: "hello there" }).detail, /hello there/);
+  assert.equal(V({ phase: "speaking", reply: "Sure." }).action, "stop");
+  assert.equal(V({ phase: "thinking" }).action, null);
+  assert.match(V({ phase: "waiting", startedAt: NOW - 12000 }).detail, /12s/);
+  assert.match(V({ phase: "completed", muted: true }).detail, /muted/);
+  assert.match(V({ phase: "completed", noAudio: true }).detail, /didn't come through/);
+  assert.match(V({ phase: "completed", reply: "All set." }).detail, /All set/);
+});
+
+test("voice capsule: failures are specific, and never claim anything was sent elsewhere", () => {
+  for (const code of Object.keys(lib.VOICE_ERRORS)) {
+    const out = lib.voiceCapsule({ phase: "error", error: code }, NOW);
+    assert.equal(out.visible, true);
+    assert.ok(out.label && out.detail, code);
+  }
+  assert.match(lib.voiceCapsule({ phase: "error", error: "unavailable" }, NOW).detail, /Nothing was sent/);
+  assert.match(lib.voiceCapsule({ phase: "error", error: "failed" }, NOW).detail, /Nothing was sent to another assistant/);
+  // An unknown code falls back to the generic failure, not a blank capsule.
+  assert.equal(lib.voiceCapsule({ phase: "error", error: "???" }, NOW).label, lib.VOICE_ERRORS.failed.label);
+});
+
+test("voice goes to Executive Mya through the one chat path, never a fixture or a second assistant", () => {
+  const voice = read("voice.js");
+  assert.match(voice, /MyaChat\.send\(text, \{ voice: true/);
+  assert.doesNotMatch(voice, /fetch\(|XMLHttpRequest|\/api\//);
+  // The dev simulation is gated to ?dev=1 and never writes to the conversation.
+  const sim = voice.slice(voice.indexOf("function simulate()"), voice.indexOf("function typeWords"));
+  assert.match(sim, /dev=1/);
+  assert.doesNotMatch(sim, /MyaChat\.send|addLine|chat\.line/);
+  // Reception stays separate: no phone/Reception endpoints from the voice UI.
+  assert.doesNotMatch(voice + read("chat.js"), /mya-call|outbound-call|mya-actions/);
+});
+
 test("screen context only describes data that actually loaded", () => {
   const off = lib.buildScreenContext("approvals", { approvals: { state: "offline", data: null } });
   assert.equal(off.label, "Approvals");

@@ -197,5 +197,12 @@
     return true;
   }
 
-  global.MyaAskAbout = { init: init, askAbout: askAbout, open: openBar, isAvailable: function () { return available; } };
+  // The screen note for a view, for questions asked some other way (voice).
+  // Null on Home and Mya, which have no single screen to describe.
+  function contextFor(view) {
+    if (VIEWS.indexOf(view) === -1) return null;
+    return MyaLib.buildScreenContext(view, snapshot());
+  }
+
+  global.MyaAskAbout = { init: init, askAbout: askAbout, open: openBar, contextFor: contextFor, isAvailable: function () { return available; } };
 })(window);

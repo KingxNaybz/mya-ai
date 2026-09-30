@@ -143,7 +143,8 @@
   function onMicChanged(s) {
     var el = $("strip-mic");
     el.classList.toggle("on", Boolean(s.micEnabled));
-    el.querySelector(".strip-text").textContent = !s.supported ? "No voice input" : s.micEnabled ? "Mic listening" : "Mic off";
+    el.querySelector(".strip-text").textContent = !s.supported ? "No voice input" : s.micEnabled ? "Wake word on" : "Wake word off";
+    el.title = 'Hands-free: listening for the wake word "Mya"';
   }
 
   /* ---------------- init ---------------- */
@@ -203,6 +204,7 @@
       $("dev-card").hidden = false;
       MyaCore.renderDevStateRow($("mf-dev-states-row"));
       $("mf-replay-intro-btn").addEventListener("click", MyaCore.playIntro);
+      $("mf-simulate-voice-btn").addEventListener("click", MyaVoice.simulate);
     }
 
     MyaEvents.on("data.changed", renderStrip);

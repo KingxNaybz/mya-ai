@@ -8,11 +8,15 @@
  * page; MyaShell moves it between slots rather than cloning it, so every
  * state change is always reflected wherever she currently is.
  *
- * REAL vs DEV states: idle, listening, thinking and speaking are driven by
- * real signals (see chat.js). Every other state (memory-retrieval,
- * tool-use, working, delegating, awaiting-approval, completed, alert,
- * error) has no backend signal yet and is only reachable from the dev-only
- * preview row (Systems view, ?dev=1), which marks itself as dev.
+ * REAL vs DEV states. Driven by real signals (chat.js, voice.js,
+ * presence.js): idle, listening, thinking, waiting (a request in flight
+ * with no answer yet after a few seconds), speaking (only while her audio
+ * is actually playing), completed (a reply just arrived, or she just
+ * finished speaking), awaiting-approval and blocked (resting states from
+ * real approvals / Executive Mya being unreachable), and error (a failed
+ * request). The rest (memory-retrieval, tool-use, working, delegating,
+ * alert) have no backend signal yet and are only reachable from the
+ * dev-only preview (Systems view, ?dev=1), which marks itself as dev.
  */
 (function (global) {
   "use strict";
@@ -100,6 +104,8 @@
     "listening": "Listening",
     "thinking": "Thinking",
     "speaking": "Speaking",
+    "waiting": "Still working",
+    "blocked": "Unavailable",
     "memory-retrieval": "Recalling",
     "tool-use": "Using a tool",
     "working": "Working",
@@ -133,15 +139,17 @@
 
   // What the Core shows when nothing is happening. MyaPresence sets it to
   // "awaiting-approval" while real approvals are pending, so the Core itself
-  // tells you she's waiting on you. Only ever idle or awaiting-approval.
+  // tells you she's waiting on you, and to "blocked" while Executive Mya
+  // can't be reached. Only ever idle, awaiting-approval or blocked.
+  var RESTING = ["idle", "awaiting-approval", "blocked"];
   var resting = "idle";
   function restingState() { return resting; }
   function setResting(stateName) {
-    var next = stateName === "awaiting-approval" ? "awaiting-approval" : "idle";
+    var next = RESTING.indexOf(stateName) !== -1 ? stateName : "idle";
     if (next === resting) return;
     var current = getCoreState();
     resting = next;
-    if (current === "idle" || current === "awaiting-approval") setCoreState(resting);
+    if (RESTING.indexOf(current) !== -1) setCoreState(resting);
   }
 
   function settleCore() { settleFn(); }
@@ -156,9 +164,17 @@
 
   function clearIdleTimer() { clearTimeout(idleTimer); }
 
-  // Real event -> state wiring (same three emissions as Build 12).
+  // Real event -> state wiring.
   MyaEvents.on("mya.thinking", function () { clearTimeout(idleTimer); setCoreState("thinking"); });
-  MyaEvents.on("mya.responding", function () { setCoreStateTemporary("speaking", 2200); });
+  // Still no answer after a few seconds: say so instead of spinning forever.
+  MyaEvents.on("mya.waiting", function () { if (getCoreState() === "thinking") setCoreState("waiting"); });
+  // A reply arrived. With audio, chat.js holds "speaking" for exactly as
+  // long as she's audible; without it she was never speaking, so the Core
+  // shows a brief "completed" instead.
+  MyaEvents.on("mya.responding", function (d) {
+    if (d && d.audio) { clearTimeout(idleTimer); setCoreState("speaking"); }
+    else setCoreStateTemporary("completed", 1600);
+  });
   MyaEvents.on("mya.idle", function () { clearTimeout(idleTimer); setCoreState(restingState()); });
   // A failed request flashes the Core's contained error state, then settles.
   MyaEvents.on("mya.outcome", function (o) { if (o && o.ok === false) setCoreStateTemporary("error", 1800); });
@@ -168,9 +184,9 @@
      opened with ?dev=1 (see the Systems view). Every click emits with
      dev: true and never touches the network. */
   var DEV_PREVIEW_STATES = [
-    "idle", "listening", "thinking", "speaking", "memory-retrieval",
-    "tool-use", "working", "delegating", "awaiting-approval",
-    "completed", "alert", "error"
+    "idle", "listening", "thinking", "waiting", "working", "speaking",
+    "completed", "awaiting-approval", "blocked", "error",
+    "memory-retrieval", "tool-use", "delegating", "alert"
   ];
 
   function renderDevStateRow(row) {
