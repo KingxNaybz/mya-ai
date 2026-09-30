@@ -22,20 +22,22 @@
     alerts:      { url: "/api/command-center-projects?type=alerts", label: "Proactive alerts" },
     memory:      { url: "/api/command-center-memory",              label: "Remembered facts" },
     followups:   { url: "/api/command-center-followups",           label: "Follow-ups" },
-    contractors: { url: "/api/command-center-contractors",         label: "Contractors" }
+    contractors: { url: "/api/command-center-contractors",         label: "Contractors" },
+    systems:     { url: "/api/command-center-data?type=systems",    label: "System health" },
+    approvalsRecent: { url: "/api/command-center-approvals?status=recent", label: "Approval history" }
   };
 
-  // External systems the Command Center will connect to in later phases.
-  // These are descriptions of real systems that exist OUTSIDE this repo --
-  // not data, and never shown as connected. Phase 1 has no link to any of
-  // them, so every one renders as "Not connected".
+  // External systems that live OUTSIDE this repo. These are descriptions
+  // only -- never data. Their status comes exclusively from the "systems"
+  // source (server-side, read-only checks); an id the server doesn't report
+  // renders as "Not observable", never as connected.
   var INTEGRATIONS = [
     { id: "hermes",    name: "Mya runtime (Hermes VPS)", role: "Mya's production agent runtime — Telegram, routing, long-running work." },
     { id: "telegram",  name: "Telegram",                 role: "Mya's mobile messaging channel, served by the Hermes runtime." },
-    { id: "hindsight", name: "Hindsight memory",         role: "Mya's long-term memory store — source for Memory / Constellation." },
+    { id: "hindsight", name: "Hindsight memory",         role: "Mya's long-term memory store, built up by the Hermes runtime. Searchable here, read-only." },
     { id: "router",    name: "Local Qwen router",        role: "On-VPS model routing for everyday requests." },
     { id: "claude",    name: "Claude escalation",        role: "Escalation path for complex reasoning from the Hermes runtime." },
-    { id: "mcp",       name: "Hermes MCP read bridge",   role: "Hermes → Command Center tools. Read-only allowlist (get_project, get_client, search_projects); status isn't observable from here yet." },
+    { id: "mcp",       name: "Hermes MCP read bridge",   role: "Hermes → Command Center tools. Read-only allowlist: get_project, get_client, search_projects." },
     { id: "windows",   name: "Windows bridge",           role: "Desktop control on your PC — screen, click, type, always with confirmation." },
     { id: "houzz",     name: "Houzz Pro",                role: "Construction operating system of record. Mya will orchestrate above it, not replace it." }
   ];
@@ -90,12 +92,67 @@
       });
   }
 
+  /* On-demand reads (a search, one project's detail). Same session, same
+     401 → auth.expired rule, same freshness record as a polled source, but
+     never polled and kept out of the status strip's worst-of. Each key holds
+     only its latest result; `status` is the HTTP status of the last failure
+     so views can tell "not configured" (503) from "unreachable". */
+  var queries = {};
+
+  function query(key, url) {
+    var entry = queries[key] || (queries[key] = { name: key, data: null, lastSuccessAt: 0, lastAttemptAt: 0, lastError: null, status: 0, inFlight: false, seq: 0 });
+    var seq = ++entry.seq;
+    entry.inFlight = true;
+    entry.url = url;
+    entry.data = null;
+    entry.lastSuccessAt = 0;
+    entry.lastError = null;
+    entry.status = 0;
+    entry.lastAttemptAt = Date.now();
+    notify(key);
+    return fetch(url, { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then(function (res) {
+        if (res.status === 401) {
+          var err = new Error("unauthorized");
+          err.unauthorized = true;
+          throw err;
+        }
+        if (!res.ok) { var e = new Error("HTTP " + res.status); e.status = res.status; throw e; }
+        return res.json();
+      })
+      .then(function (json) {
+        if (seq !== entry.seq) return null; // a newer query replaced this one
+        entry.data = json;
+        entry.lastSuccessAt = Date.now();
+        return json;
+      })
+      .catch(function (err) {
+        if (seq !== entry.seq) return null;
+        entry.lastError = (err && err.message) || "failed";
+        entry.status = (err && err.status) || 0;
+        entry.lastAttemptAt = Math.max(Date.now(), entry.lastSuccessAt + 1);
+        if (err && err.unauthorized) MyaEvents.emit("auth.expired", { source: key });
+        return null;
+      })
+      .then(function (result) {
+        if (seq === entry.seq) { entry.inFlight = false; notify(key); }
+        return result;
+      });
+  }
+
+  function clearQuery(key) {
+    if (!queries[key]) return;
+    queries[key].seq++;
+    delete queries[key];
+    notify(key);
+  }
+
   function refreshAll() {
     return Promise.all(Object.keys(SOURCES).map(fetchSource));
   }
 
   function freshness(name, now) {
-    return MyaLib.computeFreshness(entries[name], now);
+    return MyaLib.computeFreshness(entries[name] || queries[name], now);
   }
 
   function allFreshness(now) {
@@ -129,7 +186,7 @@
   // touched (same tool-name mapping the classic dashboard and Build 12 use).
   var TOOL_SOURCES = {
     add_contractor: ["contractors"], remove_contractor: ["contractors"],
-    resolve_approval: ["approvals", "alerts"],
+    resolve_approval: ["approvals", "alerts", "approvalsRecent"],
     create_followup: ["followups", "alerts"],
     remember_fact: ["memory"],
     create_project: ["projects", "data"], update_project: ["projects", "data"],
@@ -151,7 +208,9 @@
   global.MyaData = {
     SOURCES: SOURCES,
     INTEGRATIONS: INTEGRATIONS,
-    get: function (name) { return entries[name]; },
+    get: function (name) { return entries[name] || queries[name]; },
+    query: query,
+    clearQuery: clearQuery,
     fetch: fetchSource,
     refreshAll: refreshAll,
     refreshForTools: refreshForTools,

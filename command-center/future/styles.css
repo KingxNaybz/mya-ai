@@ -527,6 +527,47 @@ a.metric:hover { border-color: var(--line-strong); transform: translateY(-1px); 
 
 /* ============================================================ RESPONSIVE */
 /* Tablet / small laptop: icon-only rail */
+/* ============================================================ PHASE 2 */
+/* System health pills beyond live/stale/offline */
+.fresh.down { color: #f2a19a; border-color: rgba(229, 100, 90, 0.4); background: rgba(229, 100, 90, 0.08); }
+.fresh.down .fresh-dot { background: var(--red); box-shadow: 0 0 6px rgba(229, 100, 90, 0.8); }
+.fresh.configured { color: var(--text-mid); border-color: var(--line-strong); }
+.fresh.configured .fresh-dot { background: var(--accent); opacity: 0.7; }
+.fresh-down { color: #f2a19a; border-color: rgba(229, 100, 90, 0.45) !important; }
+.fresh-down .fresh-dot { background: var(--red); box-shadow: 0 0 8px rgba(229, 100, 90, 0.7); }
+.integration-detail { margin-top: 8px; color: var(--text-mid); }
+
+/* Inline search (Projects, Hindsight) -- same field language as quick-ask */
+.inline-search {
+  display: flex; gap: 8px; align-items: center; margin: 0 0 10px;
+  padding: 4px 4px 4px 12px; border-radius: var(--radius-sm);
+  background: rgba(5, 8, 14, 0.55); border: 1px solid var(--line-strong);
+  transition: border-color var(--dur), box-shadow var(--dur);
+}
+.inline-search[hidden] { display: none; }
+.card > p.muted + .inline-search, .card > p.muted + #hindsight-results { margin-top: 12px; }
+.inline-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(74, 168, 255, 0.12); }
+.inline-search input { flex: 1; min-width: 0; height: 34px; border: 0; background: transparent; outline: none; color: var(--text-hi); }
+.inline-search input::placeholder { color: var(--text-muted); }
+
+/* Clickable project rows + detail card */
+.row-link { display: block; cursor: pointer; border-radius: var(--radius-sm); outline: none; }
+.row-link:hover .row-main strong, .row-link:focus-visible .row-main strong { color: var(--accent-soft); }
+.row-link:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.row-link:last-child .row { border-bottom: 0; }
+.project-detail { margin-bottom: 20px; border-color: rgba(74, 168, 255, 0.28); }
+.detail-head-side { display: inline-flex; align-items: center; gap: 10px; }
+.detail-grid { align-items: start; }
+.detail-sub { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin: 4px 0 6px; }
+.detail-sub + * { margin-bottom: 14px; }
+.detail-updated { margin: 12px 0; }
+
+/* Chat: what Mya used, and which runtime answered */
+.chat-tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.chat-tools .chip-tag { text-transform: none; }
+.runtime-line { margin-top: 10px; font-size: 12px; color: var(--text-muted); text-align: center; }
+#mya-provider-toggle { margin: 8px auto 0; }
+
 @media (max-width: 1279px) {
   :root { --rail-w: 76px; --gutter: 22px; }
   .strip-brand { width: auto; }
@@ -554,6 +595,7 @@ a.metric:hover { border-color: var(--line-strong); transform: translateY(-1px); 
   .strip { padding: 0 12px; gap: 10px; }
   .strip-items { gap: 6px; }
   .strip-hide-sm { display: none !important; }
+  .detail-grid { grid-template-columns: minmax(0, 1fr); }
   .strip-item { padding: 0 9px; }
   .strip-item .strip-text { display: none; }
   #strip-approvals .strip-text { display: none; }

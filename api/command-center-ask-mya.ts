@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
-import { isCommandCenterAuthenticated } from "../lib/session";
+import { isCommandCenterAuthenticated, commandCenterAuthMethod, safeStringEqual } from "../lib/session";
+import { hindsightRecall } from "../lib/integrations";
 
 /**
  * Same protection model as the other command-center-*.ts endpoints: no
@@ -220,7 +221,7 @@ Rules:
 - After taking an action, confirm in one short sentence what you did.
 - If asked what you can do, what your capabilities are, or what you can't do yet, call list_capabilities rather than describing yourself from memory — that list is the real, current one.
 - If the user says "undo", "undo that", or asks to reverse the last thing you did, call undo_last_action. Don't guess which action they mean — that skill always reverses the single most recent reversible action.
-- If the user tells you to remember something, or shares a fact/preference/detail worth keeping for later ("remember that...", "the Rivers project needs..."), call remember_fact. If asked what you remember or know about something, call recall_memory rather than guessing.
+- If the user tells you to remember something, or shares a fact/preference/detail worth keeping for later ("remember that...", "the Rivers project needs..."), call remember_fact. If asked what you remember or know about something, call recall_memory rather than guessing. For longer-term memory (things learned in Telegram or earlier conversations), call recall_hindsight; if it says Hindsight isn't connected, say so plainly.
 - Projects are the company's real jobs (e.g. "3941 Briar Glen Ct" / "Courtney Vonwalsung"). When asked about a specific project, call get_project rather than guessing at details — it returns everything on file for that job. Use create_project when a new job should be tracked, update_project to record scope/status/pricing/decision changes, and list_projects to see what's open or in a given status.
 - The Company Brain holds standing business info (margin targets, payment terms, warranty language, estimating standards, insurance procedures, lessons learned) — call get_company_brain when asked about company policy/standards, and update_company_brain when told to change one.
 - Estimates are built from real cost line items, never guessed. Use add_estimate_item to log a real quantity x rate cost against a project, calculate_estimate to get its Direct Cost/True Cost/Floor Price/Target Price, and evaluate_bid_price for "what if we bid this at $X" questions. If a project has no line items yet, say so and offer to log some — never invent a price.
@@ -946,6 +947,26 @@ const SKILLS: Skill[] = [
     },
   },
   {
+    // Read-only by name (recall_ → level 0). Deliberately NOT in
+    // MCP_TOOL_ALIASES: Hermes already owns Hindsight; the MCP allowlist
+    // stays get_project/get_client/search_projects.
+    name: "recall_hindsight",
+    description: "Search Mya's long-term Hindsight memory — the memory her Hermes runtime and Telegram conversations build up — for anything relevant. Read-only. Use when asked what you know or remember about a person, project, preference, or past conversation and recall_memory doesn't cover it.",
+    input_schema: {
+      type: "object",
+      properties: { query: { type: "string", description: "What to search for, in plain words" } },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    execute: async (input) => {
+      const result = await hindsightRecall(input.query, 10);
+      if (result.ok) return { memories: result.memories };
+      if (result.reason === "not_configured") return { error: "Hindsight memory isn't connected to the Command Center yet." };
+      if (result.reason === "invalid_query") return { error: "query is required" };
+      return { error: "Hindsight memory isn't reachable right now." };
+    },
+  },
+  {
     name: "get_company_brain",
     description: "Get Elevate Construction's standing business info: margin targets, payment terms, warranty language, contract clauses, estimating standards, insurance procedures, equipment notes, and lessons learned.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
@@ -1668,7 +1689,7 @@ async function handleMcpRequest(
     return { status: 401, body: jsonRpcError(id, -32001, "MCP bridge has no key configured.") };
   }
   const presented = (authHeader || "").replace(/^Bearer\s+/i, "").trim();
-  if (!presented || presented !== MCP_BRIDGE_KEY) {
+  if (!presented || !safeStringEqual(presented, MCP_BRIDGE_KEY)) {
     return { status: 401, body: jsonRpcError(id, -32001, "Unauthorized.") };
   }
 
@@ -1908,9 +1929,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ result });
   }
 
-  if (!ANTHROPIC_API_KEY) {
+  // Optional, off-by-default Hermes route (text only, no tools). Anthropic +
+  // SKILLS stays the default; "hermes" is accepted only when this deployment
+  // actually has HERMES_BRIDGE_KEY, so it can never silently fall back.
+  const requestedProvider = (req.body || {}).provider;
+  if (requestedProvider !== undefined && requestedProvider !== "anthropic" && requestedProvider !== "hermes") {
+    return res.status(400).json({ error: "Unknown provider." });
+  }
+  const provider: ModelProvider = requestedProvider === "hermes" ? "hermes" : DEFAULT_MODEL_PROVIDER;
+  if (provider === "hermes" && !HERMES_BRIDGE_KEY) {
+    return res.status(400).json({ error: "hermes_not_configured" });
+  }
+  if (provider === "anthropic" && !ANTHROPIC_API_KEY) {
     return res.status(503).json({ error: "not_configured", message: "ANTHROPIC_API_KEY is not set." });
   }
+  // Audit label only: the desktop app authenticates with its header key.
+  const chatSurface = commandCenterAuthMethod(req) === "api_key" ? "desktop_app" : "dashboard_or_desktop_chat";
 
   const userMessage = typeof (req.body || {}).message === "string" ? req.body.message.trim() : "";
   if (!userMessage) {
@@ -1935,7 +1969,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-      const response = await callModel(DEFAULT_MODEL_PROVIDER, messages);
+      const response = await callModel(provider, messages);
       const toolUseBlocks = (response.content || []).filter((b: any) => b.type === "tool_use");
 
       if (toolUseBlocks.length === 0) {
@@ -1945,14 +1979,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .join("\n")
           .trim() || "Done.";
         const audioBase64 = wantsVoice ? await synthesizeSpeech(reply) : null;
-        return res.status(200).json({ reply, toolsUsed, audioBase64 });
+        return res.status(200).json({ reply, toolsUsed, audioBase64, provider });
       }
 
       const toolResults = await Promise.all(
         toolUseBlocks.map(async (tu: any) => {
           const { result, toolUsed } = await executeTool(tu.name, tu.input || {});
           toolsUsed.push(toolUsed);
-          await logActionEvent({ toolName: toolUsed, input: tu.input || {}, result, surface: "dashboard_or_desktop_chat" });
+          await logActionEvent({ toolName: toolUsed, input: tu.input || {}, result, surface: chatSurface });
           return { type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(result) };
         })
       );
@@ -1966,9 +2000,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       reply: tooManySteps,
       toolsUsed,
       audioBase64: wantsVoice ? await synthesizeSpeech(tooManySteps) : null,
+      provider,
     });
   } catch (err: any) {
     console.error("command-center-ask-mya error:", err);
+    // The Hermes route is new code: generic message, never upstream text.
+    if (provider === "hermes") return res.status(502).json({ error: "Hermes didn't answer." });
     return res.status(500).json({ error: err?.message || "Internal server error" });
   }
 }

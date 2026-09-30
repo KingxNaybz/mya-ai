@@ -17,6 +17,12 @@ import { isCommandCenterAuthenticated } from "../lib/session";
  *     check, not an LLM call, run each time the dashboard loads. No
  *     background job here (Vercel Cron would need editing vercel.json,
  *     off-limits).
+ *   - ?type=detail&id=<uuid>: one project with its estimate line items and
+ *     upcoming appointments (mirrors the get_project skill's select("*")
+ *     plus list_estimate_items' columns; the skills themselves are
+ *     untouched).
+ *   - ?type=search&q=<text>: name/client keyword search across ALL
+ *     statuses (same filter semantics as the list_projects skill), capped.
  */
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
@@ -98,6 +104,75 @@ async function handleProjectsList(res: VercelResponse) {
   return res.status(200).json({ projects: data || [] });
 }
 
+// PostgREST .or() takes a filter *string*, so characters that are syntax
+// there (commas, parens, wildcards, quotes, backslashes) are stripped from
+// user text before it goes in -- a search box must never be able to add
+// its own filter clauses.
+function cleanSearchText(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  return raw.replace(/[,()*%\\"'`:]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
+const SEARCH_LIMIT = 25;
+
+async function handleProjectSearch(req: VercelRequest, res: VercelResponse) {
+  const q = cleanSearchText(req.query.q);
+  if (!q) return res.status(400).json({ error: "q is required" });
+  const { data, error } = await supabase
+    .from("mya_projects")
+    .select("id,project_name,client_name,project_type,status,next_action,outstanding_decisions,updated_at")
+    .or(`project_name.ilike.%${q}%,client_name.ilike.%${q}%`)
+    .order("updated_at", { ascending: false })
+    .limit(SEARCH_LIMIT);
+  if (error) {
+    console.error("command-center-projects GET search error:", error);
+    return res.status(500).json({ error: "Couldn't search projects." });
+  }
+  return res.status(200).json({ projects: data || [], limit: SEARCH_LIMIT });
+}
+
+async function handleProjectDetail(req: VercelRequest, res: VercelResponse) {
+  const id = typeof req.query.id === "string" ? req.query.id.trim() : "";
+  if (!id || id.length > 64 || !/^[A-Za-z0-9-]+$/.test(id)) {
+    return res.status(400).json({ error: "id is required" });
+  }
+  try {
+    const { data: project, error } = await supabase.from("mya_projects").select("*").eq("id", id).maybeSingle();
+    if (error) {
+      console.error("command-center-projects GET detail error:", error);
+      return res.status(500).json({ error: "Couldn't load that project." });
+    }
+    if (!project) return res.status(404).json({ error: "Project not found" });
+
+    // Each part is independent: a failed side query is reported as null
+    // ("we don't know"), never as an empty list that looks real.
+    const [items, upcoming] = await Promise.all([
+      supabase
+        .from("mya_estimate_items")
+        .select("id,category,description,quantity,unit,unit_cost,line_total")
+        .eq("project_id", id)
+        .order("category", { ascending: true }),
+      supabase
+        .from("mya_appointments")
+        .select("title,scheduled_at,notes")
+        .eq("project_id", id)
+        .gte("scheduled_at", new Date().toISOString())
+        .order("scheduled_at")
+        .limit(5),
+    ]);
+    const estimateItems = items.error ? null : items.data || [];
+    return res.status(200).json({
+      project,
+      estimateItems,
+      directCost: estimateItems ? estimateItems.reduce((sum: number, i: any) => sum + Number(i.line_total || 0), 0) : null,
+      upcoming: upcoming.error ? null : upcoming.data || [],
+    });
+  } catch (err: any) {
+    console.error("command-center-projects GET detail error:", err);
+    return res.status(500).json({ error: "Couldn't load that project." });
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -115,5 +190,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.query.type === "alerts") {
     return handleProactiveAlerts(res);
   }
+  if (req.query.type === "detail") return handleProjectDetail(req, res);
+  if (req.query.type === "search") return handleProjectSearch(req, res);
   return handleProjectsList(res);
 }

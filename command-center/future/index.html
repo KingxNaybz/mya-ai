@@ -19,8 +19,8 @@
      bump N in every tag below whenever any of them changes. The service
      worker (sw.js) is network-first for these, so a new N is picked up on
      the next online load. -->
-<link rel="stylesheet" href="styles.css?v=13">
-<link rel="stylesheet" href="core.css?v=13">
+<link rel="stylesheet" href="styles.css?v=14">
+<link rel="stylesheet" href="core.css?v=14">
 </head>
 <body>
 
@@ -179,6 +179,8 @@
           </div>
           <p class="voice-status" data-voice-status hidden></p>
           <p class="muted small center">Say “Mya” when the mic is on. She keeps listening for 45 seconds after each reply.</p>
+          <p class="runtime-line" id="mya-runtime">Answers come from Claude with Command Center tools.</p>
+          <button type="button" class="pill-btn" id="mya-provider-toggle" aria-pressed="false" hidden><span data-label>Ask the Hermes runtime</span></button>
         </aside>
         <div class="chat-panel card">
           <div class="chat-empty" id="chat-empty">
@@ -210,9 +212,20 @@
           <p class="view-sub">Active jobs from Mya's project records, with the next action on each.</p></div>
         <span data-fresh="projects"></span>
       </header>
+      <div class="card project-detail" id="project-detail" hidden>
+        <div class="card-head"><h2 id="project-detail-title">Project</h2>
+          <span class="detail-head-side"><span id="project-detail-fresh"></span><button type="button" class="btn ghost" id="project-detail-close">Close</button></span></div>
+        <div id="project-detail-body"></div>
+      </div>
       <div class="grid-2-1">
         <div class="card">
-          <div class="card-head"><h2>Active projects</h2><span class="muted small" id="projects-note"></span></div>
+          <div class="card-head"><h2 id="projects-list-title">Active projects</h2><span class="muted small" id="projects-note"></span></div>
+          <form class="inline-search" id="projects-search-form" role="search" autocomplete="off">
+            <label class="sr-only" for="projects-search-input">Search all projects</label>
+            <input type="search" id="projects-search-input" placeholder="Search all projects by name or client…" maxlength="80">
+            <button type="submit" class="btn ghost">Search</button>
+            <button type="button" class="btn ghost" id="projects-search-clear" hidden>Clear</button>
+          </form>
           <div id="projects-list"></div>
         </div>
         <div class="stack">
@@ -242,6 +255,10 @@
             <div class="card-head"><h2>Overdue</h2><span data-fresh="alerts"></span></div>
             <div id="approvals-alerts"></div>
           </div>
+          <div class="card">
+            <div class="card-head"><h2>Recently resolved</h2><span data-fresh="approvalsRecent"></span></div>
+            <div id="approvals-recent"></div>
+          </div>
           <div class="card note-card">
             <h2>How approvals work today</h2>
             <p class="muted small">Approve or decline marks the request resolved — the same behavior as the classic dashboard. Routing Mya's own consequential actions here for sign-off before they run is a later phase; it isn't enforced yet.</p>
@@ -254,7 +271,7 @@
     <section class="view" data-view="memory" aria-labelledby="memory-title" hidden>
       <header class="view-head">
         <div><p class="eyebrow">Hindsight · Constellation</p><h1 id="memory-title">Memory</h1>
-          <p class="view-sub">What Mya remembers. Each star is one real remembered fact.</p></div>
+          <p class="view-sub">What Mya remembers. Each star is one real fact remembered in the Command Center; Hindsight holds her long-term memory.</p></div>
         <span data-fresh="memory"></span>
       </header>
       <div class="metric-row" id="memory-metrics"></div>
@@ -275,7 +292,17 @@
         </div>
       </div>
       <div class="card">
-        <div class="card-head"><h2>Remembered facts</h2><span data-fresh="memory"></span></div>
+        <div class="card-head"><h2>Search Hindsight memory</h2><span id="hindsight-fresh"></span></div>
+        <p class="muted small">Mya's long-term memory from Hermes and Telegram. Read-only from here — nothing you search is saved.</p>
+        <form class="inline-search" id="hindsight-form" role="search" autocomplete="off" hidden>
+          <label class="sr-only" for="hindsight-q">Search Hindsight memory</label>
+          <input type="search" id="hindsight-q" placeholder="What do you want Mya to recall?" maxlength="500">
+          <button type="submit" class="btn ghost">Recall</button>
+        </form>
+        <div id="hindsight-results"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Remembered in Command Center</h2><span data-fresh="memory"></span></div>
         <div id="memory-facts" class="scroll-y tall"></div>
       </div>
     </section>
@@ -352,7 +379,7 @@
     <section class="view" data-view="systems" aria-labelledby="systems-title" hidden>
       <header class="view-head">
         <div><p class="eyebrow">Integrations · health</p><h1 id="systems-title">Systems</h1>
-          <p class="view-sub">What the Command Center can see, how fresh it is, and what isn't connected yet.</p></div>
+          <p class="view-sub">What the Command Center can see, how fresh it is, and what each outside system is actually doing.</p></div>
       </header>
       <div class="card">
         <div class="card-head"><h2>Command Center data sources</h2><span class="muted small">Refreshes every minute while open</span></div>
@@ -363,13 +390,16 @@
       </div>
       <div class="grid-2">
         <div class="card">
-          <div class="card-head"><h2>Configured services</h2><span data-fresh="data"></span></div>
+          <div class="card-head"><h2>Core services</h2><span data-fresh="systems"></span></div>
           <div id="services-list"></div>
-          <p class="muted small">“Configured” means the server has credentials for it. It is not a live reachability check.</p>
         </div>
         <div class="card">
-          <div class="card-head"><h2>Mya integrations</h2><span class="muted small">External systems</span></div>
+          <div class="card-head"><h2>Mya integrations</h2><span data-fresh="systems"></span></div>
           <div id="integrations-list"></div>
+        </div>
+        <div class="card note-card span-2">
+          <h2>What these statuses mean</h2>
+          <p class="muted small"><strong>Connected</strong> — a read-only check just succeeded. <strong>Down</strong> — that check failed. <strong>Configured</strong> — the server has credentials, but checking live would cost money or has no read-only endpoint. <strong>Not observable</strong> — no verified signal reaches the Command Center, so nothing is claimed. <strong>Not configured</strong> — no credentials here.</p>
         </div>
       </div>
       <div class="card" id="dev-card" hidden>
@@ -470,13 +500,13 @@
   </div>
 </div>
 
-<script src="lib.js?v=13"></script>
-<script src="mya-events.js?v=13"></script>
-<script src="core.js?v=13"></script>
-<script src="data.js?v=13"></script>
-<script src="chat.js?v=13"></script>
-<script src="views.js?v=13"></script>
-<script src="shell.js?v=13"></script>
-<script src="app.js?v=13"></script>
+<script src="lib.js?v=14"></script>
+<script src="mya-events.js?v=14"></script>
+<script src="core.js?v=14"></script>
+<script src="data.js?v=14"></script>
+<script src="chat.js?v=14"></script>
+<script src="views.js?v=14"></script>
+<script src="shell.js?v=14"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>

@@ -112,6 +112,15 @@
       : worst.state === "loading" ? "Loading data"
       : "Some data not connected";
     dataEl.title = "Worst freshness across all Command Center data sources — details in Systems.";
+    // A system a live check just found down outranks freshness: it's the
+    // one thing on the strip you'd want to act on.
+    var sys = MyaData.get("systems");
+    var down = MyaLib.systemsDown(sys && sys.data && sys.data.systems, MyaData.freshness("systems"));
+    if (down.length) {
+      dataEl.className = "strip-item fresh-down";
+      dataEl.querySelector(".strip-text").textContent = down.length === 1 ? down[0] + " is down" : down.length + " systems down";
+      dataEl.title = "A live check found " + down.join(", ") + " down — details in Systems.";
+    }
 
     var approvals = MyaData.get("approvals");
     var af = MyaData.freshness("approvals");

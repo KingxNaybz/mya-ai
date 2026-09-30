@@ -149,3 +149,101 @@ test("manifest is valid and scoped to the Command Center", () => {
   for (const icon of m.icons) assert.ok(fs.existsSync(path.join(FUTURE, icon.src)), icon.src);
   assert.ok(m.icons.some((i) => i.purpose === "maskable"));
 });
+
+/* ---------------- Phase 2: system health, chat metadata ---------------- */
+const LIVE = { state: "live", age: 0 };
+const STALE = { state: "stale", age: 5 * MIN };
+
+test("system status: nothing is claimed until the Systems check has loaded", () => {
+  assert.equal(lib.integrationStatus({ status: "up" }, { state: "offline" }).label, "Not connected");
+  assert.equal(lib.integrationStatus({ status: "up" }, { state: "loading" }).label, "Checking");
+  assert.equal(lib.integrationStatus({ status: "up" }, null).state, "offline");
+});
+
+test("system status: a stale check never says Connected", () => {
+  for (const status of ["up", "down", "configured", "not_configured", "not_observable"]) {
+    const st = lib.integrationStatus({ status }, STALE);
+    assert.equal(st.state, "stale", status);
+    assert.doesNotMatch(st.label, /Connected/, status);
+  }
+});
+
+test("system status: live labels match what the server actually checked", () => {
+  assert.deepEqual(lib.integrationStatus({ status: "up" }, LIVE), { state: "up", label: "Connected", cls: "live" });
+  assert.equal(lib.integrationStatus({ status: "down" }, LIVE).label, "Down");
+  assert.equal(lib.integrationStatus({ status: "configured" }, LIVE).label, "Configured");
+  assert.equal(lib.integrationStatus({ status: "not_configured" }, LIVE).label, "Not configured");
+});
+
+test("system status: an unreported or unknown system is Not observable, never connected", () => {
+  assert.equal(lib.integrationStatus(null, LIVE).state, "not_observable");
+  assert.equal(lib.integrationStatus({ status: "bogus" }, LIVE).state, "not_observable");
+});
+
+test("systemsDown only reports outages a live check just saw", () => {
+  const systems = [{ name: "Hindsight memory", status: "down" }, { name: "Database", status: "up" }];
+  assert.deepEqual(lib.systemsDown(systems, LIVE), ["Hindsight memory"]);
+  assert.deepEqual(lib.systemsDown(systems, STALE), []);
+  assert.deepEqual(lib.systemsDown(null, LIVE), []);
+});
+
+test("briefing mentions a down system only when one is known", () => {
+  assert.match(lib.buildBriefing({ approvals: 1, systemsDown: ["Hindsight memory"] }).text, /Heads up: Hindsight memory is down\./);
+  assert.doesNotMatch(lib.buildBriefing({ approvals: 1 }).text, /down/);
+});
+
+test("tool labels are friendly, with a readable fallback for new tools", () => {
+  assert.equal(lib.toolLabel("recall_hindsight"), "Searched Hindsight memory");
+  assert.equal(lib.toolLabel("some_new_tool"), "Some new tool");
+});
+
+test("provider label says which runtime answered", () => {
+  assert.match(lib.providerLabel("hermes"), /Hermes runtime.*no Command Center tools/);
+  assert.match(lib.providerLabel("anthropic"), /Claude with Command Center tools/);
+  assert.match(lib.providerLabel(undefined), /Claude/);
+});
+
+/* ---------------- Phase 2 static guards ---------------- */
+const BASELINE = "59e8c0d";
+const readRoot = (f) => fs.readFileSync(path.join(ROOT, f), "utf8");
+
+test("api/ stays at the 12-function cap", () => {
+  assert.equal(fs.readdirSync(path.join(ROOT, "api")).filter((f) => f.endsWith(".ts")).length, 12);
+});
+
+test("every /api/ URL the shell requests maps to an existing endpoint", () => {
+  for (const f of ["data.js", "views.js", "chat.js", "app.js"]) {
+    for (const m of read(f).matchAll(/"(\/api\/[a-z-]+)/g)) assert.ok(fs.existsSync(path.join(ROOT, m[1] + ".ts")), f + ": " + m[1]);
+  }
+});
+
+test("MCP allowlist is exactly get_project, get_client, search_projects", () => {
+  const src = readRoot("api/command-center-ask-mya.ts");
+  const block = src.match(/const MCP_TOOL_ALIASES[^{]*\{([^}]*)\}/)[1];
+  const keys = [...block.matchAll(/^\s*([a-z_]+)\s*:/gm)].map((m) => m[1]).sort();
+  assert.deepEqual(keys, ["get_client", "get_project", "search_projects"]);
+});
+
+test("MCP bearer key is compared timing-safe", () => {
+  const src = readRoot("api/command-center-ask-mya.ts");
+  assert.match(src, /safeStringEqual\(presented, MCP_BRIDGE_KEY\)/);
+  assert.doesNotMatch(src, /presented !== MCP_BRIDGE_KEY/);
+});
+
+test("reception/phone files are untouched and never reach Command Center integrations", () => {
+  const files = fs.readdirSync(path.join(ROOT, "api")).filter((f) => /^mya-.*\.ts$|^outbound-call\.ts$/.test(f));
+  assert.ok(files.length >= 4);
+  for (const f of files) {
+    const rel = "api/" + f;
+    const src = readRoot(rel);
+    assert.doesNotMatch(src, /lib\/integrations|hindsight|HINDSIGHT_|HERMES_BRIDGE/i, rel);
+    const base = execFileSync("git", ["show", `${BASELINE}:${rel}`], { cwd: ROOT, encoding: "utf8" });
+    assert.equal(src, base, rel + " differs from the Phase 2 baseline " + BASELINE);
+  }
+});
+
+test("browser code never references server-side secrets", () => {
+  for (const f of fs.readdirSync(FUTURE).filter((x) => /\.(js|html)$/.test(x))) {
+    assert.doesNotMatch(read(f), /HINDSIGHT_|HERMES_BRIDGE_KEY|MCP_BRIDGE_KEY|hsk_/, f);
+  }
+});

@@ -35,9 +35,33 @@
     var voiceStatusEls = document.querySelectorAll("[data-voice-status]");
     var history = [];
     var voiceEnabled = localStorage.getItem("mya-voice-enabled") !== "off";
+    // Optional Hermes route: off by default, per-page (never persisted), and
+    // the toggle only appears while a live Systems check reports Hermes up.
+    var useHermes = false;
+    var providerBtn = document.getElementById("mya-provider-toggle");
+    var runtimeLine = document.getElementById("mya-runtime");
+
+    function hermesUp() {
+      var sys = MyaData.get("systems");
+      var list = sys && sys.data && Array.isArray(sys.data.systems) ? sys.data.systems : [];
+      var hermes = list.filter(function (x) { return x && x.id === "hermes"; })[0];
+      return MyaLib.integrationStatus(hermes, MyaData.freshness("systems")).state === "up";
+    }
+
+    function applyProviderUI() {
+      var available = hermesUp();
+      if (!available) useHermes = false;
+      providerBtn.hidden = !available;
+      providerBtn.setAttribute("aria-pressed", useHermes ? "true" : "false");
+      providerBtn.querySelector("[data-label]").textContent = useHermes ? "Asking Hermes (text only)" : "Ask the Hermes runtime";
+    }
+    providerBtn.addEventListener("click", function () { useHermes = !useHermes; applyProviderUI(); });
+    MyaEvents.on("data.changed", function (d) { if (d && d.source === "systems") applyProviderUI(); });
     var currentAudio = null;
 
-    function addLine(text, role) {
+    // meta (Mya replies only): { toolsUsed, provider } -- shown as small
+    // chips so it's always visible what she actually looked at or changed.
+    function addLine(text, role, meta) {
       var line = document.createElement("div");
       line.className = "chat-line " + role;
       var who = document.createElement("div");
@@ -48,6 +72,20 @@
       body.textContent = text;
       line.appendChild(who);
       line.appendChild(body);
+      if (meta && Array.isArray(meta.toolsUsed) && meta.toolsUsed.length) {
+        var tools = document.createElement("div");
+        tools.className = "chat-tools";
+        var seen = {};
+        meta.toolsUsed.forEach(function (t) {
+          if (seen[t]) return;
+          seen[t] = true;
+          var chip = document.createElement("span");
+          chip.className = "chip-tag";
+          chip.textContent = MyaLib.toolLabel(t);
+          tools.appendChild(chip);
+        });
+        line.appendChild(tools);
+      }
       log.appendChild(line);
       log.scrollTop = log.scrollHeight;
       document.getElementById("chat-empty").hidden = true;
@@ -358,7 +396,9 @@
       fetch("/api/command-center-ask-mya", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: message, history: history.slice(-20), voice: voiceEnabled }),
+        body: JSON.stringify(useHermes
+          ? { message: message, history: history.slice(-20), voice: voiceEnabled, provider: "hermes" }
+          : { message: message, history: history.slice(-20), voice: voiceEnabled }),
       })
         .then(function (res) {
           if (res.status === 401) {
@@ -367,18 +407,25 @@
             MyaEvents.emit("auth.expired", { source: "ask-mya" });
             return null;
           }
-          return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+          return res.json().catch(function () { return {}; }).then(function (data) { return { ok: res.ok, status: res.status, data: data || {} }; });
         })
         .then(function (result) {
           if (!result) return; // handled above (401)
           if (!result.ok) {
-            addLine(result.data.message || result.data.error || "Something went wrong — try again.", "mya error");
+            var err = result.data.error;
+            addLine(
+              err === "not_configured" ? "Mya's brain isn't configured on the server yet, so she can't answer here."
+              : err === "hermes_not_configured" ? "The Hermes runtime isn't configured for the Command Center."
+              : result.status >= 500 ? "Mya hit a problem answering that — try again in a moment."
+              : err || "Something went wrong — try again.",
+              "mya error");
             MyaEvents.emit("mya.idle", { dev: false });
             MyaCore.settle();
             return;
           }
           var reply = result.data.reply || "(no reply)";
-          addLine(reply, "mya");
+          addLine(reply, "mya", { toolsUsed: result.data.toolsUsed, provider: result.data.provider });
+          if (runtimeLine) runtimeLine.textContent = MyaLib.providerLabel(result.data.provider) + ".";
           history.push({ role: "assistant", content: reply });
           MyaEvents.emit("mya.responding", { dev: false });
           var playing = playReplyAudio(result.data.audioBase64);

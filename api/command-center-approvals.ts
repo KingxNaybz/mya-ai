@@ -54,6 +54,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
+  // ?status=recent: the last 10 resolved approvals (read-only history for
+  // the Approvals module). The pending GET below is unchanged.
+  if (req.method === "GET" && req.query.status === "recent") {
+    const { data, error } = await supabase
+      .from("mya_approvals")
+      .select("id,title,detail,status,requested_at,resolved_at,action_type")
+      .in("status", ["approved", "declined"])
+      .order("resolved_at", { ascending: false, nullsFirst: false })
+      .limit(10);
+    if (error) {
+      console.error("command-center-approvals GET recent error:", error);
+      return res.status(500).json({ error: "Couldn't load approval history." });
+    }
+    return res.status(200).json({ approvals: data || [] });
+  }
+
   if (req.method === "GET") {
     const { data, error } = await supabase
       .from("mya_approvals")

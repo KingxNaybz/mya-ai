@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 import { isCommandCenterAuthenticated } from "../lib/session";
+import { hermesStatus, hindsightHealth, type SystemReport } from "../lib/integrations";
 
 /**
  * Requires a valid dashboard session cookie or COMMAND_CENTER_API_KEY (see
@@ -142,6 +143,110 @@ function isRealLead(phone: string | null | undefined, categoryByPhone: Map<strin
   return !category || !NOT_A_REAL_LEAD_CATEGORIES.has(category);
 }
 
+/* ── ?type=systems: real health for the Systems module ───────────
+ * One status per system, only from signals we can actually verify:
+ *   up / down         a real read-only check just ran
+ *   configured        credentials present, not probed live (the check
+ *                     would cost money or has no read-only endpoint)
+ *   not_configured    credentials missing
+ *   not_observable    no verified signal reaches the Command Center
+ * External systems go through lib/integrations.ts (narrow, read-only,
+ * timeouts, no secrets returned). Lives here rather than in a new file
+ * because api/ is at Vercel Hobby's 12-function cap. */
+async function lastActionAt(surface: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from("mya_action_log")
+      .select("created_at")
+      .eq("requested_by", surface)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (error || !data || !data[0]) return null;
+    return data[0].created_at || null;
+  } catch {
+    return null;
+  }
+}
+
+function configReport(id: string, name: string, configured: boolean, detail: string): SystemReport {
+  return {
+    id,
+    name,
+    status: configured ? "configured" : "not_configured",
+    detail: configured ? detail : `${detail} — not configured.`,
+    checkedAt: new Date().toISOString(),
+    latencyMs: null,
+  };
+}
+
+async function supabaseReport(): Promise<SystemReport> {
+  const name = "Database (Supabase)";
+  if (!SUPABASE_URL || !SUPABASE_KEY) return configReport("supabase", name, false, "Business data storage");
+  const started = Date.now();
+  try {
+    const { error } = await supabase.from("mya_projects").select("id", { head: true }).limit(1);
+    return {
+      id: "supabase",
+      name,
+      status: error ? "down" : "up",
+      detail: error ? "Database query failed." : "Business data storage — responding.",
+      checkedAt: new Date().toISOString(),
+      latencyMs: Date.now() - started,
+    };
+  } catch {
+    return { id: "supabase", name, status: "down", detail: "Couldn't reach the database.", checkedAt: new Date().toISOString(), latencyMs: null };
+  }
+}
+
+async function handleSystems(res: VercelResponse) {
+  try {
+    const env = process.env;
+    const [supabaseR, hindsightR, mcpLast, desktopLast] = await Promise.all([
+      supabaseReport(),
+      hindsightHealth(),
+      lastActionAt("hermes_mcp"),
+      lastActionAt("desktop_app"),
+    ]);
+    const mcpConfigured = env.MCP_BRIDGE_ENABLED === "true" && Boolean(env.MCP_BRIDGE_KEY);
+    const systems: SystemReport[] = [
+      supabaseR,
+      configReport("anthropic", "Mya's brain (Anthropic)", Boolean(env.ANTHROPIC_API_KEY), "Command Center chat + tools"),
+      configReport("voice", "Mya's voice (ElevenLabs)", Boolean(env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE_ID), "Spoken chat replies"),
+      configReport("phone", "Phone system (Twilio)", Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_PHONE_NUMBER), "Calls and SMS"),
+      ...hermesStatus(),
+      hindsightR,
+      {
+        ...configReport("mcp", "Hermes MCP read bridge", mcpConfigured,
+          "Read-only allowlist: get_project, get_client, search_projects"),
+        lastActivityAt: mcpLast,
+      },
+      {
+        id: "windows",
+        name: "Windows agent",
+        status: "not_observable",
+        detail: desktopLast
+          ? "No live heartbeat — last seen when it last asked Mya something."
+          : "No live heartbeat, and no activity recorded from it yet.",
+        checkedAt: new Date().toISOString(),
+        latencyMs: null,
+        lastActivityAt: desktopLast,
+      },
+      {
+        id: "houzz",
+        name: "Houzz Pro",
+        status: "not_configured",
+        detail: "No Houzz adapter in this phase.",
+        checkedAt: new Date().toISOString(),
+        latencyMs: null,
+      },
+    ];
+    return res.status(200).json({ generatedAt: new Date().toISOString(), systems });
+  } catch (err: any) {
+    console.error("command-center-data GET systems error:", err);
+    return res.status(500).json({ error: "Couldn't check systems." });
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -155,6 +260,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!isCommandCenterAuthenticated(req)) {
     return res.status(401).json({ error: "Unauthorized" });
   }
+
+  if (req.query.type === "systems") return handleSystems(res);
 
   const todayIso = startOfTodayAtlanta();
   const tomorrowIso = startOfTomorrowAtlanta();

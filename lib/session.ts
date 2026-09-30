@@ -67,19 +67,31 @@ export function extractSessionCookie(cookieHeader: string | undefined | null): s
 export function isCommandCenterAuthenticated(req: {
   headers: { [key: string]: string | string[] | undefined };
 }): boolean {
+  return commandCenterAuthMethod(req) !== null;
+}
+
+// Which of the two legitimate callers authenticated: "api_key" (the desktop
+// app's x-command-center-key header) or "session" (the browser's signed
+// cookie), or null for neither. Same checks as above -- isCommandCenter-
+// Authenticated is defined on top of this, so there is still exactly one
+// gate. Used only to LABEL audit-log rows (e.g. desktop vs dashboard); it
+// never grants anything the gate itself doesn't.
+export function commandCenterAuthMethod(req: {
+  headers: { [key: string]: string | string[] | undefined };
+}): "api_key" | "session" | null {
   const apiKeyHeader = (req.headers["x-command-center-key"] as string | undefined) || "";
   const commandCenterApiKey = process.env.COMMAND_CENTER_API_KEY || "";
   if (commandCenterApiKey && apiKeyHeader && safeStringEqual(apiKeyHeader, commandCenterApiKey)) {
-    return true;
+    return "api_key";
   }
 
   const cookieToken = extractSessionCookie(req.headers.cookie as string | undefined);
   const sessionSigningSecret = process.env.SESSION_SIGNING_SECRET || "";
   if (cookieToken && sessionSigningSecret && verifySessionToken(cookieToken, sessionSigningSecret)) {
-    return true;
+    return "session";
   }
 
-  return false;
+  return null;
 }
 
 export { SESSION_COOKIE_NAME };

@@ -109,11 +109,19 @@
     if (typeof s.scheduleToday === "number") {
       parts.push(s.scheduleToday === 0 ? "a clear schedule" : plural(s.scheduleToday, "item", "items") + " on today's schedule");
     }
+    // systemsDown: names of systems a live check just found down. Only ever
+    // passed from a successful Systems fetch -- unknown is never "down".
+    var down = Array.isArray(s.systemsDown) && s.systemsDown.length
+      ? " Heads up: " + joinAnd(s.systemsDown) + (s.systemsDown.length === 1 ? " is" : " are") + " down."
+      : "";
     if (parts.length === 0) {
-      return { known: false, text: "I can't reach your business data right now, so I won't guess. Check Systems for what's connected." };
+      return { known: false, text: "I can't reach your business data right now, so I won't guess. Check Systems for what's connected." + down };
     }
-    var body = parts.length === 1 ? parts[0] : parts.slice(0, -1).join(", ") + ", and " + parts[parts.length - 1];
-    return { known: true, text: "You have " + body + "." };
+    return { known: true, text: "You have " + joinAnd(parts) + "." + down };
+  }
+
+  function joinAnd(list) {
+    return list.length === 1 ? list[0] : list.slice(0, -1).join(", ") + ", and " + list[list.length - 1];
   }
 
   function partOfDay(hour) {
@@ -157,7 +165,72 @@
     return pts;
   }
 
+  /* ---------------- System health (Systems module) ----------------
+     A system's status is only as good as the Systems fetch that reported
+     it: if that fetch never succeeded (or is still loading) nothing is
+     claimed, and if it's stale the last-known status is shown as stale --
+     never as "Connected". `cls` is the .fresh variant used for the pill. */
+  var SYSTEM_LABELS = {
+    up: "Connected", down: "Down", configured: "Configured",
+    not_configured: "Not configured", not_observable: "Not observable"
+  };
+  var STALE_LABELS = {
+    up: "Was reachable · Stale", down: "Was down · Stale", configured: "Configured · Stale",
+    not_configured: "Not configured · Stale", not_observable: "Not observable · Stale"
+  };
+  var SYSTEM_CLASSES = { up: "live", down: "down", configured: "configured", not_configured: "offline", not_observable: "offline" };
+
+  function integrationStatus(system, sourceFreshness) {
+    var f = sourceFreshness || { state: "offline" };
+    if (f.state === "loading") return { state: "loading", label: "Checking", cls: "loading" };
+    if (f.state !== "live" && f.state !== "stale") return { state: "offline", label: "Not connected", cls: "offline" };
+    var st = system && SYSTEM_LABELS[system.status] ? system.status : "not_observable";
+    if (f.state === "stale") {
+      return { state: "stale", label: STALE_LABELS[st], cls: "stale" };
+    }
+    return { state: st, label: SYSTEM_LABELS[st], cls: SYSTEM_CLASSES[st] };
+  }
+
+  // Names of systems a LIVE Systems check found down. Stale or missing
+  // data yields [] -- we don't announce outages we can't currently see.
+  function systemsDown(systems, sourceFreshness) {
+    if (!sourceFreshness || sourceFreshness.state !== "live" || !Array.isArray(systems)) return [];
+    return systems.filter(function (x) { return x && x.status === "down"; }).map(function (x) { return x.name; });
+  }
+
+  /* ---------------- Chat metadata ---------------- */
+  var TOOL_LABELS = {
+    get_project: "Looked up a project", list_projects: "Listed projects", get_client: "Looked up a client",
+    create_project: "Created a project", update_project: "Updated a project",
+    recall_memory: "Checked remembered facts", remember_fact: "Remembered a fact",
+    recall_hindsight: "Searched Hindsight memory",
+    list_pending_approvals: "Checked approvals", resolve_approval: "Resolved an approval",
+    get_dashboard_summary: "Checked the business snapshot", list_leads: "Checked leads",
+    list_recent_activity: "Checked recent activity", list_schedule: "Checked the schedule",
+    create_appointment: "Scheduled an appointment", create_followup: "Created a follow-up",
+    get_company_brain: "Read the Company Brain", update_company_brain: "Updated the Company Brain",
+    undo_last_action: "Undid the last action", list_capabilities: "Listed capabilities",
+    get_services_status: "Checked services", calculate_estimate: "Calculated an estimate",
+    evaluate_bid_price: "Evaluated a bid price"
+  };
+
+  function toolLabel(name) {
+    if (TOOL_LABELS[name]) return TOOL_LABELS[name];
+    var words = String(name || "tool").replace(/_/g, " ").trim();
+    return words.charAt(0).toUpperCase() + words.slice(1);
+  }
+
+  function providerLabel(provider) {
+    return provider === "hermes"
+      ? "Answered by the Hermes runtime (text only, no Command Center tools)"
+      : "Answered by Claude with Command Center tools";
+  }
+
   return {
+    integrationStatus: integrationStatus,
+    systemsDown: systemsDown,
+    toolLabel: toolLabel,
+    providerLabel: providerLabel,
     escapeHtml: escapeHtml,
     formatRelative: formatRelative,
     formatAge: formatAge,

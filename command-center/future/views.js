@@ -73,6 +73,9 @@
     }
     if (alerts && Array.isArray(alerts.alerts)) s.alerts = alerts.alerts.length;
     if (followups && typeof followups.openCount === "number") s.followUps = followups.openCount;
+    var sys = payload("systems");
+    var down = MyaLib.systemsDown(sys && sys.systems, fresh("systems"));
+    if (down.length) s.systemsDown = down;
     if (d) {
       if (d.newLeads && !d.newLeads.error && typeof d.newLeads.value === "number") s.newLeads = d.newLeads.value;
       if (d.todaysCalls && !d.todaysCalls.error && typeof d.todaysCalls.value === "number") s.callsToday = d.todaysCalls.value;
@@ -167,20 +170,153 @@
   function projectRow(p) {
     var name = p.client_name ? h(p.project_name) + ' <span class="muted">· ' + h(p.client_name) + "</span>" : h(p.project_name);
     var next = p.next_action || p.outstanding_decisions;
-    return row(name, next ? "Next: " + h(next) : '<span class="muted">No next action set</span>', statusChip(p.status));
+    var html = row(name, next ? "Next: " + h(next) : '<span class="muted">No next action set</span>', statusChip(p.status));
+    if (!p.id) return html;
+    return '<div class="row-link" role="button" tabindex="0" data-project-id="' + h(p.id) + '" aria-label="Open ' + h(p.project_name) + '">' + html + "</div>";
   }
 
   /* ---------------- PROJECTS ---------------- */
+  var projectSearch = "";
+  var openProjectId = null;
+
   function renderProjects() {
-    var projects = payload("projects");
-    var list = projects && projects.projects;
-    renderList("projects-list", "projects", list, projectRow, "No active projects on file.", "Projects");
-    $("projects-note").textContent = Array.isArray(list) && list.length >= PROJECTS_PAGE_LIMIT ? "6 most recently updated" : "";
+    if (projectSearch) {
+      var sr = MyaData.get("projectSearch");
+      var results = sr && sr.data && sr.data.projects;
+      $("projects-list-title").textContent = "Search results";
+      renderList("projects-list", "projectSearch", results, projectRow, "No projects match “" + projectSearch + "”.", "Project search");
+      var cap = sr && sr.data && sr.data.limit;
+      $("projects-note").textContent = Array.isArray(results) && cap && results.length >= cap ? "First " + cap + " matches" : "All statuses";
+    } else {
+      var projects = payload("projects");
+      var list = projects && projects.projects;
+      $("projects-list-title").textContent = "Active projects";
+      renderList("projects-list", "projects", list, projectRow, "No active projects on file.", "Projects");
+      $("projects-note").textContent = Array.isArray(list) && list.length >= PROJECTS_PAGE_LIMIT ? "6 most recently updated" : "";
+    }
+    renderProjectDetail();
 
     var c = payload("contractors");
     renderList("contractors-list", "contractors", c && c.contractors, function (x) {
       return row(h(x.name) + " " + statusChip(x.category), h([x.notes, x.pricing_rate].filter(Boolean).join(" · ")), '<span class="time">' + h(x.phone || "") + "</span>");
     }, "No contractors added yet.", "Contractors");
+  }
+
+  /* ---------------- PROJECT DETAIL ---------------- */
+  // Known mya_projects columns shown in a fixed order; anything null or
+  // missing is simply left out (unknown is never shown as blank-but-real).
+  var PROJECT_FIELDS = [
+    ["client_name", "Client"], ["status", "Status"], ["project_type", "Type"], ["address", "Address"],
+    ["next_action", "Next action"], ["next_action_due", "Next action due"],
+    ["outstanding_decisions", "Outstanding decisions"], ["original_scope", "Original scope"],
+    ["revised_scope", "Revised scope"], ["current_estimate", "Current estimate"],
+    ["payment_terms", "Payment terms"], ["warranty_terms", "Warranty terms"], ["notes", "Notes"]
+  ];
+
+  function money(n) {
+    var v = Number(n);
+    return isFinite(v) ? "$" + v.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "";
+  }
+
+  function renderProjectDetail() {
+    var card = $("project-detail");
+    if (!openProjectId) { card.hidden = true; return; }
+    card.hidden = false;
+    var f = fresh("projectDetail");
+    $("project-detail-fresh").innerHTML = freshTagHtml(f);
+    var entry = MyaData.get("projectDetail");
+    var body = $("project-detail-body");
+    var d = entry && entry.data;
+    if (!d || !d.project) {
+      body.innerHTML = f.state === "loading" ? stateBlock("projectDetail")
+        : entry && entry.status === 404 ? emptyBlock("That project isn't on file anymore.")
+        : stateBlock("projectDetail", "This project");
+      return;
+    }
+    var p = d.project;
+    $("project-detail-title").textContent = p.project_name || "Project";
+    var kv = PROJECT_FIELDS.filter(function (fd) { return p[fd[0]] != null && String(p[fd[0]]).trim() !== ""; }).map(function (fd) {
+      var v = fd[0] === "current_estimate" ? money(p[fd[0]]) || p[fd[0]] : fd[0] === "status" ? String(p[fd[0]]).replace(/_/g, " ") : p[fd[0]];
+      return "<dt>" + h(fd[1]) + "</dt><dd>" + h(typeof v === "object" ? JSON.stringify(v) : v) + "</dd>";
+    }).join("");
+    var items = Array.isArray(d.estimateItems)
+      ? (d.estimateItems.length ? d.estimateItems.map(function (i) {
+          return row(h(i.description || i.category || "Line item"), h([i.category, i.quantity != null ? i.quantity + " " + (i.unit || "") : ""].filter(Boolean).join(" · ")),
+            '<span class="num">' + h(money(i.line_total)) + "</span>");
+        }).join("") + (typeof d.directCost === "number" ? row("<span class=\"muted\">Direct cost</span>", "", '<span class="num">' + h(money(d.directCost)) + "</span>") : "")
+        : emptyBlock("No estimate line items logged yet."))
+      : '<p class="muted small">Estimate items couldn\'t be loaded — nothing is shown rather than guessing.</p>';
+    var upcoming = Array.isArray(d.upcoming)
+      ? (d.upcoming.length ? d.upcoming.map(function (a) {
+          return row(h(a.title), h(a.notes || ""), '<span class="time">' + h(new Date(a.scheduled_at).toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" })) + "</span>");
+        }).join("") : emptyBlock("Nothing scheduled for this project."))
+      : '<p class="muted small">Appointments couldn\'t be loaded — nothing is shown rather than guessing.</p>';
+    body.innerHTML =
+      '<div class="grid-2 detail-grid"><div><dl class="kv">' + (kv || "<dt>On file</dt><dd>Only the name so far.</dd>") + "</dl>" +
+      (p.updated_at ? '<p class="muted small detail-updated">Updated ' + h(MyaLib.formatRelative(p.updated_at)) + "</p>" : "") +
+      '<button type="button" class="btn approve" id="project-ask-mya">Ask Mya about this project</button></div>' +
+      '<div><h3 class="detail-sub">Estimate</h3>' + items + '<h3 class="detail-sub">Upcoming</h3>' + upcoming + "</div></div>";
+  }
+
+  function openProject(id) {
+    openProjectId = id;
+    MyaData.query("projectDetail", "/api/command-center-projects?type=detail&id=" + encodeURIComponent(id));
+    renderProjectDetail();
+    var card = $("project-detail");
+    if (card.scrollIntoView) card.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // Row "buttons" are divs (a block row can't live inside <button>), so
+  // Enter/Space activate them like a real button.
+  function activateOnKey(el) {
+    el.addEventListener("keydown", function (e) {
+      if ((e.key === "Enter" || e.key === " ") && e.target.closest("[data-project-id]")) {
+        e.preventDefault();
+        e.target.closest("[data-project-id]").click();
+      }
+    });
+  }
+
+  function initProjects() {
+    activateOnKey($("projects-list"));
+    activateOnKey($("home-projects"));
+    $("projects-list").addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-project-id]");
+      if (btn) openProject(btn.getAttribute("data-project-id"));
+    });
+    $("home-projects").addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-project-id]");
+      if (!btn) return;
+      location.hash = "#/projects";
+      openProject(btn.getAttribute("data-project-id"));
+    });
+    $("project-detail-close").addEventListener("click", function () {
+      openProjectId = null;
+      MyaData.clearQuery("projectDetail");
+      renderProjectDetail();
+    });
+    $("project-detail-body").addEventListener("click", function (e) {
+      if (!e.target.closest("#project-ask-mya")) return;
+      var entry = MyaData.get("projectDetail");
+      var name = entry && entry.data && entry.data.project && entry.data.project.project_name;
+      if (!name) return;
+      location.hash = "#/mya";
+      MyaChat.send("What's the latest on " + name + "?");
+    });
+    $("projects-search-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var q = $("projects-search-input").value.trim();
+      if (!q) return;
+      projectSearch = q;
+      $("projects-search-clear").hidden = false;
+      MyaData.query("projectSearch", "/api/command-center-projects?type=search&q=" + encodeURIComponent(q));
+    });
+    $("projects-search-clear").addEventListener("click", function () {
+      projectSearch = "";
+      $("projects-search-input").value = "";
+      $("projects-search-clear").hidden = true;
+      MyaData.clearQuery("projectSearch");
+    });
   }
 
   /* ---------------- APPROVALS ---------------- */
@@ -207,6 +343,13 @@
         "</div></div>";
     }, "Nothing is waiting on your approval.", "Approvals");
 
+    var rec = payload("approvalsRecent");
+    renderList("approvals-recent", "approvalsRecent", rec && rec.approvals, function (x) {
+      var approved = x.status === "approved";
+      return row(h(x.title), h(x.resolved_at ? MyaLib.formatRelative(x.resolved_at) : ""),
+        '<span class="chip-tag' + (approved ? " gold" : "") + '">' + (approved ? "Approved" : "Declined") + "</span>");
+    }, "Nothing resolved yet.", "Approval history");
+
     var al = payload("alerts");
     renderList("approvals-alerts", "alerts", al && al.alerts, function (x) {
       return '<div class="row row-amber"><div class="row-main"><span class="alert-text"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>' + h(x.message) + "</span></div></div>";
@@ -220,6 +363,11 @@
       var id = btn.getAttribute("data-approval-id");
       var action = btn.getAttribute("data-action");
       var card = btn.closest(".approval");
+      // On a phone a mis-tap is easy; confirm before anything is resolved.
+      if (window.matchMedia("(max-width: 899px)").matches) {
+        var title = card.querySelector("strong");
+        if (!window.confirm((action === "approve" ? "Approve" : "Decline") + " “" + (title ? title.textContent : "this request") + "”?")) return;
+      }
       var buttons = card.querySelectorAll("button");
       buttons.forEach(function (b) { b.disabled = true; });
       fetch("/api/command-center-approvals", {
@@ -240,6 +388,7 @@
             : "Declined.");
           MyaData.fetch("approvals");
           MyaData.fetch("alerts");
+          MyaData.fetch("approvalsRecent");
         })
         .catch(function () {
           buttons.forEach(function (b) { b.disabled = false; });
@@ -262,6 +411,7 @@
     ].join("");
 
     renderConstellation(factList);
+    renderHindsight();
 
     renderList("memory-facts", "memory", factList, function (f) {
       return row(h(f.fact), "", '<span class="time">' + h(MyaLib.formatRelative(f.created_at)) + "</span>");
@@ -271,6 +421,55 @@
     renderList("memory-people", "data", people, function (c) {
       return row(h(CALLER_CATEGORY_LABELS[c.category] || c.category), "", '<span class="num">' + h(c.count) + "</span>");
     }, "No callers classified yet.", "Company contacts");
+  }
+
+  function systemById(id) {
+    var sys = payload("systems");
+    var list = sys && Array.isArray(sys.systems) ? sys.systems : [];
+    return list.filter(function (x) { return x && x.id === id; })[0] || null;
+  }
+
+  var hindsightAsked = "";
+
+  function renderHindsight() {
+    var st = MyaLib.integrationStatus(systemById("hindsight"), fresh("systems"));
+    // The search box only exists when a live check says Hindsight answers --
+    // never a control that can't do anything.
+    var usable = st.state === "up";
+    $("hindsight-form").hidden = !usable;
+    var out = $("hindsight-results");
+    var tag = $("hindsight-fresh");
+    if (!hindsightAsked) {
+      tag.innerHTML = "";
+      out.innerHTML = usable ? "" : '<div class="unconnected"><svg class="icon" aria-hidden="true"><use href="#i-plug"/></svg><span>' +
+        h(st.state === "loading" ? "Checking whether Hindsight is reachable…"
+          : st.state === "not_configured" ? "Hindsight isn't configured for the Command Center yet, so there's nothing to search."
+          : "Hindsight isn't reachable from here right now (" + st.label + "), so search is off rather than guessing.") + "</span></div>";
+      return;
+    }
+    var f = fresh("hindsight");
+    tag.innerHTML = freshTagHtml(f);
+    var entry = MyaData.get("hindsight");
+    var mems = entry && entry.data && entry.data.memories;
+    if (!Array.isArray(mems)) {
+      out.innerHTML = f.state === "loading" ? stateBlock("hindsight")
+        : entry && entry.status === 503 ? '<p class="muted small">Hindsight isn\'t configured for the Command Center.</p>'
+        : stateBlock("hindsight", "Hindsight");
+      return;
+    }
+    out.innerHTML = mems.length
+      ? mems.map(function (m) { return row(h(m.text), "", m.type ? '<span class="chip-tag">' + h(m.type) + "</span>" : ""); }).join("")
+      : emptyBlock("Hindsight has nothing on “" + hindsightAsked + "”.");
+  }
+
+  function initHindsight() {
+    $("hindsight-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var q = $("hindsight-q").value.trim();
+      if (!q) return;
+      hindsightAsked = q;
+      MyaData.query("hindsight", "/api/command-center-memory?type=hindsight&q=" + encodeURIComponent(q));
+    });
   }
 
   function renderConstellation(facts) {
@@ -371,15 +570,33 @@
         '</td><td class="hide-sm"><code>' + h(src.url) + "</code></td></tr>";
     }).join("");
 
-    var d = payload("data");
-    renderList("services-list", "data", d && d.services, function (sv) {
-      return row(h(sv.name), h(sv.detail || ""),
-        '<span class="fresh ' + (sv.connected ? "live" : "offline") + '"><span class="fresh-dot"></span>' + (sv.connected ? "Configured" : "Not configured") + "</span>");
-    }, "No services reported.", "Service status");
+    var sys = payload("systems");
+    var list = sys && Array.isArray(sys.systems) ? sys.systems : null;
+    var CORE = ["supabase", "anthropic", "voice", "phone"];
+    renderList("services-list", "systems", list && list.filter(function (x) { return CORE.indexOf(x.id) !== -1; }), systemRow,
+      "No services reported.", "System health");
+    // External integrations: every described system is listed, whether or
+    // not the server reported it -- an unreported one reads Not observable.
+    var external = list ? MyaData.INTEGRATIONS.map(function (i) {
+      return systemById(i.id) || { id: i.id, name: i.name, status: "not_observable", detail: i.role };
+    }) : null;
+    renderList("integrations-list", "systems", external, systemRow, "No integrations reported.", "System health");
+  }
 
-    $("integrations-list").innerHTML = MyaData.INTEGRATIONS.map(function (i) {
-      return row(h(i.name), h(i.role), '<span class="fresh offline"><span class="fresh-dot"></span>Not connected</span>');
-    }).join("");
+  function systemPill(system) {
+    var st = MyaLib.integrationStatus(system, fresh("systems"));
+    return '<span class="fresh ' + st.cls + '"><span class="fresh-dot"></span>' + h(st.label) + "</span>";
+  }
+
+  function systemSub(system) {
+    var bits = [system.detail || ""];
+    if (system.lastActivityAt) bits.push("Last activity " + MyaLib.formatRelative(system.lastActivityAt));
+    if (typeof system.latencyMs === "number" && system.status === "up") bits.push(system.latencyMs + " ms");
+    return bits.filter(Boolean).join(" · ");
+  }
+
+  function systemRow(system) {
+    return row(h(system.name), h(systemSub(system)), systemPill(system));
   }
 
   function renderIntegrationCards() {
@@ -388,9 +605,13 @@
       var id = cards[i].getAttribute("data-integration");
       var info = MyaData.INTEGRATIONS.filter(function (x) { return x.id === id; })[0];
       if (!info) continue;
-      cards[i].classList.add("unconnected-card");
-      cards[i].innerHTML = '<div class="card-head"><h2>' + h(info.name) + '</h2><span class="fresh offline"><span class="fresh-dot"></span>Not connected</span></div>' +
-        '<p class="muted small">' + h(info.role) + "</p>";
+      var system = systemById(id);
+      var st = MyaLib.integrationStatus(system, fresh("systems"));
+      cards[i].classList.toggle("unconnected-card", st.state !== "up");
+      var detail = system ? systemSub(system) : "";
+      cards[i].innerHTML = '<div class="card-head"><h2>' + h(info.name) + "</h2>" + systemPill(system) + "</div>" +
+        '<p class="muted small">' + h(info.role) + "</p>" +
+        (detail && detail !== info.role ? '<p class="small integration-detail">' + h(detail) + "</p>" : "");
     }
   }
 
@@ -419,6 +640,7 @@
     renderOperations();
     renderDevices();
     renderSystems();
+    renderIntegrationCards();
     renderFreshTags();
   }
 
@@ -430,8 +652,9 @@
   }
 
   function init() {
-    renderIntegrationCards();
     initApprovalActions();
+    initProjects();
+    initHindsight();
     MyaEvents.on("data.changed", queueRender);
     MyaEvents.on("mic.changed", function (s) { micState = s; renderDevices(); });
     MyaEvents.on("voice.changed", function (s) { voiceState = s; renderDevices(); });
