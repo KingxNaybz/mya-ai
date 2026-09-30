@@ -234,7 +234,10 @@
       $("dev-card").hidden = false;
       MyaCore.renderDevStateRow($("mf-dev-states-row"));
       $("mf-replay-intro-btn").addEventListener("click", MyaCore.playIntro);
-      $("mf-simulate-voice-btn").addEventListener("click", MyaVoice.simulate);
+      $("mf-simulate-voice-btn").addEventListener("click", function () { MyaVoice.simulate("turn"); });
+      Array.prototype.forEach.call(document.querySelectorAll("[data-simulate]"), function (b) {
+        b.addEventListener("click", function () { MyaVoice.simulate(b.getAttribute("data-simulate")); });
+      });
     }
 
     MyaEvents.on("data.changed", renderStrip);

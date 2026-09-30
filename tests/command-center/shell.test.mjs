@@ -394,3 +394,14 @@ test("voice controls: talk from any screen, mute is separate from voice replies"
   // Muted or voice-off: no audio is requested from the server.
   assert.match(chat, /voice: voiceEnabled && !mutedNow/);
 });
+
+test("voice capsule: approval needed leads to Approvals; dev simulations never touch the conversation", () => {
+  const out = lib.voiceCapsule({ phase: "approval" }, NOW);
+  assert.equal(out.action, "review");
+  assert.match(out.detail, /Nothing goes out until you decide/);
+  assert.equal(lib.voiceCapsule({ phase: "speaking", silenced: true }, NOW).label, "Speaking · muted");
+  const voice = read("voice.js");
+  const sims = voice.slice(voice.indexOf("var SIM_SCRIPTS"), voice.indexOf("function typeWords"));
+  assert.match(sims, /dev=1/);
+  assert.doesNotMatch(sims, /MyaChat\.send|addLine|chat\.line|fetch\(/);
+});

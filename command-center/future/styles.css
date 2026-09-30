@@ -1077,6 +1077,7 @@ a.metric:hover { border-color: var(--line-strong); transform: translateY(-1px); 
 .voice-capsule[data-phase="waiting"] { --vc: #8d9aff; }
 .voice-capsule[data-phase="speaking"] { --vc: var(--violet); }
 .voice-capsule[data-phase="error"] { --vc: var(--red); }
+.voice-capsule[data-phase="approval"] { --vc: var(--core-approval); }
 .vc-orb { width: 42px; height: 42px; flex: none; display: grid; place-items: center; }
 .vc-meter { display: none; align-items: center; gap: 3px; height: 22px; flex: none; }
 .voice-capsule[data-phase="listening"] .vc-meter, .voice-capsule[data-phase="speaking"] .vc-meter { display: inline-flex; }
@@ -1293,4 +1294,5 @@ html:not(.has-level) .voice-capsule[data-phase="listening"] .vc-meter i { animat
 .vc-interim { color: var(--text-mid); font-style: italic; opacity: 0.8; }
 /* Mute is a quick, page-only silence (chat.js): gold, waves gone. */
 .vc-mute.is-muted { color: #e6b450; border-color: rgba(230, 180, 80, 0.5); }
-.vc-mute.is-muted .wave { opacity: 0; }
+.vc-mute { position: relative; }
+.vc-mute.is-muted::after { content: ""; position: absolute; left: 8px; right: 8px; top: 50%; height: 2px; border-radius: 2px; background: currentColor; transform: rotate(-40deg); }

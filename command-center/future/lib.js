@@ -367,7 +367,7 @@
         out.detail = "Using her tools";
         break;
       case "speaking":
-        out.label = "Speaking";
+        out.label = v.silenced ? "Speaking · muted" : "Speaking";
         out.detail = v.reply ? snippet(v.reply, 110) : "Replying now";
         out.action = "stop";
         break;
@@ -376,6 +376,11 @@
         out.detail = v.muted ? "Her voice is muted, so the reply is in the conversation."
           : v.noAudio ? "Her voice reply didn't come through. The text is in the conversation."
           : v.reply ? snippet(v.reply, 110) : "Replied";
+        break;
+      case "approval":
+        out.label = "Needs your approval";
+        out.detail = v.reply ? snippet(v.reply, 110) : "She's waiting on you in Approvals. Nothing goes out until you decide.";
+        out.action = "review";
         break;
       case "error":
         var e = VOICE_ERRORS[v.error] || VOICE_ERRORS.failed;

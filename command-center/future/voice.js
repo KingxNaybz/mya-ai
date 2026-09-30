@@ -53,6 +53,7 @@
   var finalText = "";
   var interimText = "";
   var speakingNow = false;    // her reply audio is playing
+  var silenced = false;       // Mute is on (chat.js owns it)
   var micPerm = "unknown";    // granted | denied | prompt | unknown
   var silenceTimer = null, noSpeechTimer = null, hideTimer = null, tickTimer = null;
   var voiceTurn = false;      // the request in flight came from tap-to-talk
@@ -74,7 +75,7 @@
   function render() {
     var cap = $("voice-capsule");
     if (!cap) return;
-    var out = MyaLib.voiceCapsule(v);
+    var out = MyaLib.voiceCapsule(extend({}, v, { silenced: silenced }));
     document.documentElement.setAttribute("data-voice", out.visible ? out.phase : "");
     if (!out.visible) {
       cap.classList.remove("is-in");
@@ -102,8 +103,8 @@
     var primary = cap.querySelector("[data-vc-action]");
     primary.hidden = !out.action;
     primary.setAttribute("data-action", out.action || "");
-    primary.querySelector("span").textContent = out.action === "send" ? "Done" : out.action === "stop" ? "Stop" : "";
-    primary.setAttribute("aria-label", out.action === "send" ? "Send what you said" : "Stop Mya speaking");
+    primary.querySelector("span").textContent = out.action === "send" ? "Done" : out.action === "stop" ? "Stop" : out.action === "review" ? "Review" : "";
+    primary.setAttribute("aria-label", out.action === "send" ? "Send what you said" : out.action === "review" ? "Open Approvals" : "Stop Mya speaking");
     requestAnimationFrame(function () { cap.classList.add("is-in"); });
     renderTalkButtons();
   }
@@ -307,6 +308,7 @@
       }
     });
     MyaEvents.on("auth.expired", function () { if (capturing) endCapture(null); close(); });
+    MyaEvents.on("voice.muted", function (m) { silenced = m.muted; if (v.phase) render(); });
 
     // The turn outlives navigation; while listening, "About" follows you to
     // the screen whose context will be sent.
@@ -320,6 +322,7 @@
     var cap = $("voice-capsule");
     cap.querySelector("[data-vc-action]").addEventListener("click", function () {
       var a = this.getAttribute("data-action");
+      if (a === "review") { location.hash = "#/approvals"; if (sim) stopSim(); else close(); return; }
       if (sim) return stopSim();
       if (a === "send") finish();
       else if (a === "stop") MyaChat.stopSpeaking();
@@ -347,16 +350,32 @@
   }
 
   /* ---------------- Dev simulation (?dev=1 only) ---------------- */
-  var SIM_SCRIPT = [
-    { phase: "listening", core: "listening", ms: 2600, words: "What needs my attention today on the Fixture projects" },
-    { phase: "thinking", core: "thinking", ms: 1600 },
-    { phase: "waiting", core: "waiting", ms: 1800 },
-    { phase: "working", core: "working", ms: 1800 },
-    { phase: "speaking", core: "speaking", ms: 3600, reply: "Synthetic dev reply: this is a simulated state, not Mya." },
-    { phase: "completed", core: "completed", ms: 1800 }
-  ];
+  var SIM_SCRIPTS = {
+    turn: [
+      { phase: "listening", core: "listening", ms: 2600, words: "What needs my attention today on the Fixture projects" },
+      { phase: "thinking", core: "thinking", ms: 1600 },
+      { phase: "waiting", core: "waiting", ms: 1800 },
+      { phase: "working", core: "working", ms: 1800 },
+      { phase: "speaking", core: "speaking", ms: 3600, reply: "Synthetic dev reply: this is a simulated state, not Mya." },
+      { phase: "completed", core: "completed", ms: 1800 }
+    ],
+    approval: [
+      { phase: "listening", core: "listening", ms: 2200, words: "Send the revised estimate to Fixture Client B" },
+      { phase: "thinking", core: "thinking", ms: 1400 },
+      { phase: "working", core: "working", ms: 1600 },
+      { phase: "speaking", core: "speaking", ms: 3000, reply: "Synthetic dev reply: drafted, and it needs your approval before it goes out." },
+      { phase: "approval", core: "awaiting-approval", ms: 3200 }
+    ],
+    error: [
+      { phase: "listening", core: "listening", ms: 2000, words: "Check the estimate" },
+      { phase: "thinking", core: "thinking", ms: 1400 },
+      { phase: "waiting", core: "waiting", ms: 2200 },
+      { phase: "error", core: "error", ms: 3200, error: "failed" }
+    ]
+  };
 
-  function simulate() {
+  function simulate(kind) {
+    var script = SIM_SCRIPTS[typeof kind === "string" && SIM_SCRIPTS[kind] ? kind : "turn"];
     if (!/[?&]dev=1\b/.test(location.search)) return;
     if (capturing) endCapture(null);
     stopSim();
@@ -365,10 +384,10 @@
     sim = { timers: [], raf: 0 };
     var next = function () {
       if (!sim) return;
-      var s = SIM_SCRIPT[i++];
+      var s = script[i++];
       if (!s) { stopSim(); return; }
       MyaCore.setState(s.core, { dev: true });
-      setPhase(s.phase, { keep: true, dev: true, startedAt: t0, reply: s.reply || v.reply });
+      setPhase(s.phase, { keep: true, dev: true, startedAt: t0, reply: s.reply || v.reply, error: s.error });
       if (s.words) typeWords(s.words, s.ms);
       if (s.phase === "speaking") synthLevel(s.ms);
       sim.timers.push(setTimeout(next, s.ms));

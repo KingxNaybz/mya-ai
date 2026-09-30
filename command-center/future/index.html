@@ -19,8 +19,8 @@
      bump N in every tag below whenever any of them changes. The service
      worker (sw.js) is network-first for these, so a new N is picked up on
      the next online load. -->
-<link rel="stylesheet" href="styles.css?v=40">
-<link rel="stylesheet" href="core.css?v=40">
+<link rel="stylesheet" href="styles.css?v=41">
+<link rel="stylesheet" href="core.css?v=41">
 </head>
 <body>
 
@@ -432,9 +432,11 @@
         <div class="chip-row" id="mf-dev-states-row"></div>
         <div class="chip-row">
           <button type="button" class="chip" id="mf-simulate-voice-btn">▶ Simulate a voice turn (dev)</button>
+          <button type="button" class="chip" data-simulate="approval">▶ …ending in Approval needed</button>
+          <button type="button" class="chip" data-simulate="error">▶ …ending in an error</button>
           <button type="button" class="chip" id="mf-replay-intro-btn">↻ Replay core intro</button>
         </div>
-        <p class="muted small">The simulation walks listening → thinking → waiting → working → speaking → done with synthetic text. It adds nothing to the conversation and makes no request.</p>
+        <p class="muted small">The simulations walk listening → thinking → waiting → working → speaking → done (or approval needed, or an error) with synthetic text. It adds nothing to the conversation and makes no request.</p>
       </div>
     </section>
 
@@ -580,16 +582,16 @@
   </div>
 </div>
 
-<script src="lib.js?v=40"></script>
-<script src="mya-events.js?v=40"></script>
-<script src="core.js?v=40"></script>
-<script src="data.js?v=40"></script>
-<script src="chat.js?v=40"></script>
-<script src="voice.js?v=40"></script>
-<script src="presence.js?v=40"></script>
-<script src="ask-about.js?v=40"></script>
-<script src="views.js?v=40"></script>
-<script src="shell.js?v=40"></script>
-<script src="app.js?v=40"></script>
+<script src="lib.js?v=41"></script>
+<script src="mya-events.js?v=41"></script>
+<script src="core.js?v=41"></script>
+<script src="data.js?v=41"></script>
+<script src="chat.js?v=41"></script>
+<script src="voice.js?v=41"></script>
+<script src="presence.js?v=41"></script>
+<script src="ask-about.js?v=41"></script>
+<script src="views.js?v=41"></script>
+<script src="shell.js?v=41"></script>
+<script src="app.js?v=41"></script>
 </body>
 </html>
