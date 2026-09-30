@@ -261,6 +261,13 @@ a.strip-item:hover { border-color: var(--line-strong); color: var(--text-hi); }
   margin: 0 0 8px; padding: 8px 10px 8px 6px; border-radius: var(--radius);
   border: 1px solid transparent; transition: background var(--dur), border-color var(--dur);
 }
+/* When the Core is hosted elsewhere (Home hero, Mya view), the dock's quiet
+   orb still glows in the presence color, so the state never disappears. */
+[data-presence]:not([data-presence="idle"]) .core-slot-dock:not(.has-core)::before {
+  box-shadow: 0 0 22px color-mix(in srgb, var(--presence) 75%, transparent);
+  border-color: color-mix(in srgb, var(--presence) 60%, transparent);
+}
+[data-presence="thinking"] .core-slot-dock:not(.has-core)::before { animation: pulse 1.1s ease-in-out infinite; }
 .rail-dock.presence-dock:hover { background: var(--surface); border-color: var(--line); }
 .presence-dock .core-slot-dock { --mf-core-size: 56px; width: 56px; height: 56px; flex: none; }
 .presence-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
@@ -456,7 +463,7 @@ a.strip-item:hover { border-color: var(--line-strong); color: var(--text-hi); }
 .feed-body span { font-size: 13px; line-height: 1.45; color: var(--text-mid); overflow-wrap: anywhere; }
 .feed-item .time { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; padding-top: 2px; }
 .feed-empty { padding: 8px 0 12px; font-size: 13px; color: var(--text-muted); }
-.about-tag { margin-left: 8px; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.about-tag { margin: 0; text-transform: none; letter-spacing: 0; font-weight: 600; }
 .view-sub { color: var(--text-mid); margin-top: 6px; max-width: 60ch; }
 
 .card {
@@ -628,7 +635,16 @@ a.metric:hover { border-color: var(--line-strong); transform: translateY(-1px); 
 .chat-empty { padding: 28px 24px 8px; display: flex; flex-direction: column; gap: 12px; color: var(--text-mid); }
 .chat-log { flex: 1; overflow-y: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 14px; }
 .chat-line { max-width: 78%; display: flex; flex-direction: column; gap: 4px; }
-.chat-who { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); }
+.chat-who { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); }
+.chat-line.user .chat-who { flex-direction: row-reverse; }
+.chat-time { font-weight: 500; letter-spacing: 0; text-transform: none; opacity: 0.8; }
+.chat-copy {
+  background: none; border: 0; padding: 2px 6px; border-radius: 6px; font: inherit; letter-spacing: 0; text-transform: none;
+  color: var(--text-muted); opacity: 0; transition: opacity var(--dur), color var(--dur), background var(--dur);
+}
+.chat-line:hover .chat-copy, .chat-copy:focus-visible { opacity: 1; }
+.chat-copy:hover { color: var(--text-hi); background: var(--surface-hover); }
+@media (hover: none) { .chat-copy { opacity: 1; } }
 .chat-text { padding: 11px 14px; border-radius: 14px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
 .chat-line.user { align-self: flex-end; align-items: flex-end; }
 .chat-line.user .chat-text { background: rgba(74, 168, 255, 0.14); border: 1px solid rgba(74, 168, 255, 0.25); border-bottom-right-radius: 4px; }

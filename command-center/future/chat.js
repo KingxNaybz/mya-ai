@@ -111,6 +111,27 @@
         about.textContent = "About: " + meta.about;
         who.appendChild(about);
       }
+      var when = new Date();
+      var time = document.createElement("time");
+      time.className = "chat-time";
+      time.dateTime = when.toISOString();
+      time.textContent = when.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      who.appendChild(time);
+      // A real reply from Mya can be copied, e.g. into an email or a text.
+      if (role === "mya" && navigator.clipboard) {
+        var copy = document.createElement("button");
+        copy.type = "button";
+        copy.className = "chat-copy";
+        copy.textContent = "Copy";
+        copy.setAttribute("aria-label", "Copy Mya's reply");
+        copy.addEventListener("click", function () {
+          navigator.clipboard.writeText(text).then(function () {
+            copy.textContent = "Copied";
+            setTimeout(function () { copy.textContent = "Copy"; }, 1600);
+          }, function () { copy.textContent = "Couldn't copy"; });
+        });
+        who.appendChild(copy);
+      }
       line.appendChild(who);
       line.appendChild(body);
       if (meta && Array.isArray(meta.toolsUsed) && meta.toolsUsed.length) {
