@@ -472,9 +472,15 @@
         : stateBlock("hindsight", "Hindsight");
       return;
     }
-    out.innerHTML = mems.length
+    // Hand the search to Mya: she answers from what she remembers, seeing
+    // the query and what Hindsight just returned.
+    var askTitle = "Ask Mya what she remembers about this";
+    var ask = '<div class="hindsight-ask"><button type="button" class="ask-btn sm" data-ask-hindsight data-ask-title="' + askTitle + '"' +
+      (MyaAskAbout.isAvailable() ? ' title="' + askTitle + '"' : ' disabled title="Executive Mya is unavailable"') +
+      '><span class="ask-orb" aria-hidden="true"></span><span>Ask Mya about “' + h(MyaLib.snippet(hindsightAsked, 40)) + '”</span></button></div>';
+    out.innerHTML = ask + (mems.length
       ? mems.map(function (m) { return row(h(m.text), "", m.type ? '<span class="chip-tag">' + h(m.type) + "</span>" : ""); }).join("")
-      : emptyBlock("Hindsight has nothing on “" + hindsightAsked + "”.");
+      : emptyBlock("Hindsight has nothing on “" + hindsightAsked + "”."));
   }
 
   function initHindsight() {
@@ -484,6 +490,15 @@
       if (!q) return;
       hindsightAsked = q;
       MyaData.query("hindsight", "/api/command-center-memory?type=hindsight&q=" + encodeURIComponent(q));
+    });
+    $("hindsight-results").addEventListener("click", function (e) {
+      if (!e.target.closest("button[data-ask-hindsight]") || !hindsightAsked) return;
+      var entry = MyaData.get("hindsight");
+      var mems = (entry && entry.data && Array.isArray(entry.data.memories)) ? entry.data.memories : [];
+      var shown = mems.slice(0, 5).map(function (m) { return "- " + MyaLib.snippet(m.text, 160); }).join("\n");
+      MyaAskAbout.askAbout("memory", "What do you remember about " + hindsightAsked + "?",
+        "Hindsight search on screen for “" + hindsightAsked + "”: " + (mems.length ? mems.length + " result(s):\n" + shown : "no results."),
+        "Memory: " + MyaLib.snippet(hindsightAsked, 40));
     });
   }
 

@@ -15,6 +15,12 @@ nothing is pushed, merged or deployed.
 | 4757e6c | Systems health overview first; data-sources table moved down |
 | 78b2fb7 / 52add7f | Home presence line; warm resting approval Core (a styles.css override; core.css unchanged) |
 | 570690b | Contextual ⌘K / "/" shortcut; staggered view entrance |
+| 73be9ba | Chat timestamps and Copy; the dock orb follows presence |
+| 824299b | Real audit log on Operations |
+| 3d04153 … e785c20 | Voice experience and Core states; quieter Live tags; gold decision cards; living Constellation; phone/tablet clusters; voice-capsule mute; Devices shows tap-to-talk, mic and wake word |
+| 18a2504 | Preview server: `--mode=fixtures` never drops to the login screen; a local "preview server stopped" screen reconnects by itself |
+| a94c9cf | The Core flies between slots on route change |
+| (this) | Memory: "Ask Mya about “X”" on Hindsight search results, with the results as context |
 
 Contracts are in `agent-os/standards/frontend/presence-and-ask-mya.md`.
 
@@ -29,6 +35,3 @@ Contracts are in `agent-os/standards/frontend/presence-and-ask-mya.md`.
 - update_company_brain (level 3) still writes directly (known gap from Phase 2).
 
 ## Next candidates
-- Chat message timestamps, and copying a reply.
-- A Memory screen "Ask Mya what she remembers about X" flowing into Hindsight recall results.
-- An audit-log read endpoint via `?type=` (under the function cap) to back "what she just completed" with server truth.

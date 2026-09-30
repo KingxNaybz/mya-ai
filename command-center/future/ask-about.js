@@ -164,10 +164,10 @@
       var cs = b.chips.querySelectorAll("button");
       for (var i = 0; i < cs.length; i++) cs[i].disabled = !available;
     });
-    var itemBtns = document.querySelectorAll("[data-ask-approval]");
+    var itemBtns = document.querySelectorAll("[data-ask-approval], [data-ask-hindsight]");
     for (var j = 0; j < itemBtns.length; j++) {
       itemBtns[j].disabled = !available;
-      itemBtns[j].title = available ? "Ask Mya about this request" : "Executive Mya is unavailable";
+      itemBtns[j].title = available ? (itemBtns[j].getAttribute("data-ask-title") || "Ask Mya about this request") : "Executive Mya is unavailable";
     }
   }
 

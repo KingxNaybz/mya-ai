@@ -1260,3 +1260,6 @@ html:not(.has-level) .voice-capsule[data-phase="listening"] .vc-meter i { animat
 /* While the Core flies between slots, nothing clips her. */
 .core-flying .rail, .core-flying .stage { overflow: visible; }
 .core-flying .tabbar { overflow: visible; }
+
+/* "Ask Mya about <search>" above Hindsight results. */
+.hindsight-ask { display: flex; justify-content: flex-end; margin: 0 0 10px; }
