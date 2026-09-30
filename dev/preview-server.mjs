@@ -29,6 +29,14 @@
  *
  * The real login flow is NOT emulated: authentication is only ever decided
  * by the real /api/command-center-settings on Vercel.
+ *
+ * Fixtures mode never expires. This server has no sessions and never returns
+ * 401 in fixtures mode, so the Production login overlay can only appear here
+ * when the page (re)loads while this server is down, e.g. a discarded tab
+ * restored from the service-worker cache. The fixtures-only KEEPALIVE script
+ * below pings /__preview/ping, never lets the login overlay show, puts up a
+ * "Local preview server stopped" screen instead, and reloads once the server
+ * answers again. It's injected by this server only; product auth is untouched.
  */
 import http from "node:http";
 import fs from "node:fs";
@@ -55,6 +63,18 @@ const TYPES = {
 const BANNER_H = 22;
 const BANNER = `<style>body{padding-top:${BANNER_H}px}.strip{top:${BANNER_H}px!important}.rail{top:calc(var(--strip-h) + ${BANNER_H}px)!important;height:calc(100dvh - var(--strip-h) - ${BANNER_H}px)!important}</style>` +
   `<div style="position:fixed;left:0;right:0;top:0;height:${BANNER_H}px;z-index:9999;display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(135deg,#e6a23c 0 14px,#d99530 14px 28px);color:#1c1300;font:700 10.5px/1 system-ui,sans-serif;letter-spacing:.12em;pointer-events:none;white-space:nowrap;overflow:hidden">LOCAL PREVIEW · SYNTHETIC FIXTURE DATA — NOT REAL</div>`;
+
+// Fixtures-only: replace the misleading Production login overlay with a
+// local-dev offline screen that reconnects by itself (see header comment).
+const KEEPALIVE = `<style>#mf-login-overlay{display:none!important}#pv-offline{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;background:#0b0d12;color:#e8eaf0;font:15px/1.5 system-ui,sans-serif}#pv-offline[hidden]{display:none}#pv-offline div{max-width:30rem}#pv-offline h1{font-size:18px;margin:0 0 8px}#pv-offline code{background:#1b1f29;padding:1px 5px;border-radius:4px}#pv-offline button{margin-top:14px;font:inherit;padding:6px 14px;border-radius:6px;border:1px solid #3a4152;background:#1b1f29;color:inherit;cursor:pointer}</style>` +
+  `<div id="pv-offline" role="alert" hidden><div><h1>Local preview server stopped</h1><p>This is the local fixture preview, and <code>node dev/preview-server.mjs --mode=fixtures</code> isn't responding. Start it again and this page reconnects on its own. Production isn't involved.</p><p id="pv-offline-status">Checking…</p><button type="button" id="pv-offline-retry">Retry now</button></div></div>` +
+  `<script>(function(){var box=document.getElementById("pv-offline"),st=document.getElementById("pv-offline-status"),down=false;` +
+  `function ping(){return fetch("/__preview/ping",{cache:"no-store"}).then(function(r){return r.ok&&r.json()}).then(function(j){return !!(j&&j.mode==="fixtures")},function(){return false})}` +
+  `function check(){ping().then(function(ok){if(ok){if(down||loginShown())reload();return}down=true;box.hidden=false;st.textContent="Last checked "+new Date().toLocaleTimeString()+" — retrying every few seconds."})}` +
+  `function reload(){try{var t=+sessionStorage.getItem("pv-reload")||0;if(Date.now()-t<10000)return;sessionStorage.setItem("pv-reload",Date.now())}catch(e){}location.replace(location.pathname+location.search+location.hash)}function loginShown(){var o=document.getElementById("mf-login-overlay");return o&&!o.hidden}` +
+  `new MutationObserver(function(){if(loginShown())check()}).observe(document.documentElement,{subtree:true,attributes:true,attributeFilter:["hidden"]});` +
+  `document.getElementById("pv-offline-retry").onclick=check;setInterval(function(){if(down||document.visibilityState==="visible")check()},5000);` +
+  `document.addEventListener("visibilitychange",function(){if(document.visibilityState==="visible")check()});addEventListener("focus",check);addEventListener("online",check);check()})()</script>`;
 
 const ago = (mins) => new Date(Date.now() - mins * 60000).toISOString();
 let approvalsCalls = 0;
@@ -216,7 +236,7 @@ function serveStatic(res, url) {
     // Each page load replays the approvals Live -> Stale sequence from the
     // start, so a reload never lands straight on "Not connected".
     if (MODE === "fixtures" && type.startsWith("text/html")) approvalsCalls = 0;
-    if (MODE === "fixtures" && type.startsWith("text/html")) out = Buffer.from(buf.toString("utf8").replace("<body>", "<body>" + BANNER));
+    if (MODE === "fixtures" && type.startsWith("text/html")) out = Buffer.from(buf.toString("utf8").replace("<body>", "<body>" + BANNER + KEEPALIVE));
     res.writeHead(200, { "Content-Type": type, "Cache-Control": "no-store" });
     res.end(out);
   });
@@ -224,6 +244,7 @@ function serveStatic(res, url) {
 
 http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
+  if (url.pathname === "/__preview/ping") return sendJson(res, 200, { ok: true, mode: MODE }); // fixtures keepalive (see KEEPALIVE)
   if (url.pathname === "/__preview/reset") { approvalsCalls = 0; return sendJson(res, 200, { ok: true }); } // lets a reviewer (or the checks) replay the Live -> Stale sequence
   if (url.pathname.startsWith("/api/")) return handleApi(req, res, url);
   if (url.pathname === "/" ) { res.writeHead(302, { Location: "/command-center/future/index.html" }); return res.end(); }
