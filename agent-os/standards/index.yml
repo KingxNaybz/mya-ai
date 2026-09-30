@@ -19,6 +19,8 @@ frontend:
     description: No-build ES5 module layout, MyaData-only fetching, and cache-bust rules for future/
   mya-core-and-dev-states:
     description: Single Mya Core element, real vs dev-only states, core.css change rule
+  presence-and-ask-mya:
+    description: Presence Layer from real signals only; Ask Mya about this screen/item with honest context
 
 testing:
   preview-server:
