@@ -1,7 +1,11 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
-import { isCommandCenterAuthenticated } from "../lib/session";
+import { isCommandCenterAuthenticated, commandCenterAuthMethod } from "../lib/session";
 import { hermesStatus, hindsightHealth, type SystemReport } from "../lib/integrations";
+import {
+  applyAgentReport, applyOwnerAction, agentInstructions, connectionState, rowFromSession, sessionFromRow,
+  validateReport, emptySession, type ComputerEvent, type ComputerSession,
+} from "../lib/computer";
 
 /**
  * Requires a valid dashboard session cookie or COMMAND_CENTER_API_KEY (see
@@ -201,12 +205,16 @@ async function supabaseReport(): Promise<SystemReport> {
 async function handleSystems(res: VercelResponse) {
   try {
     const env = process.env;
-    const [supabaseR, hindsightR, mcpLast, desktopLast] = await Promise.all([
+    const [supabaseR, hindsightR, mcpLast, desktopLast, computer] = await Promise.all([
       supabaseReport(),
       hindsightHealth(),
       lastActionAt("hermes_mcp"),
       lastActionAt("desktop_app"),
+      readComputerSession().catch(() => null),
     ]);
+    // Watch Mya heartbeat: a real signal once the agent reports.
+    const heartbeat = computer && !computer.error ? computer.session.heartbeatAt : null;
+    const agentConn = connectionState(heartbeat, Date.now());
     const mcpConfigured = env.MCP_BRIDGE_ENABLED === "true" && Boolean(env.MCP_BRIDGE_KEY);
     const systems: SystemReport[] = [
       supabaseR,
@@ -223,13 +231,15 @@ async function handleSystems(res: VercelResponse) {
       {
         id: "windows",
         name: "Windows agent",
-        status: "not_observable",
-        detail: desktopLast
-          ? "No live heartbeat — last seen when it last asked Mya something."
-          : "No live heartbeat, and no activity recorded from it yet.",
+        status: agentConn === "live" ? "up" : agentConn === "stale" ? "down" : "not_observable",
+        detail: agentConn === "live" ? "Reporting to Watch Mya — heartbeat just now."
+          : agentConn === "stale" ? "Its Watch Mya heartbeat stopped recently."
+          : desktopLast
+            ? "No live heartbeat — last seen when it last asked Mya something."
+            : "No live heartbeat, and no activity recorded from it yet.",
         checkedAt: new Date().toISOString(),
         latencyMs: null,
-        lastActivityAt: desktopLast,
+        lastActivityAt: heartbeat || desktopLast,
       },
       {
         id: "houzz",
@@ -276,18 +286,178 @@ async function handleAudit(res: VercelResponse) {
   }
 }
 
+/**
+ * Watch Mya (?type=computer*) — see lib/computer.ts for the contract.
+ *
+ *   GET  ?type=computer          session + recent events (no frame)    browser or agent
+ *   GET  ?type=computer-frame    the latest downscaled frame           browser
+ *   POST ?type=computer-control  { action } pause|resume|take|return|stop   browser session ONLY
+ *   POST ?type=computer-report   heartbeat/task/step/frame/events      Windows Agent key ONLY
+ *
+ * The Windows Agent keeps its existing outbound-only model: it calls this
+ * API with its own COMMAND_CENTER_API_KEY and every report's response tells
+ * it whether it may issue input. No port on the PC is ever opened.
+ *
+ * Races: an agent report never writes `control` except to yield it, and
+ * that write is conditional, so an owner's Take Control / Pause / Stop that
+ * lands between the agent's read and write can't be overwritten. Status is
+ * likewise never written over a stopped task unless a new task starts.
+ *
+ * Storage: mya_computer_sessions (one row per device) and
+ * mya_computer_events. Until those tables exist (see the proposed SQL in
+ * agent-os/specs/2026-09-30-watch-mya/schema.sql), every call answers
+ * 503 not_configured -- the Command Center says so instead of guessing.
+ */
+const COMPUTER_DEVICE = "windows";
+const COMPUTER_EVENTS_LIMIT = 30;
+
+function isMissingTable(error: any): boolean {
+  return Boolean(error) && (error.code === "42P01" || error.code === "PGRST205" || /does not exist|schema cache/i.test(String(error.message || "")));
+}
+
+async function readComputerSession(withFrame = false): Promise<{ session: ComputerSession; frame?: string | null; missing: boolean; error: boolean }> {
+  const cols = "device_id, device_name, task_id, task, app, step, status, control, control_changed_at, control_changed_by, approval_id, heartbeat_at, frame_at, started_at" + (withFrame ? ", frame" : "");
+  const { data, error } = await supabase.from("mya_computer_sessions").select(cols).eq("device_id", COMPUTER_DEVICE).limit(1);
+  if (error) return { session: emptySession(COMPUTER_DEVICE), missing: isMissingTable(error), error: true };
+  const row: any = data && data[0];
+  return { session: sessionFromRow(row, COMPUTER_DEVICE), frame: row ? row.frame ?? null : null, missing: false, error: false };
+}
+
+async function logComputerEvents(events: ComputerEvent[]) {
+  if (!events.length) return;
+  try {
+    await supabase.from("mya_computer_events").insert(events.map((e) => ({
+      device_id: COMPUTER_DEVICE, at: e.at, kind: e.kind, text: e.text, app: e.app ?? null, by: e.by,
+    })));
+  } catch (err) {
+    console.error("computer events insert failed:", err); // best-effort, never blocks control
+  }
+}
+
+function notConfigured(res: VercelResponse) {
+  return res.status(503).json({ error: "not_configured", message: "Watch Mya's storage isn't set up yet." });
+}
+
+async function handleComputerGet(res: VercelResponse, frame: boolean) {
+  const r = await readComputerSession(frame);
+  if (r.missing) return notConfigured(res);
+  if (r.error) return res.status(502).json({ error: "Couldn't read Mya's computer session." });
+  if (frame) return res.status(200).json({ frame: r.frame || null, frameAt: r.session.frameAt });
+  const { data: events } = await supabase
+    .from("mya_computer_events")
+    .select("at, kind, text, app, by")
+    .eq("device_id", COMPUTER_DEVICE)
+    .order("at", { ascending: false })
+    .limit(COMPUTER_EVENTS_LIMIT);
+  return res.status(200).json({
+    generatedAt: new Date().toISOString(),
+    session: r.session,
+    connection: connectionState(r.session.heartbeatAt, Date.now()),
+    events: events || [],
+  });
+}
+
+async function handleComputerControl(req: VercelRequest, res: VercelResponse) {
+  const action = (req.body || {}).action;
+  const r = await readComputerSession();
+  if (r.missing) return notConfigured(res);
+  if (r.error) return res.status(502).json({ error: "Couldn't read Mya's computer session." });
+  const nowIso = new Date().toISOString();
+  const out = applyOwnerAction(r.session, action, nowIso);
+  if (!out.ok) return res.status(409).json({ error: out.error });
+  const { error } = await supabase.from("mya_computer_sessions").upsert(rowFromSession(out.session), { onConflict: "device_id" });
+  if (error) return res.status(502).json({ error: "Couldn't change control. Nothing changed." });
+  await logComputerEvents([out.event]);
+  try {
+    await supabase.from("mya_action_log").insert({
+      tool_name: "computer_control_" + action, permission_level: 0, requested_by: "dashboard_direct_ui",
+      input: { action }, result_summary: "success",
+    });
+  } catch { /* best-effort audit */ }
+  return res.status(200).json({ session: out.session, connection: connectionState(out.session.heartbeatAt, Date.now()) });
+}
+
+async function handleComputerReport(req: VercelRequest, res: VercelResponse) {
+  const v = validateReport(req.body);
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  const r = await readComputerSession();
+  if (r.missing) return notConfigured(res);
+  if (r.error) return res.status(502).json({ error: "Couldn't read the computer session." });
+  const nowIso = new Date().toISOString();
+  const next = applyAgentReport(r.session, v.report, nowIso);
+  const newTask = next.taskId !== r.session.taskId;
+  const table = supabase.from("mya_computer_sessions");
+
+  // 1. Everything except control and status: always safe to write.
+  const base: Record<string, unknown> = {
+    device_id: COMPUTER_DEVICE, device_name: next.deviceName, task_id: next.taskId, task: next.task, app: next.app,
+    step: next.step, approval_id: next.approvalId, heartbeat_at: next.heartbeatAt, frame_at: next.frameAt, started_at: next.startedAt,
+  };
+  if (v.report.frame) base.frame = v.report.frame;
+  if (!r.session.heartbeatAt && !r.session.taskId && !r.session.controlChangedAt) {
+    // First report ever: create the row, starting without control.
+    const { error } = await table.upsert({ ...rowFromSession(emptySession(COMPUTER_DEVICE)), ...base }, { onConflict: "device_id", ignoreDuplicates: true });
+    if (error) return res.status(502).json({ error: "Couldn't save the report." });
+  }
+  const { error: baseErr } = await supabase.from("mya_computer_sessions").update(base).eq("device_id", COMPUTER_DEVICE);
+  if (baseErr) return res.status(502).json({ error: "Couldn't save the report." });
+
+  // 2. Status: never over a stopped task, unless this report starts a new one.
+  if (v.report.status !== undefined || newTask) {
+    let q = supabase.from("mya_computer_sessions").update({ status: next.status }).eq("device_id", COMPUTER_DEVICE);
+    if (!newTask) q = q.neq("status", "stopped");
+    await q;
+  }
+  // 3. Control only ever becomes MORE restrictive here, and conditionally.
+  if (newTask) {
+    await supabase.from("mya_computer_sessions").update({ control: "paused", control_changed_at: nowIso, control_changed_by: "agent" })
+      .eq("device_id", COMPUTER_DEVICE).eq("control", "mya");
+  }
+  if (v.report.control === "user") {
+    await supabase.from("mya_computer_sessions").update({ control: "user", control_changed_at: nowIso, control_changed_by: "agent" })
+      .eq("device_id", COMPUTER_DEVICE).neq("control", "user");
+  }
+  await logComputerEvents((v.report.events || []).map((e) => ({ at: nowIso, kind: e.kind, text: e.text, app: e.app ?? next.app, by: "mya" as const }))
+    .concat(v.report.control === "user" && r.session.control !== "user"
+      ? [{ at: nowIso, kind: "control" as const, text: "Mya saw you use the computer and handed you control.", app: next.app, by: "agent" as const }]
+      : []));
+
+  // The agent obeys what's stored NOW, not what it just sent.
+  const after = await readComputerSession();
+  return res.status(200).json(agentInstructions(after.error ? { ...next, control: "paused" } : after.session));
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(200).end();
 
-  if (req.method !== "GET") {
+  const type = req.query.type;
+  const isComputerPost = req.method === "POST" && (type === "computer-control" || type === "computer-report");
+  if (req.method !== "GET" && !isComputerPost) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   if (!isCommandCenterAuthenticated(req)) {
     return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  if (isComputerPost) {
+    const method = commandCenterAuthMethod(req);
+    // Control belongs to the owner's signed-in browser; reports belong to
+    // the agent's key. Neither can do the other's job.
+    if (type === "computer-control") {
+      if (method !== "session") return res.status(403).json({ error: "Only the signed-in owner can change control." });
+      return handleComputerControl(req, res);
+    }
+    if (method !== "api_key") return res.status(403).json({ error: "Only the Windows Agent reports computer activity." });
+    return handleComputerReport(req, res);
+  }
+  if (type === "computer") return handleComputerGet(res, false);
+  if (type === "computer-frame") {
+    if (commandCenterAuthMethod(req) !== "session") return res.status(403).json({ error: "Frames are for the signed-in owner." });
+    return handleComputerGet(res, true);
   }
 
   if (req.query.type === "systems") return handleSystems(res);

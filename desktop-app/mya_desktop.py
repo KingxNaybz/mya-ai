@@ -236,13 +236,29 @@ def locate_target(instruction: str, image_bytes: bytes) -> dict:
     return parse_locate_response(res.json())
 
 
+class InputBlocked(Exception):
+    """Watch Mya says she may not issue input right now."""
+
+
+def _check_gate() -> None:
+    # Asked immediately before EVERY input call, so Pause / Take Control in
+    # the Command Center (or you moving the mouse) stops her mid-action.
+    if WATCH_GATE is not None and not WATCH_GATE.allows_confirmed_action():
+        raise InputBlocked(WATCH_GATE.blocked_reason() or "I'm not allowed to touch anything right now.")
+
+
 def perform_action(action: dict) -> None:
     import pyautogui
 
     x, y = int(action["x"]), int(action["y"])
+    _check_gate()
+    if WATCH_REPORTER is not None:
+        WATCH_REPORTER.note_self_move((x, y))
     pyautogui.moveTo(x, y, duration=0.3)
+    _check_gate()
     pyautogui.click()
     if action.get("action_type") == "type" and action.get("text_to_type"):
+        _check_gate()
         pyautogui.typewrite(action["text_to_type"], interval=0.02)
 
 
@@ -270,9 +286,17 @@ def handle_action_request(instruction: str, screenshot_bytes: bytes) -> None:
         print(f'[Mya] Okay, not doing that (heard: "{confirmation}").')
         return
 
+    if WATCH_REPORTER is not None:
+        WATCH_REPORTER.state.update({"step": f"{action_type.capitalize()} {target['target_description']}"[:300], "status": "working"})
     try:
         perform_action(target)
         print(f"[Mya] Done — {action_type}ed {target['target_description']}.")
+        if WATCH_REPORTER is not None:
+            WATCH_REPORTER.event("action", f"{action_type.capitalize()}ed {target['target_description']}")
+    except InputBlocked as e:
+        print(f"[Mya] {e}")
+        if WATCH_REPORTER is not None:
+            WATCH_REPORTER.event("note", "Didn't act: input isn't allowed right now.")
     except Exception as e:
         print(f"[Mya] Tried to act but something went wrong: {e}")
 
@@ -375,6 +399,27 @@ def play_audio(mp3_bytes: bytes) -> None:
 # too) is whatever the dashboard brain itself decides to remember via
 # its own remember_fact/create_project/etc. skills.
 conversation_history: List[dict] = []
+
+# Watch Mya (opt-in via MYA_WATCH=on, see watch.py). None when off, so the
+# confirmed click/type flow above behaves exactly as before.
+WATCH_GATE = None
+WATCH_REPORTER = None
+
+
+def start_watch() -> None:
+    global WATCH_GATE, WATCH_REPORTER
+    import watch
+
+    if not watch.watch_enabled():
+        return
+    if not COMMAND_CENTER_API_KEY:
+        print("[Mya] MYA_WATCH is on but COMMAND_CENTER_API_KEY isn't set — Watch Mya stays off.")
+        return
+    WATCH_GATE = watch.ControlGate()
+    WATCH_REPORTER = watch.Reporter(DASHBOARD_BASE_URL, COMMAND_CENTER_API_KEY, WATCH_GATE, {"status": "idle"},
+                                    device_name=os.environ.get("COMPUTERNAME", "Windows PC"))
+    WATCH_REPORTER.start()
+    print("[Mya] Watch Mya is on: reporting to the Command Center (outbound only; no port opened).")
 
 
 def handle_activation() -> None:
@@ -484,6 +529,7 @@ def main() -> None:
     print("[Mya] Right-click the tray icon for 'Ask Mya now' or 'Open Dashboard'.")
     print(f"[Mya] Talking to the dashboard brain at: {DASHBOARD_BASE_URL}")
     keyboard.add_hotkey(HOTKEY, handle_activation)
+    start_watch()
 
     run_tray_icon()
 
