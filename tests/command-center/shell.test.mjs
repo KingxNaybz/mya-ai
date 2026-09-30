@@ -208,6 +208,24 @@ test("Executive Mya route follows configuration, never an invented health check"
   assert.equal(lib.executiveMyaRoute({ status: "not_observable" }, { state: "loading" }), "loading");
 });
 
+test("presence comes only from real signals, in priority order", () => {
+  const now = 1_000_000;
+  const P = (s) => lib.derivePresence(s, now).state;
+  assert.equal(P({ core: "thinking", availability: "unavailable", approvals: 3 }), "thinking");
+  assert.equal(P({ core: "speaking" }), "speaking");
+  assert.equal(P({ core: "idle", lastOutcome: { ok: false, at: now - 1000 }, approvals: 2 }), "error");
+  assert.equal(P({ core: "idle", lastOutcome: { ok: true, at: now - 1000 } }), "completed");
+  assert.equal(P({ core: "idle", lastOutcome: { ok: true, at: now - 120000 }, availability: "connected" }), "idle");
+  assert.equal(P({ core: "idle", availability: "unavailable", approvals: 2 }), "blocked");
+  assert.equal(P({ core: "idle", availability: "unknown" }), "blocked");
+  assert.equal(P({ core: "listening", availability: "connected", micOn: true, approvals: 2 }), "listening");
+  assert.equal(P({ core: "idle", availability: "connected", approvals: 2 }), "approval");
+  // Unknown approvals are never read as zero or as "waiting on you".
+  assert.equal(P({ core: "idle", availability: "connected", approvals: null }), "idle");
+  assert.match(lib.derivePresence({ core: "idle", availability: "connected", approvals: 1 }, now).detail, /1 approval needs/);
+  assert.match(lib.derivePresence({ core: "thinking", pendingText: "x".repeat(200) }, now).detail, /…/);
+});
+
 /* ---------------- Phase 2 static guards ---------------- */
 const BASELINE = "59e8c0d";
 const readRoot = (f) => fs.readFileSync(path.join(ROOT, f), "utf8");

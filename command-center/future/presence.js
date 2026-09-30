@@ -1,0 +1,125 @@
+/**
+ * MyaPresence: the persistent "what is Mya doing?" layer.
+ *
+ * The one Mya Core already moves between slots (MyaShell). This layer adds
+ * the words and signals that go with it, wherever you are:
+ *   - the desktop rail dock: Core + state + one-line detail;
+ *   - the status strip's Mya item;
+ *   - html[data-presence], which colors the phone tab-bar Core's ring;
+ *   - a toast when she starts, finishes or fails a request while you're
+ *     away from the Mya view.
+ *
+ * Every input is a real signal (see MyaLib.derivePresence). Dev-preview Core
+ * states (?dev=1) are ignored here, so review-only states never read as
+ * real activity.
+ */
+(function (global) {
+  "use strict";
+
+  var s = { core: "idle", availability: "loading", lastOutcome: null, approvals: null, micOn: false, pendingText: "" };
+  var lastReply = "";
+  var seen = {};
+  var shownKey = null, timedKey = null;
+  var hideTimer = null, seenTimer = null;
+
+  function $(id) { return document.getElementById(id); }
+  function route() { return document.documentElement.getAttribute("data-route") || "home"; }
+
+  function approvalsCount() {
+    var f = MyaData.freshness("approvals");
+    if (f.state !== "live" && f.state !== "stale") return null;
+    var a = MyaData.get("approvals");
+    return a && a.data && Array.isArray(a.data.approvals) ? a.data.approvals.length : null;
+  }
+
+  function render() {
+    var p = MyaLib.derivePresence(s);
+    document.documentElement.setAttribute("data-presence", p.state);
+    var labels = document.querySelectorAll("[data-presence-label]");
+    for (var i = 0; i < labels.length; i++) labels[i].textContent = p.label;
+    var details = document.querySelectorAll("[data-presence-detail]");
+    for (var j = 0; j < details.length; j++) details[j].textContent = p.detail;
+    var dock = $("presence-dock");
+    if (dock) dock.setAttribute("aria-label", "Mya: " + p.label + ". " + p.detail + ". Open Mya.");
+    // The Core rests in its approval state only while approvals are really pending.
+    MyaCore.setResting(p.state === "approval" ? "awaiting-approval" : "idle");
+    renderToast(p);
+  }
+
+  // Thinking shows for as long as she's working. A reply or a failure shows
+  // once, briefly, then counts as seen, even though "Replied" stays on the
+  // dock for a minute.
+  function toastKey(p) {
+    if (p.state === "thinking") return "thinking";
+    if ((p.state === "completed" || p.state === "error") && s.lastOutcome) return p.state + ":" + s.lastOutcome.at;
+    return null;
+  }
+
+  function renderToast(p) {
+    var toast = $("presence-toast");
+    if (!toast) return;
+    var key = toastKey(p);
+    if (route() === "mya" || !key || seen[key]) { hideToast(); return; }
+    toast.setAttribute("data-state", p.state);
+    toast.querySelector("[data-toast-label]").textContent =
+      p.state === "thinking" ? "Mya is thinking" : p.state === "completed" ? "Mya replied" : "Mya didn't answer";
+    toast.querySelector("[data-toast-detail]").textContent =
+      p.state === "completed" && lastReply ? MyaLib.snippet(lastReply, 120) : p.detail;
+    clearTimeout(hideTimer);
+    toast.hidden = false;
+    requestAnimationFrame(function () { toast.classList.add("is-in"); });
+    shownKey = key;
+    if (key !== "thinking" && timedKey !== key) {
+      timedKey = key;
+      clearTimeout(seenTimer);
+      seenTimer = setTimeout(function () { seen[key] = true; render(); }, p.state === "error" ? 9000 : 7000);
+    }
+  }
+
+  function hideToast() {
+    var toast = $("presence-toast");
+    if (!toast || toast.hidden) return;
+    toast.classList.remove("is-in");
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(function () { toast.hidden = true; }, 220);
+  }
+
+  function dismissToast() {
+    if (shownKey && shownKey !== "thinking") seen[shownKey] = true;
+    hideToast();
+  }
+
+  function init() {
+    MyaEvents.on("core.state", function (e) {
+      if (!e || e.dev) return;
+      s.core = e.state;
+      render();
+    });
+    MyaEvents.on("chat.line", function (line) {
+      if (line && line.role === "user") s.pendingText = line.text;
+    });
+    MyaEvents.on("mya.outcome", function (o) {
+      s.lastOutcome = { ok: Boolean(o && o.ok), at: Date.now() };
+      s.pendingText = "";
+      if (o && o.ok) lastReply = o.reply || "";
+      render();
+    });
+    MyaEvents.on("mya.availability", function (a) { s.availability = a.availability; render(); });
+    MyaEvents.on("mic.changed", function (m) { s.micOn = Boolean(m.micEnabled && m.supported); render(); });
+    MyaEvents.on("data.changed", function (d) {
+      if (d && d.source === "approvals") { s.approvals = approvalsCount(); render(); }
+    });
+    window.addEventListener("hashchange", function () { render(); });
+    var toast = $("presence-toast");
+    if (toast) {
+      toast.querySelector("[data-toast-close]").addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); dismissToast(); });
+      toast.addEventListener("click", dismissToast);
+    }
+    // "Replied" and "Didn't answer" expire on their own; re-derive periodically.
+    setInterval(render, 15000);
+    s.approvals = approvalsCount();
+    render();
+  }
+
+  global.MyaPresence = { init: init };
+})(window);

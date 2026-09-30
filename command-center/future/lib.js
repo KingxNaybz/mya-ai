@@ -220,6 +220,57 @@
     return words.charAt(0).toUpperCase() + words.slice(1);
   }
 
+  /* ---------------- Mya presence ----------------
+     One answer to "what is Mya doing right now?", derived ONLY from real
+     signals: the Core's live state (a request in flight, a reply being
+     spoken, the mic), the outcome of her last request, whether Executive Mya
+     is reachable, and live/stale approvals. There's no "working in the
+     background" state because nothing reports background work to the
+     Command Center yet, so it is never shown.
+       s.core          current Core state ("thinking", "speaking", ...)
+       s.availability  "connected" | "configured" | "unavailable" | "unknown" | "loading"
+       s.lastOutcome   { ok: bool, at: ms } | null
+       s.approvals     number | null (null = not known, never treated as 0)
+       s.micOn         bool
+       s.pendingText   what the owner last asked, while a request is in flight
+     Returns { state, label, detail }. */
+  var COMPLETED_HOLD_MS = 60 * 1000;
+  var FAILED_HOLD_MS = 5 * 60 * 1000;
+
+  function snippet(text, max) {
+    var t = String(text || "").replace(/\s+/g, " ").trim();
+    return t.length > max ? t.slice(0, max - 1) + "…" : t;
+  }
+
+  function derivePresence(s, now) {
+    s = s || {};
+    now = now == null ? Date.now() : now;
+    var out = s.lastOutcome;
+    var age = out ? now - out.at : Infinity;
+    if (s.core === "thinking") {
+      return { state: "thinking", label: "Thinking", detail: s.pendingText ? "On: “" + snippet(s.pendingText, 60) + "”" : "Working on your request" };
+    }
+    if (s.core === "speaking") return { state: "speaking", label: "Speaking", detail: "Replying now" };
+    if (out && !out.ok && age < FAILED_HOLD_MS) {
+      return { state: "error", label: "Didn't answer", detail: "Her last reply failed. Nothing was sent elsewhere." };
+    }
+    if (out && out.ok && age < COMPLETED_HOLD_MS) return { state: "completed", label: "Replied", detail: "Just now · open to read" };
+    if (s.availability === "unavailable") {
+      return { state: "blocked", label: "Unavailable", detail: "Executive Mya isn't configured here" };
+    }
+    if (s.availability === "unknown") return { state: "blocked", label: "Not connected", detail: "Can't check her runtime right now" };
+    if (s.micOn) return { state: "listening", label: "Listening", detail: "Say “Mya” to talk" };
+    if (typeof s.approvals === "number" && s.approvals > 0) {
+      return { state: "approval", label: "Waiting on you", detail: s.approvals + (s.approvals === 1 ? " approval needs" : " approvals need") + " your decision" };
+    }
+    if (s.availability === "loading") return { state: "idle", label: "Ready", detail: "Checking her runtime…" };
+    return {
+      state: "idle",
+      label: "Ready",
+      detail: s.availability === "connected" ? "Connected · ask anything" : "Configured · her first reply confirms it"
+    };
+  }
+
   // Which runtime chat should use. Hermes has no health endpoint, so a
   // Systems report can only say whether the Hermes bridge key is set
   // ("not_observable" or, in theory, "up"). That's enough to route chat to
@@ -240,6 +291,8 @@
     systemsDown: systemsDown,
     toolLabel: toolLabel,
     executiveMyaRoute: executiveMyaRoute,
+    derivePresence: derivePresence,
+    snippet: snippet,
     escapeHtml: escapeHtml,
     formatRelative: formatRelative,
     formatAge: formatAge,

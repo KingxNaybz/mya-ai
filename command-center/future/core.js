@@ -118,6 +118,7 @@
     var labelEls = document.querySelectorAll("[data-core-state-label]");
     for (var i = 0; i < labelEls.length; i++) labelEls[i].textContent = label;
     coreEl.setAttribute("aria-label", "Mya's core, currently " + label.toLowerCase());
+    MyaEvents.emit("core.state", { state: stateName, dev: Boolean(opts.dev) });
   }
 
   function getCoreState() {
@@ -128,7 +129,20 @@
   // Plain idle by default; chat.js points it at the mic state once the voice
   // pipeline initializes, so "she stopped talking" settles to "listening"
   // instead of "idle" whenever the mic is on.
-  var settleFn = function () { setCoreState("idle"); };
+  var settleFn = function () { setCoreState(restingState()); };
+
+  // What the Core shows when nothing is happening. MyaPresence sets it to
+  // "awaiting-approval" while real approvals are pending, so the Core itself
+  // tells you she's waiting on you. Only ever idle or awaiting-approval.
+  var resting = "idle";
+  function restingState() { return resting; }
+  function setResting(stateName) {
+    var next = stateName === "awaiting-approval" ? "awaiting-approval" : "idle";
+    if (next === resting) return;
+    var current = getCoreState();
+    resting = next;
+    if (current === "idle" || current === "awaiting-approval") setCoreState(resting);
+  }
 
   function settleCore() { settleFn(); }
   function setSettle(fn) { settleFn = fn; }
@@ -145,7 +159,9 @@
   // Real event -> state wiring (same three emissions as Build 12).
   MyaEvents.on("mya.thinking", function () { clearTimeout(idleTimer); setCoreState("thinking"); });
   MyaEvents.on("mya.responding", function () { setCoreStateTemporary("speaking", 2200); });
-  MyaEvents.on("mya.idle", function () { clearTimeout(idleTimer); setCoreState("idle"); });
+  MyaEvents.on("mya.idle", function () { clearTimeout(idleTimer); setCoreState(restingState()); });
+  // A failed request flashes the Core's contained error state, then settles.
+  MyaEvents.on("mya.outcome", function (o) { if (o && o.ok === false) setCoreStateTemporary("error", 1800); });
 
   /* ---------------- Dev-only state preview row ----------------
      Not part of the product experience; only rendered when the page is
@@ -181,6 +197,8 @@
     setTemporary: setCoreStateTemporary,
     settle: settleCore,
     setSettle: setSettle,
+    restingState: restingState,
+    setResting: setResting,
     clearIdleTimer: clearIdleTimer,
     playIntro: playCoreIntro,
     renderDevStateRow: renderDevStateRow,

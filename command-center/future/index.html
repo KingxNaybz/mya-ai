@@ -19,8 +19,8 @@
      bump N in every tag below whenever any of them changes. The service
      worker (sw.js) is network-first for these, so a new N is picked up on
      the next online load. -->
-<link rel="stylesheet" href="styles.css?v=15">
-<link rel="stylesheet" href="core.css?v=15">
+<link rel="stylesheet" href="styles.css?v=16">
+<link rel="stylesheet" href="core.css?v=16">
 </head>
 <body>
 
@@ -45,6 +45,7 @@
     <symbol id="i-classic" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M9 4.5v15M9 10h11.5"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 21 19.5H3z"/><path d="M12 10v4.5M12 17h.01"/></symbol>
     <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3.5v4M15 3.5v4M7 7.5h10v3a5 5 0 0 1-10 0z"/><path d="M12 15.5v5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
   </defs>
 </svg>
 
@@ -71,8 +72,8 @@
       <span class="brand-word">MYA</span><span class="brand-sub">Command Center</span>
     </a>
     <div class="strip-items" role="status" aria-live="polite">
-      <a class="strip-item strip-mya" href="#/mya" title="Mya's current state">
-        <span class="state-dot" aria-hidden="true"></span><span data-core-state-label>Ready</span>
+      <a class="strip-item strip-mya" href="#/mya" title="What Mya is doing">
+        <span class="presence-dot" aria-hidden="true"></span><span data-presence-label>Ready</span>
       </a>
       <span class="strip-item" id="strip-data" title="Freshness of the data on screen">
         <span class="fresh-dot" aria-hidden="true"></span><span class="strip-text">Data</span>
@@ -107,7 +108,13 @@
       <a href="#/systems" data-route="systems"><svg class="icon"><use href="#i-systems"/></svg><span>Systems</span></a>
     </div>
     <div class="rail-foot">
-      <a class="rail-dock" href="#/mya" title="Talk to Mya" aria-label="Talk to Mya"><div class="core-slot core-slot-dock" id="core-slot-rail"></div></a>
+      <a class="rail-dock presence-dock" id="presence-dock" href="#/mya" title="Talk to Mya" aria-label="Talk to Mya">
+        <div class="core-slot core-slot-dock" id="core-slot-rail"></div>
+        <span class="presence-text">
+          <span class="presence-label"><span class="presence-dot" aria-hidden="true"></span><span data-presence-label>Ready</span></span>
+          <span class="presence-detail" data-presence-detail>Checking her runtime…</span>
+        </span>
+      </a>
       <a class="rail-link" href="/command-center/index.html" title="Open the classic dashboard"><svg class="icon"><use href="#i-classic"/></svg><span>Classic dashboard</span></a>
       <button type="button" class="rail-link" data-logout><svg class="icon"><use href="#i-logout"/></svg><span>Log out</span></button>
     </div>
@@ -420,6 +427,12 @@
     <button type="button" id="more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="more-sheet"><svg class="icon"><use href="#i-more"/></svg><span>More</span></button>
   </nav>
 
+  <a class="presence-toast" id="presence-toast" href="#/mya" role="status" aria-live="polite" hidden>
+    <span class="presence-dot" aria-hidden="true"></span>
+    <span class="toast-text"><strong data-toast-label>Mya</strong><span data-toast-detail></span></span>
+    <button type="button" class="toast-close" data-toast-close aria-label="Dismiss"><svg class="icon"><use href="#i-close"/></svg></button>
+  </a>
+
   <div class="sheet-backdrop" id="more-backdrop" hidden></div>
   <div class="sheet" id="more-sheet" role="dialog" aria-modal="true" aria-label="More modules" hidden>
     <div class="sheet-grip" aria-hidden="true"></div>
@@ -499,13 +512,14 @@
   </div>
 </div>
 
-<script src="lib.js?v=15"></script>
-<script src="mya-events.js?v=15"></script>
-<script src="core.js?v=15"></script>
-<script src="data.js?v=15"></script>
-<script src="chat.js?v=15"></script>
-<script src="views.js?v=15"></script>
-<script src="shell.js?v=15"></script>
-<script src="app.js?v=15"></script>
+<script src="lib.js?v=16"></script>
+<script src="mya-events.js?v=16"></script>
+<script src="core.js?v=16"></script>
+<script src="data.js?v=16"></script>
+<script src="chat.js?v=16"></script>
+<script src="presence.js?v=16"></script>
+<script src="views.js?v=16"></script>
+<script src="shell.js?v=16"></script>
+<script src="app.js?v=16"></script>
 </body>
 </html>

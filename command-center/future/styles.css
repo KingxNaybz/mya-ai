@@ -229,6 +229,59 @@ a.strip-item:hover { border-color: var(--line-strong); color: var(--text-hi); }
 [data-mya-state="error"] .state-dot { background: var(--red); box-shadow: 0 0 10px var(--red); }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
+/* ---------------- Mya presence ----------------
+   One color language for "what is Mya doing", driven by html[data-presence]
+   (MyaPresence, real signals only). Used by the rail dock, the strip, the
+   toast and the phone tab-bar Core's ring. */
+:root { --presence: var(--accent-soft); }
+[data-presence="listening"] { --presence: var(--core-listening); }
+[data-presence="thinking"]  { --presence: var(--accent); }
+[data-presence="speaking"]  { --presence: var(--violet); }
+[data-presence="completed"] { --presence: var(--core-completed); }
+[data-presence="approval"]  { --presence: var(--gold); }
+[data-presence="error"]     { --presence: var(--red); }
+[data-presence="blocked"]   { --presence: var(--offline); }
+.presence-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--presence); box-shadow: 0 0 10px var(--presence); transition: background var(--dur), box-shadow var(--dur); }
+[data-presence="blocked"] .presence-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--offline); }
+[data-presence="thinking"] .presence-dot { animation: pulse 0.9s ease-in-out infinite; }
+[data-presence="speaking"] .presence-dot { animation: pulse 0.5s ease-in-out infinite; }
+[data-presence="listening"] .presence-dot { animation: pulse 1.6s ease-in-out infinite; }
+
+.rail-dock.presence-dock {
+  display: flex; align-items: center; gap: 12px; justify-content: flex-start;
+  margin: 0 0 8px; padding: 8px 10px 8px 6px; border-radius: var(--radius);
+  border: 1px solid transparent; transition: background var(--dur), border-color var(--dur);
+}
+.rail-dock.presence-dock:hover { background: var(--surface); border-color: var(--line); }
+.presence-dock .core-slot-dock { --mf-core-size: 56px; width: 56px; height: 56px; flex: none; }
+.presence-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.presence-label { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--text-hi); }
+.presence-detail {
+  font-size: 11.5px; line-height: 1.35; color: var(--text-muted);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+[data-presence="error"] .presence-detail, [data-presence="approval"] .presence-detail { color: var(--text-mid); }
+
+.presence-toast {
+  position: fixed; z-index: 42; right: 20px; bottom: 20px;
+  display: flex; align-items: center; gap: 12px; max-width: min(380px, calc(100vw - 32px));
+  padding: 12px 10px 12px 16px; border-radius: var(--radius);
+  background: var(--surface-2); border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--presence);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45), 0 0 30px color-mix(in srgb, var(--presence) 18%, transparent);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  color: var(--text-hi); text-decoration: none;
+  opacity: 0; transform: translateY(10px) scale(0.98);
+  transition: opacity var(--dur), transform var(--dur) var(--ease);
+}
+.presence-toast.is-in { opacity: 1; transform: none; }
+.toast-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 12.5px; color: var(--text-mid); }
+.toast-text strong { font-size: 13px; color: var(--text-hi); }
+.toast-text span { overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.toast-close { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: none; border: 0; color: var(--text-muted); }
+.toast-close:hover { color: var(--text-hi); background: var(--surface-hover); }
+.toast-close .icon { width: 16px; height: 16px; }
+
 .icon-btn {
   display: inline-grid; place-items: center;
   width: 36px; height: 36px; border-radius: 10px;
@@ -578,6 +631,9 @@ a.metric:hover { border-color: var(--line-strong); transform: translateY(-1px); 
   .rail-nav .badge { position: absolute; top: 3px; right: 5px; min-width: 16px; height: 16px; font-size: 10px; padding: 0 4px; }
   .rail-dock { padding: 4px 0 8px; }
   .core-slot-dock { --mf-core-size: 52px; width: 52px; height: 52px; }
+  .rail-dock.presence-dock { justify-content: center; padding: 6px 0; }
+  .presence-dock .presence-text { display: none; }
+  .presence-dock .core-slot-dock { --mf-core-size: 52px; width: 52px; height: 52px; }
   .home-hero { grid-template-columns: minmax(0, 1fr) auto; }
   .hero-side { grid-column: 1 / -1; }
   .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -664,6 +720,13 @@ a.metric:hover { border-color: var(--line-strong); transform: translateY(-1px); 
     box-shadow: 0 0 0 5px rgba(5, 8, 14, 0.9), 0 0 26px rgba(74, 168, 255, 0.35);
   }
   .tab-core.active .core-slot-tab { border-color: var(--accent); }
+  .tab-core .core-slot-tab { transition: border-color var(--dur), box-shadow var(--dur); }
+  [data-presence]:not([data-presence="idle"]) .tab-core .core-slot-tab {
+    border-color: var(--presence);
+    box-shadow: 0 0 0 5px rgba(5, 8, 14, 0.9), 0 0 26px color-mix(in srgb, var(--presence) 55%, transparent);
+  }
+  [data-presence="thinking"] .tab-core .core-slot-tab { animation: presenceRing 1.2s ease-in-out infinite; }
+  .presence-toast { left: 12px; right: 12px; max-width: none; bottom: calc(var(--tab-h) + var(--safe-bottom) + 14px); }
 
   /* ---- More sheet ---- */
   .sheet-backdrop { display: block; position: fixed; inset: 0; z-index: 44; background: rgba(0, 0, 0, 0.5); opacity: 0; transition: opacity var(--dur); }
@@ -701,7 +764,11 @@ a.metric:hover { border-color: var(--line-strong); transform: translateY(-1px); 
   .strip { padding-top: env(safe-area-inset-top, 0px); height: calc(var(--strip-h) + env(safe-area-inset-top, 0px)); }
 }
 
+@keyframes presenceRing { 0%, 100% { box-shadow: 0 0 0 5px rgba(5, 8, 14, 0.9), 0 0 14px color-mix(in srgb, var(--presence) 35%, transparent); } 50% { box-shadow: 0 0 0 5px rgba(5, 8, 14, 0.9), 0 0 30px color-mix(in srgb, var(--presence) 70%, transparent); } }
+
 @media (prefers-reduced-motion: reduce) {
   .view, .state-dot, .fresh-dot, .skeleton, [data-mic-toggle] .icon, .icon-btn.spinning .icon { animation: none !important; }
   .sheet, .toast, .metric { transition: none !important; }
+  .presence-dot, .tab-core .core-slot-tab { animation: none !important; }
+  .presence-toast { transition: none !important; }
 }

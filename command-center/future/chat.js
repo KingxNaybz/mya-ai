@@ -76,6 +76,17 @@
       } else {
         setRuntimeLine("Executive Mya: Not connected. Can't check her runtime right now, so chat is off.");
       }
+      var homeInput = document.getElementById("home-ask-input");
+      var homeSend = document.querySelector("#home-ask-form [type=submit]");
+      if (homeInput) {
+        homeInput.disabled = !useHermes;
+        homeInput.placeholder = useHermes ? "Ask Mya anything…" : "Executive Mya is unavailable";
+      }
+      if (homeSend) homeSend.disabled = !useHermes;
+      MyaEvents.emit("mya.availability", {
+        availability: useHermes ? (hermesVerifiedAt ? "connected" : "configured")
+          : route === "not_configured" ? "unavailable" : route === "loading" ? "loading" : "unknown"
+      });
     }
     MyaEvents.on("data.changed", function (d) { if (d && d.source === "systems") applyProviderUI(); });
     applyProviderUI();
@@ -177,7 +188,8 @@
     // Only flips the Core to "listening" if it's currently idle -- never
     // steals the display from a thinking/speaking transition in flight.
     function showListeningIfIdle() {
-      if (MyaCore.getState() === "idle") MyaCore.setState("listening");
+      var st = MyaCore.getState();
+      if (st === "idle" || st === "awaiting-approval") MyaCore.setState("listening");
     }
 
     // Resolves only once the mic has actually confirmed it stopped
@@ -338,7 +350,7 @@
       }
       setMicUI();
       setVoiceStatus("");
-      if (MyaCore.getState() === "listening") MyaCore.setState("idle");
+      if (MyaCore.getState() === "listening") MyaCore.setState(MyaCore.restingState());
     }
 
     function toggleMicListening() {
@@ -368,7 +380,7 @@
     }
 
     MyaCore.setSettle(function () {
-      MyaCore.setState(micEnabled ? "listening" : "idle");
+      MyaCore.setState(micEnabled ? "listening" : MyaCore.restingState());
     });
 
     function stopSpeakingAnimation() {
@@ -447,6 +459,7 @@
             if (err === "executive_mya_unavailable" || result.status >= 500) { hermesFailed = true; hermesVerifiedAt = null; applyProviderUI(); }
             MyaEvents.emit("mya.idle", { dev: false });
             MyaCore.settle();
+            MyaEvents.emit("mya.outcome", { ok: false });
             return;
           }
           var reply = result.data.reply || "(no reply)";
@@ -455,6 +468,7 @@
           hermesVerifiedAt = Date.now();
           applyProviderUI();
           history.push({ role: "assistant", content: reply });
+          MyaEvents.emit("mya.outcome", { ok: true, reply: reply });
           MyaEvents.emit("mya.responding", { dev: false });
           var playing = playReplyAudio(result.data.audioBase64);
           if (!playing) restartMicForNextTurn();
@@ -465,6 +479,7 @@
           addLine("Couldn't reach Executive Mya — try again.", "mya error");
           MyaEvents.emit("mya.idle", { dev: false });
           MyaCore.settle();
+          MyaEvents.emit("mya.outcome", { ok: false });
         })
         .finally(function () {
           inFlight = false;

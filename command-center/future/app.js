@@ -103,6 +103,7 @@
     MyaCore.setState("idle");
     MyaShell.init(settings);
     MyaViews.init();
+    MyaPresence.init();
     MyaChat.init();
     initLogoutControls();
     MyaCore.playIntro();
