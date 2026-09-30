@@ -49,7 +49,12 @@ const TYPES = {
   ".svg": "image/svg+xml", ".png": "image/png", ".webp": "image/webp", ".ico": "image/x-icon",
 };
 
-const BANNER = `<div style="position:fixed;left:50%;top:6px;transform:translateX(-50%);z-index:9999;padding:4px 12px;border-radius:999px;background:#e6a23c;color:#1c1300;font:600 11px/1.6 system-ui,sans-serif;letter-spacing:.08em;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.4)">LOCAL PREVIEW · SYNTHETIC FIXTURE DATA — NOT REAL</div>`;
+// A thin full-width bar above the app (never on top of the status strip).
+// The small style block only shifts the sticky chrome down by the bar's
+// height; it's injected by this preview server and never ships.
+const BANNER_H = 22;
+const BANNER = `<style>body{padding-top:${BANNER_H}px}.strip{top:${BANNER_H}px!important}.rail{top:calc(var(--strip-h) + ${BANNER_H}px)!important;height:calc(100dvh - var(--strip-h) - ${BANNER_H}px)!important}</style>` +
+  `<div style="position:fixed;left:0;right:0;top:0;height:${BANNER_H}px;z-index:9999;display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(135deg,#e6a23c 0 14px,#d99530 14px 28px);color:#1c1300;font:700 10.5px/1 system-ui,sans-serif;letter-spacing:.12em;pointer-events:none;white-space:nowrap;overflow:hidden">LOCAL PREVIEW · SYNTHETIC FIXTURE DATA — NOT REAL</div>`;
 
 const ago = (mins) => new Date(Date.now() - mins * 60000).toISOString();
 let approvalsCalls = 0;
@@ -208,6 +213,9 @@ function serveStatic(res, url) {
     if (err) { res.writeHead(404); return res.end("Not found"); }
     const type = TYPES[path.extname(file)] || "application/octet-stream";
     let out = buf;
+    // Each page load replays the approvals Live -> Stale sequence from the
+    // start, so a reload never lands straight on "Not connected".
+    if (MODE === "fixtures" && type.startsWith("text/html")) approvalsCalls = 0;
     if (MODE === "fixtures" && type.startsWith("text/html")) out = Buffer.from(buf.toString("utf8").replace("<body>", "<body>" + BANNER));
     res.writeHead(200, { "Content-Type": type, "Cache-Control": "no-store" });
     res.end(out);
