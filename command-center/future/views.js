@@ -578,13 +578,29 @@
   var micState = { micEnabled: false, supported: true };
   var voiceState = { voiceEnabled: true };
 
+  // The browser's real microphone permission, when it will say.
+  var micPermission = "unknown";
+  var MIC_PERMISSION_LABELS = {
+    granted: "Allowed", denied: "Blocked (allow it in the address bar)", prompt: "Will ask the first time", unknown: "Unknown (this browser doesn't say)"
+  };
+  function watchMicPermission() {
+    if (!navigator.permissions || !navigator.permissions.query) return;
+    navigator.permissions.query({ name: "microphone" }).then(function (p) {
+      micPermission = p.state;
+      renderDevices();
+      p.onchange = function () { micPermission = p.state; renderDevices(); };
+    }).catch(function () { /* not queryable in this browser */ });
+  }
+
   function renderDevices() {
     var standalone = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
     var sw = "serviceWorker" in navigator ? (navigator.serviceWorker.controller ? "Active" : "Not active") : "Not supported";
     var rows = [
       ["Connection", navigator.onLine ? "Online" : "Offline"],
       ["Installed as app", standalone ? "Yes" : "No — use your browser's Install / Add to Home Screen"],
-      ["Voice input (wake word)", micState.supported ? (micState.micEnabled ? "On" : "Off") : "Not supported in this browser"],
+      ["Tap to talk", micState.supported ? "Available" : "Not supported in this browser (try Chrome or Edge)"],
+      ["Microphone permission", MIC_PERMISSION_LABELS[micPermission] || "Unknown"],
+      ["Wake word (hands-free)", micState.supported ? (micState.micEnabled ? "On, listening for “Mya”" : "Off") : "Not supported in this browser"],
       ["Mya's spoken replies", voiceState.voiceEnabled ? "On" : "Muted"],
       ["Offline app shell", sw],
       ["Screen", window.innerWidth + " × " + window.innerHeight]
@@ -723,6 +739,7 @@
     initApprovalActions();
     initProjects();
     initHindsight();
+    watchMicPermission();
     MyaEvents.on("data.changed", queueRender);
     MyaEvents.on("mya.availability", function (a) { myaAvailability = a.availability; queueRender(); });
     MyaEvents.on("mic.changed", function (s) { micState = s; renderDevices(); });
