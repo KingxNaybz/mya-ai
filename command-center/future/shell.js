@@ -159,9 +159,13 @@
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape") closeMore();
       var typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || "");
-      // ⌘K / Ctrl+K from anywhere, or "/" when not typing: talk to Mya.
+      // ⌘K / Ctrl+K from anywhere, or "/" when not typing: talk to Mya
+      // right where you are. Home focuses its quick-ask, a module opens its
+      // "Ask Mya about this" bar, and anything else goes to the conversation.
       if (((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") || (e.key === "/" && !typing)) {
         e.preventDefault();
+        if (currentRoute === "home" && !$("home-ask-input").disabled) { $("home-ask-input").focus(); return; }
+        if (MyaAskAbout.open(currentRoute)) return;
         if (currentRoute !== "mya") location.hash = "#/mya";
         setTimeout(function () { $("mf-command-input").focus(); }, 0);
       }

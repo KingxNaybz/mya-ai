@@ -143,6 +143,7 @@
 
     var focusLabel = null;
     bars[view] = {
+      open: function () { open(true); },
       btn: btn, input: input, send: send, chips: chips,
       askAbout: function (question, focus, label) {
         open(true);
@@ -158,7 +159,7 @@
     Object.keys(bars).forEach(function (v) {
       var b = bars[v];
       b.btn.disabled = !available;
-      b.btn.title = available ? "Ask Mya about this screen" : "Executive Mya is unavailable";
+      b.btn.title = available ? "Ask Mya about this screen (/ or Ctrl+K)" : "Executive Mya is unavailable";
       b.input.disabled = b.send.disabled = !available;
       var cs = b.chips.querySelectorAll("button");
       for (var i = 0; i < cs.length; i++) cs[i].disabled = !available;
@@ -188,5 +189,13 @@
     if (bars[view] && available) bars[view].askAbout(question, focus, label);
   }
 
-  global.MyaAskAbout = { init: init, askAbout: askAbout, isAvailable: function () { return available; } };
+  // Opens a screen's bar (keyboard shortcut). False if that screen has none
+  // or Executive Mya is unavailable, so the caller can fall back.
+  function openBar(view) {
+    if (!bars[view] || !available) return false;
+    bars[view].open();
+    return true;
+  }
+
+  global.MyaAskAbout = { init: init, askAbout: askAbout, open: openBar, isAvailable: function () { return available; } };
 })(window);

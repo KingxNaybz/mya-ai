@@ -361,7 +361,15 @@ a.strip-item:hover { border-color: var(--line-strong); color: var(--text-hi); }
 /* overflow-x: clip (not hidden) contains the Core's soft glow at narrow
    widths without creating a scroll container, so sticky elements still work. */
 .stage { min-width: 0; padding: 26px var(--gutter) 48px; outline: none; overflow-x: clip; }
-.view { max-width: 1440px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; animation: viewIn 260ms var(--ease); }
+.view { max-width: 1440px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+/* Blocks settle in one after another on arrival: quick, and never more
+   than ~150ms of total stagger. */
+.view > * { animation: viewIn 300ms var(--ease) both; }
+.view > *:nth-child(2) { animation-delay: 30ms; }
+.view > *:nth-child(3) { animation-delay: 60ms; }
+.view > *:nth-child(4) { animation-delay: 90ms; }
+.view > *:nth-child(5) { animation-delay: 120ms; }
+.view > *:nth-child(n+6) { animation-delay: 150ms; }
 @keyframes viewIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .view-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding: 4px 2px 2px; }
 .view-head h1 { font-size: 30px; margin-top: 4px; }
@@ -865,7 +873,7 @@ a.metric:hover { border-color: var(--line-strong); transform: translateY(-1px); 
 @keyframes presenceRing { 0%, 100% { box-shadow: 0 0 0 5px rgba(5, 8, 14, 0.9), 0 0 14px color-mix(in srgb, var(--presence) 35%, transparent); } 50% { box-shadow: 0 0 0 5px rgba(5, 8, 14, 0.9), 0 0 30px color-mix(in srgb, var(--presence) 70%, transparent); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .view, .state-dot, .fresh-dot, .skeleton, [data-mic-toggle] .icon, .icon-btn.spinning .icon { animation: none !important; }
+  .view, .view > *, .state-dot, .fresh-dot, .skeleton, [data-mic-toggle] .icon, .icon-btn.spinning .icon { animation: none !important; }
   .sheet, .toast, .metric { transition: none !important; }
   .presence-dot, .tab-core .core-slot-tab, .typing i { animation: none !important; }
   .ask-about { transition: none !important; }
