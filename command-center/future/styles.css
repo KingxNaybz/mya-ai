@@ -861,12 +861,13 @@ a.metric:hover { border-color: var(--line-strong); transform: translateY(-1px); 
   .presence-toast { left: 12px; right: 12px; max-width: none; bottom: calc(var(--tab-h) + var(--safe-bottom) + 14px); }
 
   /* ---- More sheet ---- */
-  .sheet-backdrop { display: block; position: fixed; inset: 0; z-index: 44; background: rgba(0, 0, 0, 0.5); opacity: 0; transition: opacity var(--dur); }
+  .sheet-backdrop { display: block; position: fixed; inset: 0; z-index: 44; background: rgba(2, 4, 8, 0.62); backdrop-filter: blur(3px); opacity: 0; transition: opacity var(--dur); }
   .sheet {
     display: block; position: fixed; left: 8px; right: 8px; z-index: 45;
     bottom: calc(var(--tab-h) + var(--safe-bottom) + 8px);
     padding: 10px 14px 14px; border-radius: 20px;
-    background: var(--surface-2); border: 1px solid var(--line-strong); box-shadow: 0 -20px 60px rgba(0, 0, 0, 0.5);
+    background: rgba(14, 21, 34, 0.97); border: 1px solid var(--line-strong); box-shadow: 0 -20px 60px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(24px) saturate(140%);
     transform: translateY(16px); opacity: 0; transition: transform var(--dur) var(--ease), opacity var(--dur);
   }
   .sheet-open .sheet { transform: none; opacity: 1; }
