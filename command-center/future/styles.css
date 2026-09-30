@@ -1248,3 +1248,11 @@ html:not(.has-level) .voice-capsule[data-phase="listening"] .vc-meter i { animat
 .vc-meter i:nth-child(5) { animation-delay: -0.85s; }
 @keyframes meterIdle { 0%, 100% { transform: scaleY(0.25); } 50% { transform: scaleY(0.8); } }
 @media (prefers-reduced-motion: reduce) { .vc-meter i { animation: none !important; } }
+
+/* The Core at small sizes (rail dock, tab button): strokes tuned for 320px
+   vanish at 56px, so thicken them here only. */
+.core-slot-dock .mya-core .orbit-path, .core-slot-tab .mya-core .orbit-path { stroke-width: 7; stroke-dasharray: 10 22; opacity: 0.85; }
+.core-slot-dock .mya-core .orbit-d, .core-slot-tab .mya-core .orbit-d { opacity: 0.45; }
+.core-slot-dock .mya-core .link, .core-slot-tab .mya-core .link { stroke-width: 5; }
+.core-slot-dock .mya-core .mesh-link, .core-slot-tab .mya-core .mesh-link { stroke-width: 2.4; }
+.core-slot-dock .mya-core .core-halo, .core-slot-tab .mya-core .core-halo { opacity: 0.32; }

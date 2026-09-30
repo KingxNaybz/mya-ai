@@ -12,23 +12,23 @@
  *
  * Bump CACHE_VERSION whenever SHELL_ASSETS changes.
  */
-var CACHE_VERSION = "mya-cc-shell-v35";
+var CACHE_VERSION = "mya-cc-shell-v36";
 var SHELL_ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=35",
-  "./core.css?v=35",
-  "./lib.js?v=35",
-  "./mya-events.js?v=35",
-  "./core.js?v=35",
-  "./data.js?v=35",
-  "./chat.js?v=35",
-  "./voice.js?v=35",
-  "./presence.js?v=35",
-  "./ask-about.js?v=35",
-  "./views.js?v=35",
-  "./shell.js?v=35",
-  "./app.js?v=35",
+  "./styles.css?v=36",
+  "./core.css?v=36",
+  "./lib.js?v=36",
+  "./mya-events.js?v=36",
+  "./core.js?v=36",
+  "./data.js?v=36",
+  "./chat.js?v=36",
+  "./voice.js?v=36",
+  "./presence.js?v=36",
+  "./ask-about.js?v=36",
+  "./views.js?v=36",
+  "./shell.js?v=36",
+  "./app.js?v=36",
   "./manifest.webmanifest",
   "./icons/icon.svg",
   "./icons/icon-192.png",
