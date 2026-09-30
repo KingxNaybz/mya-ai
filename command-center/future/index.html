@@ -19,8 +19,8 @@
      bump N in every tag below whenever any of them changes. The service
      worker (sw.js) is network-first for these, so a new N is picked up on
      the next online load. -->
-<link rel="stylesheet" href="styles.css?v=26">
-<link rel="stylesheet" href="core.css?v=26">
+<link rel="stylesheet" href="styles.css?v=27">
+<link rel="stylesheet" href="core.css?v=27">
 </head>
 <body>
 
@@ -99,10 +99,13 @@
     <div class="rail-nav" id="rail-nav">
       <a href="#/home" data-route="home"><svg class="icon"><use href="#i-home"/></svg><span>Home</span></a>
       <a href="#/mya" data-route="mya"><svg class="icon"><use href="#i-mya"/></svg><span>Mya</span></a>
-      <a href="#/projects" data-route="projects"><svg class="icon"><use href="#i-projects"/></svg><span>Projects</span></a>
+      <p class="rail-group" aria-hidden="true"><span>Work</span></p>
       <a href="#/approvals" data-route="approvals"><svg class="icon"><use href="#i-approvals"/></svg><span>Approvals</span><em class="badge" data-approvals-badge hidden></em></a>
+      <a href="#/projects" data-route="projects"><svg class="icon"><use href="#i-projects"/></svg><span>Projects</span></a>
+      <p class="rail-group" aria-hidden="true"><span>Knowledge</span></p>
       <a href="#/memory" data-route="memory"><svg class="icon"><use href="#i-memory"/></svg><span>Memory</span></a>
       <a href="#/files" data-route="files"><svg class="icon"><use href="#i-files"/></svg><span>Files</span></a>
+      <p class="rail-group" aria-hidden="true"><span>System</span></p>
       <a href="#/operations" data-route="operations"><svg class="icon"><use href="#i-ops"/></svg><span>Operations</span></a>
       <a href="#/devices" data-route="devices"><svg class="icon"><use href="#i-devices"/></svg><span>Devices</span></a>
       <a href="#/systems" data-route="systems"><svg class="icon"><use href="#i-systems"/></svg><span>Systems</span></a>
@@ -151,7 +154,7 @@
         </div>
       </div>
 
-      <div class="metric-row" id="home-metrics"></div>
+      <div class="metric-row cluster" id="home-metrics" aria-label="Today at a glance"></div>
 
       <div class="home-grid">
         <div class="card span-2">
@@ -574,16 +577,16 @@
   </div>
 </div>
 
-<script src="lib.js?v=26"></script>
-<script src="mya-events.js?v=26"></script>
-<script src="core.js?v=26"></script>
-<script src="data.js?v=26"></script>
-<script src="chat.js?v=26"></script>
-<script src="voice.js?v=26"></script>
-<script src="presence.js?v=26"></script>
-<script src="ask-about.js?v=26"></script>
-<script src="views.js?v=26"></script>
-<script src="shell.js?v=26"></script>
-<script src="app.js?v=26"></script>
+<script src="lib.js?v=27"></script>
+<script src="mya-events.js?v=27"></script>
+<script src="core.js?v=27"></script>
+<script src="data.js?v=27"></script>
+<script src="chat.js?v=27"></script>
+<script src="voice.js?v=27"></script>
+<script src="presence.js?v=27"></script>
+<script src="ask-about.js?v=27"></script>
+<script src="views.js?v=27"></script>
+<script src="shell.js?v=27"></script>
+<script src="app.js?v=27"></script>
 </body>
 </html>

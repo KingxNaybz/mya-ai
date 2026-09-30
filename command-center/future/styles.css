@@ -1120,3 +1120,51 @@ a.metric:hover { border-color: var(--line-strong); transform: translateY(-1px); 
   .core-slot-hero .mya-core::after, .core-slot-conv .mya-core::after { animation: none !important; }
   .voice-capsule, .core-slot-hero .mya-core-stage, .core-slot-conv .mya-core-stage { transition: none !important; }
 }
+
+/* ============================================================ PHASE 3 · EXECUTIVE POLISH */
+/* "Live" is the normal state, so it's quiet: a dot and a word. Stale and
+   Not connected keep their louder pills, since those need attention. */
+.fresh.live { border-color: transparent; background: none; padding: 0 2px; color: rgba(142, 232, 199, 0.78); font-weight: 500; letter-spacing: 0.02em; }
+.metric .fresh.live { padding: 0; }
+
+/* Rail groups: small section labels (thin rules on the icon-only rail). */
+.rail-group { margin: 14px 12px 4px; font-size: 10px; font-weight: 650; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-muted); opacity: 0.7; }
+@media (max-width: 1279px) {
+  .rail-group { margin: 10px 14px; height: 1px; background: var(--line); opacity: 1; }
+  .rail-group span { display: none; }
+}
+
+/* Cards: a hairline of light along the top edge. */
+.card::before, .metric-row.cluster::before {
+  content: ""; position: absolute; left: 18px; right: 18px; top: -1px; height: 1px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(143, 202, 255, 0.34), transparent);
+}
+.card.unconnected-card::before, .card.integration-card::before { opacity: 0.4; }
+
+/* Home: one instrument cluster instead of five separate KPI boxes. */
+.metric-row.cluster {
+  position: relative; gap: 0; padding: 4px 0; border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(21, 31, 48, 0.7), rgba(12, 18, 29, 0.62));
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 18px 40px rgba(0, 0, 0, 0.22);
+}
+.metric-row.cluster .metric { background: none; border: 0; border-radius: 0; padding: 14px 20px; position: relative; }
+.metric-row.cluster .metric + .metric::after { content: ""; position: absolute; left: 0; top: 18px; bottom: 18px; width: 1px; background: var(--line); }
+.metric-row.cluster a.metric:hover { transform: none; background: rgba(255, 255, 255, 0.025); }
+.metric-row.cluster .metric:first-child { border-radius: var(--radius-lg) 0 0 var(--radius-lg); }
+.metric-row.cluster .metric:last-child { border-radius: 0 var(--radius-lg) var(--radius-lg) 0; }
+.metric-row.cluster .metric.tone-gold { background: linear-gradient(180deg, rgba(217, 164, 65, 0.1), transparent 80%); }
+.metric-row.cluster .metric.tone-gold::before { content: ""; position: absolute; left: 20px; right: 20px; top: -5px; height: 2px; border-radius: 2px; background: var(--gold); box-shadow: 0 0 12px var(--gold); }
+.metric-row.cluster .metric-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); }
+.metric-row.cluster .metric-value { font-size: 36px; font-weight: 550; }
+
+/* Home hero side card sizes to its content. */
+.home-hero .hero-side { align-self: center; }
+.home-hero .hero-side .plain-list li { font-size: 13.5px; }
+
+@media (max-width: 899px) {
+  .metric-row.cluster { padding: 2px 0; margin: 0; border-radius: var(--radius-lg); }
+  .metric-row.cluster .metric { padding: 12px 16px; }
+  .metric-row.cluster .metric:first-child, .metric-row.cluster .metric:last-child { border-radius: 0; }
+  .metric-row.cluster .metric-value { font-size: 30px; }
+}
