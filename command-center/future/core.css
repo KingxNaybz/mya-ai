@@ -250,8 +250,12 @@
 .mya-core[data-state="delegating"] .link-5 { stroke: var(--core-delegating); opacity: 0.85; animation: linkFire calc(1s / var(--mf-anim-speed)) ease-in-out infinite; }
 
 /* -------- AWAITING-APPROVAL -- distinct, calm, steady -------- */
-.mya-core[data-state="awaiting-approval"] .core-center { fill: var(--core-approval); animation: coreBreathe calc(2.4s / var(--mf-anim-speed)) ease-in-out infinite; }
-.mya-core[data-state="awaiting-approval"] .core-halo { fill: var(--core-approval); }
+/* Command Center Phase 3: this is now a RESTING state (MyaPresence holds it
+   while real approvals are pending), so it keeps the idle Core's soft
+   gradient, warmed to gold, rather than a flat fill. */
+.mya-core[data-state="awaiting-approval"] .core-center { fill: url(#coreApprovalGrad); animation: coreBreathe calc(3.6s / var(--mf-anim-speed)) ease-in-out infinite; }
+.mya-core[data-state="awaiting-approval"] .core-halo { fill: var(--core-approval); opacity: 0.16; animation: haloBreathe calc(3.6s / var(--mf-anim-speed)) ease-in-out infinite; }
+.mya-core[data-state="awaiting-approval"] .orbit-path { stroke: var(--core-approval); opacity: 0.35; }
 
 /* -------- COMPLETED -- brief bright settle, then calm -------- */
 .mya-core[data-state="completed"] .core-center { fill: var(--core-completed); animation: coreResolve calc(0.9s / var(--mf-anim-speed)) ease-out 1; }

@@ -180,7 +180,8 @@
       var msg = input.value.trim();
       if (!msg) return;
       input.value = "";
-      MyaChat.send(msg);
+      // Her answer shows on Home itself (the last-exchange line), so no toast.
+      MyaChat.send(msg, { inline: true });
     });
     $("chat-suggestions").addEventListener("click", function (e) {
       var chip = e.target.closest("[data-suggest]");
