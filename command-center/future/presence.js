@@ -7,7 +7,11 @@
  *   - the status strip's Mya item;
  *   - html[data-presence], which colors the phone tab-bar Core's ring;
  *   - a toast when she starts, finishes or fails a request while you're
- *     away from the Mya view.
+ *     away from the Mya view;
+ *   - the Operations "Mya · this session" feed: what you asked, what she
+ *     answered or failed, and availability changes, as they happened in
+ *     this browser tab. It's kept in memory only and never presented as
+ *     her full history (that lives in Hermes).
  *
  * Every input is a real signal (see MyaLib.derivePresence). Dev-preview Core
  * states (?dev=1) are ignored here, so review-only states never read as
@@ -19,6 +23,9 @@
   var s = { core: "idle", availability: "loading", lastOutcome: null, approvals: null, micOn: false, pendingText: "" };
   var lastReply = "";
   var seen = {};
+  var feed = [];
+  var FEED_MAX = 30;
+  var lastAvailability = null;
   var inlineAsk = false;
   var shownKey = null, timedKey = null;
   var hideTimer = null, seenTimer = null;
@@ -45,6 +52,7 @@
     // The Core rests in its approval state only while approvals are really pending.
     MyaCore.setResting(p.state === "approval" ? "awaiting-approval" : "idle");
     renderToast(p);
+    renderFeed();
   }
 
   // Thinking shows for as long as she's working. A reply or a failure shows
@@ -91,6 +99,56 @@
     hideToast();
   }
 
+  function logActivity(kind, title, detail) {
+    feed.unshift({ kind: kind, title: title, detail: detail || "", at: Date.now() });
+    if (feed.length > FEED_MAX) feed.length = FEED_MAX;
+    renderFeed();
+  }
+
+  function renderFeed() {
+    var p = MyaLib.derivePresence(s);
+    var now = $("session-now");
+    if (now) {
+      now.setAttribute("data-state", p.state);
+      now.querySelector("[data-now-label]").textContent = p.label;
+      now.querySelector("[data-now-detail]").textContent = p.detail;
+    }
+    var list = $("session-feed");
+    if (!list) return;
+    list.textContent = "";
+    if (!feed.length) {
+      var empty = document.createElement("li");
+      empty.className = "feed-empty";
+      empty.textContent = "Nothing yet in this session. Ask Mya something and it will show here as it happens.";
+      list.appendChild(empty);
+      return;
+    }
+    feed.forEach(function (e) {
+      var li = document.createElement("li");
+      li.className = "feed-item";
+      li.setAttribute("data-kind", e.kind);
+      var dot = document.createElement("span");
+      dot.className = "feed-dot";
+      dot.setAttribute("aria-hidden", "true");
+      var body = document.createElement("div");
+      body.className = "feed-body";
+      var t = document.createElement("strong");
+      t.textContent = e.title;
+      body.appendChild(t);
+      if (e.detail) {
+        var d = document.createElement("span");
+        d.textContent = e.detail;
+        body.appendChild(d);
+      }
+      var time = document.createElement("time");
+      time.className = "time";
+      time.dateTime = new Date(e.at).toISOString();
+      time.textContent = MyaLib.formatRelative(e.at);
+      li.appendChild(dot); li.appendChild(body); li.appendChild(time);
+      list.appendChild(li);
+    });
+  }
+
   function init() {
     MyaEvents.on("core.state", function (e) {
       if (!e || e.dev) return;
@@ -98,15 +156,37 @@
       render();
     });
     MyaEvents.on("chat.line", function (line) {
-      if (line && line.role === "user") { s.pendingText = line.text; inlineAsk = Boolean(line.inline); }
+      if (line && line.role === "user") {
+        s.pendingText = line.text;
+        inlineAsk = Boolean(line.inline);
+        logActivity("asked", "You asked", MyaLib.snippet(line.text, 140));
+      }
     });
     MyaEvents.on("mya.outcome", function (o) {
       s.lastOutcome = { ok: Boolean(o && o.ok), at: Date.now() };
       s.pendingText = "";
       if (o && o.ok) lastReply = o.reply || "";
+      if (o && o.ok) logActivity("replied", "Mya replied", MyaLib.snippet(lastReply, 160));
+      else logActivity("failed", "Mya didn't answer", "Nothing was sent to another assistant.");
       render();
     });
-    MyaEvents.on("mya.availability", function (a) { s.availability = a.availability; render(); });
+    MyaEvents.on("mya.availability", function (a) {
+      s.availability = a.availability;
+      // Log real changes only: never the first real answer, and never the
+      // "loading"/"unknown" readings before Systems has answered at all.
+      var reachable = a.availability === "connected" || a.availability === "configured";
+      var was = lastAvailability;
+      var settled = a.availability !== "loading" && !(a.availability === "unknown" && was === null);
+      if (settled) {
+        if (was !== null && was !== reachable) {
+          logActivity(reachable ? "available" : "unavailable",
+            reachable ? "Executive Mya is available" : "Executive Mya became unavailable",
+            reachable ? "" : "Chat is off until she's reachable again.");
+        }
+        lastAvailability = reachable;
+      }
+      render();
+    });
     MyaEvents.on("mic.changed", function (m) { s.micOn = Boolean(m.micEnabled && m.supported); render(); });
     MyaEvents.on("data.changed", function (d) {
       if (d && d.source === "approvals") { s.approvals = approvalsCount(); render(); }
@@ -117,8 +197,9 @@
       toast.querySelector("[data-toast-close]").addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); dismissToast(); });
       toast.addEventListener("click", dismissToast);
     }
-    // "Replied" and "Didn't answer" expire on their own; re-derive periodically.
-    setInterval(render, 15000);
+    // "Replied" and "Didn't answer" expire on their own, and feed times age;
+    // re-derive periodically.
+    setInterval(function () { render(); renderFeed(); }, 15000);
     s.approvals = approvalsCount();
     render();
   }

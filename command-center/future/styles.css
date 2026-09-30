@@ -410,6 +410,33 @@ a.strip-item:hover { border-color: var(--line-strong); color: var(--text-hi); }
 .typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-soft); animation: pulse 1s ease-in-out infinite; }
 .typing i:nth-child(2) { animation-delay: 0.15s; }
 .typing i:nth-child(3) { animation-delay: 0.3s; }
+/* ---------------- Mya · this session (Operations) ---------------- */
+.session-now {
+  display: flex; align-items: center; gap: 14px; margin: 4px 0 14px; padding: 14px 16px;
+  border-radius: var(--radius); background: rgba(5, 8, 14, 0.45); border: 1px solid var(--line);
+  border-left: 3px solid var(--presence); color: inherit; text-decoration: none;
+  transition: border-color var(--dur), background var(--dur);
+}
+.session-now:hover { background: var(--surface-hover); }
+.session-now .presence-dot { width: 10px; height: 10px; }
+.session-now-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.session-now-text .eyebrow { margin: 0; }
+.session-now-text strong { font-size: 16px; color: var(--text-hi); }
+.session-now-text span:last-child { font-size: 13px; color: var(--text-mid); }
+.session-feed { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; max-height: 340px; overflow-y: auto; }
+.feed-item { position: relative; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 10px 2px 10px 0; }
+.feed-item:not(:last-child)::before {
+  content: ""; position: absolute; left: 6px; top: 24px; bottom: -6px; width: 1px; background: var(--line-strong);
+}
+.feed-dot { width: 9px; height: 9px; margin: 5px 0 0 2px; border-radius: 50%; background: var(--accent-soft); box-shadow: 0 0 8px var(--accent); }
+.feed-item[data-kind="asked"] .feed-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--accent-soft); }
+.feed-item[data-kind="replied"] .feed-dot, .feed-item[data-kind="available"] .feed-dot { background: var(--green); box-shadow: 0 0 8px rgba(58, 208, 160, 0.6); }
+.feed-item[data-kind="failed"] .feed-dot, .feed-item[data-kind="unavailable"] .feed-dot { background: var(--red); box-shadow: 0 0 8px rgba(229, 100, 90, 0.6); }
+.feed-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.feed-body strong { font-size: 13.5px; font-weight: 600; color: var(--text-hi); }
+.feed-body span { font-size: 13px; line-height: 1.45; color: var(--text-mid); overflow-wrap: anywhere; }
+.feed-item .time { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; padding-top: 2px; }
+.feed-empty { padding: 8px 0 12px; font-size: 13px; color: var(--text-muted); }
 .about-tag { margin-left: 8px; text-transform: none; letter-spacing: 0; font-weight: 600; }
 .view-sub { color: var(--text-mid); margin-top: 6px; max-width: 60ch; }
 

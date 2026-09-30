@@ -49,8 +49,9 @@
     if (!head) return;
     var ctx = MyaLib.buildScreenContext(view, {});
     var side = el("div", "view-head-side");
-    var fresh = head.querySelector(":scope > [data-fresh]");
-    if (fresh) side.appendChild(fresh);
+    // Everything after the title block (freshness or status tags) joins the
+    // Ask Mya button on the right.
+    Array.prototype.slice.call(head.children, 1).forEach(function (child) { side.appendChild(child); });
     var btn = el("button", "ask-btn");
     btn.type = "button";
     btn.setAttribute("aria-expanded", "false");
