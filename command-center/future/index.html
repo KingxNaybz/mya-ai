@@ -1,57 +1,416 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-mya-state="idle">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mya — Future Interface (Phase 1 Preview)</title>
-<!-- ?v=N cache-busts styles.css/app.js on every push. Vercel serves these
-     plain-named static files with no content-hash fingerprinting (there's
-     no build step to do that), so a browser that already cached them from
-     an earlier deployment at this same URL can otherwise keep serving
-     stale CSS/JS indefinitely even after a new, correct version is live --
-     bump N here every time either file changes. -->
-<link rel="stylesheet" href="styles.css?v=12">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Mya — Command Center</title>
+<meta name="description" content="Mya's executive command center for Elevate Construction.">
+<meta name="theme-color" content="#070b12">
+<meta name="color-scheme" content="dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mya">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<!-- ?v=N cache-busts every asset on each change: Vercel serves these
+     plain-named static files with no content hashing (no build step), so
+     bump N in every tag below whenever any of them changes. The service
+     worker (sw.js) is network-first for these, so a new N is picked up on
+     the next online load. -->
+<link rel="stylesheet" href="styles.css?v=13">
+<link rel="stylesheet" href="core.css?v=13">
 </head>
 <body>
 
-<!-- Phase 1 visual prototype, served from /command-center/future/ --
-     nested under the existing Command Center's own directory (moved here
-     from a sibling command-center-future/ after that path 404'd on Vercel
-     Preview; nesting inside the directory already proven to serve
-     correctly was the fastest way to unblock review). /command-center/
-     itself is unmodified and remains the production experience. This page
-     exists purely for visual-development safety and review. -->
-<!-- Visible build tag -- if this doesn't match the number in the most
-     recent commit message, the browser is showing a stale cached page,
-     not the current code. Bump alongside the ?v= numbers above. -->
-<div class="dev-badge">Phase 1 Preview — Build 12 — Not Production</div>
+<!-- Icon sprite (inline so icons work offline and inherit currentColor). -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/><path d="M10 19.5v-5h4v5"/></symbol>
+    <symbol id="i-mya" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><ellipse cx="12" cy="12" rx="9" ry="3.6" transform="rotate(-25 12 12)"/><ellipse cx="12" cy="12" rx="9" ry="3.6" transform="rotate(35 12 12)"/></symbol>
+    <symbol id="i-projects" viewBox="0 0 24 24"><path d="M3 20.5h18"/><path d="M5 20.5V9l6-4v15.5"/><path d="M11 9.5h8v11"/><path d="M7.5 11.5h1M7.5 14.5h1M14 13h2M14 16h2"/></symbol>
+    <symbol id="i-approvals" viewBox="0 0 24 24"><path d="M12 3.5 19 6v5.5c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6z"/><path d="m8.8 12.2 2.3 2.3 4.3-4.6"/></symbol>
+    <symbol id="i-memory" viewBox="0 0 24 24"><circle cx="5.5" cy="7" r="1.6"/><circle cx="17.5" cy="5.5" r="1.6"/><circle cx="12" cy="12.5" r="2"/><circle cx="6.5" cy="18" r="1.6"/><circle cx="18.5" cy="17" r="1.6"/><path d="M6.8 8.1 10.4 11M16.3 6.6 13.3 11M10.6 14 7.8 16.8M13.8 13.6l3.3 2.4"/></symbol>
+    <symbol id="i-files" viewBox="0 0 24 24"><path d="M6 3.5h8l4.5 4.5v12.5H6z"/><path d="M13.5 3.5V8.5h5"/><path d="M9 13h6M9 16.5h6"/></symbol>
+    <symbol id="i-ops" viewBox="0 0 24 24"><path d="M3 12.5h4l2.5-6 4.5 12 2.5-6H21"/></symbol>
+    <symbol id="i-devices" viewBox="0 0 24 24"><rect x="3" y="4.5" width="14" height="10" rx="1.5"/><path d="M7 19h6M10 14.5V19"/><rect x="17.5" y="9" width="4" height="10" rx="1"/></symbol>
+    <symbol id="i-systems" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/><path d="M7.5 7h.01M7.5 17h.01M11 7h5M11 17h5"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3"/></symbol>
+    <symbol id="i-speaker" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path class="wave" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12 20 4.5 13.5 20l-2.3-6.7z"/><path d="m11.2 13.3 3.5-3.5"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 4.5H6v15h8"/><path d="M10.5 12H20M16.5 8.5 20 12l-3.5 3.5"/></symbol>
+    <symbol id="i-classic" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M9 4.5v15M9 10h11.5"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 21 19.5H3z"/><path d="M12 10v4.5M12 17h.01"/></symbol>
+    <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3.5v4M15 3.5v4M7 7.5h10v3a5 5 0 0 1-10 0z"/><path d="M12 15.5v5"/></symbol>
+  </defs>
+</svg>
 
-<!-- Same behavior as the existing dashboard's login overlay: visible by
-     default, hidden only after a real session is confirmed against the
-     same /api/command-center-settings endpoint. No separate password, no
-     separate session, no client-side-only auth. -->
-<div class="mf-login-overlay" id="mf-login-overlay">
-  <form class="mf-login-box" id="mf-login-form">
-    <div class="mf-logo">MYA</div>
-    <p>Enter the dashboard password to continue.</p>
-    <input type="password" id="mf-login-password" autocomplete="current-password" required>
+<!-- Login overlay: visible by default, hidden only after a real session is
+     confirmed against /api/command-center-settings. Same endpoint, same
+     HttpOnly session cookie as the classic dashboard. -->
+<div class="login-overlay" id="mf-login-overlay">
+  <form class="login-box" id="mf-login-form">
+    <div class="login-mark" aria-hidden="true"><svg class="icon"><use href="#i-mya"/></svg></div>
+    <div class="login-word">MYA</div>
+    <p class="login-sub">Command Center</p>
+    <label class="sr-only" for="mf-login-password">Dashboard password</label>
+    <input type="password" id="mf-login-password" autocomplete="current-password" placeholder="Password" required>
     <button type="submit">Unlock</button>
-    <p class="mf-login-error" id="mf-login-error" hidden></p>
+    <p class="login-error" id="mf-login-error" role="alert" hidden></p>
   </form>
 </div>
 
-<div class="mf-shell" id="mf-shell" hidden>
+<div class="app" id="mf-shell" hidden>
 
-  <div class="mf-topbar">
-    <div class="mf-wordmark">MYA</div>
-    <div class="mf-topbar-right">
-      <a class="mf-back-link" href="/command-center/index.html">Open Command Center</a>
-      <button type="button" class="mf-logout-btn" id="mf-logout-btn">Log out</button>
+  <!-- ============ GLOBAL STATUS STRIP ============ -->
+  <header class="strip" role="banner">
+    <a class="strip-brand" href="#/home" aria-label="Mya Command Center home">
+      <span class="brand-word">MYA</span><span class="brand-sub">Command Center</span>
+    </a>
+    <div class="strip-items" role="status" aria-live="polite">
+      <a class="strip-item strip-mya" href="#/mya" title="Mya's current state">
+        <span class="state-dot" aria-hidden="true"></span><span data-core-state-label>Ready</span>
+      </a>
+      <span class="strip-item" id="strip-data" title="Freshness of the data on screen">
+        <span class="fresh-dot" aria-hidden="true"></span><span class="strip-text">Data</span>
+      </span>
+      <a class="strip-item" href="#/approvals" id="strip-approvals" title="Pending approvals">
+        <svg class="icon" aria-hidden="true"><use href="#i-approvals"/></svg><span class="strip-text">Approvals</span><span class="count" id="strip-approvals-count">–</span>
+      </a>
+      <span class="strip-item strip-hide-sm" id="strip-mic" title="Wake-word microphone">
+        <svg class="icon" aria-hidden="true"><use href="#i-mic"/></svg><span class="strip-text">Mic off</span>
+      </span>
+      <span class="strip-item strip-hide-sm" id="strip-sync" title="Last successful sync">Not synced</span>
     </div>
+    <div class="strip-right">
+      <span class="strip-clock strip-hide-sm" id="strip-clock"></span>
+      <button type="button" class="icon-btn" id="refresh-btn" title="Refresh all data" aria-label="Refresh all data">
+        <svg class="icon"><use href="#i-refresh"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ============ DESKTOP / TABLET RAIL ============ -->
+  <nav class="rail" aria-label="Command Center">
+    <div class="rail-nav" id="rail-nav">
+      <a href="#/home" data-route="home"><svg class="icon"><use href="#i-home"/></svg><span>Home</span></a>
+      <a href="#/mya" data-route="mya"><svg class="icon"><use href="#i-mya"/></svg><span>Mya</span></a>
+      <a href="#/projects" data-route="projects"><svg class="icon"><use href="#i-projects"/></svg><span>Projects</span></a>
+      <a href="#/approvals" data-route="approvals"><svg class="icon"><use href="#i-approvals"/></svg><span>Approvals</span><em class="badge" data-approvals-badge hidden></em></a>
+      <a href="#/memory" data-route="memory"><svg class="icon"><use href="#i-memory"/></svg><span>Memory</span></a>
+      <a href="#/files" data-route="files"><svg class="icon"><use href="#i-files"/></svg><span>Files</span></a>
+      <a href="#/operations" data-route="operations"><svg class="icon"><use href="#i-ops"/></svg><span>Operations</span></a>
+      <a href="#/devices" data-route="devices"><svg class="icon"><use href="#i-devices"/></svg><span>Devices</span></a>
+      <a href="#/systems" data-route="systems"><svg class="icon"><use href="#i-systems"/></svg><span>Systems</span></a>
+    </div>
+    <div class="rail-foot">
+      <a class="rail-dock" href="#/mya" title="Talk to Mya" aria-label="Talk to Mya"><div class="core-slot core-slot-dock" id="core-slot-rail"></div></a>
+      <a class="rail-link" href="/command-center/index.html" title="Open the classic dashboard"><svg class="icon"><use href="#i-classic"/></svg><span>Classic dashboard</span></a>
+      <button type="button" class="rail-link" data-logout><svg class="icon"><use href="#i-logout"/></svg><span>Log out</span></button>
+    </div>
+  </nav>
+
+  <!-- ============ VIEWS ============ -->
+  <main class="stage" id="stage" tabindex="-1">
+
+    <!-- HOME -->
+    <section class="view view-home" data-view="home" aria-labelledby="home-greeting">
+      <div class="home-hero">
+        <div class="hero-brief">
+          <p class="eyebrow" id="home-date"></p>
+          <h1 id="home-greeting">Hello.</h1>
+          <p class="briefing" id="home-briefing">Checking in with your business data…</p>
+          <p class="brief-fresh"><span data-fresh="data"></span></p>
+          <form class="quick-ask" id="home-ask-form" autocomplete="off">
+            <label class="sr-only" for="home-ask-input">Ask Mya</label>
+            <input type="text" id="home-ask-input" placeholder="Ask Mya anything…">
+            <button type="button" class="icon-btn" data-mic-toggle aria-pressed="false"><svg class="icon"><use href="#i-mic"/></svg></button>
+            <button type="submit" class="icon-btn primary" aria-label="Send to Mya"><svg class="icon"><use href="#i-send"/></svg></button>
+          </form>
+          <p class="voice-status" data-voice-status hidden></p>
+          <a class="last-exchange" id="home-last-exchange" href="#/mya" hidden></a>
+        </div>
+        <div class="hero-core">
+          <div class="core-slot core-slot-hero" id="core-slot-home"></div>
+          <div class="core-state"><span class="state-dot" aria-hidden="true"></span><span data-core-state-label>Ready</span></div>
+        </div>
+        <div class="hero-side card">
+          <div class="card-head"><h2>Mya's latest actions</h2><span data-fresh="data"></span></div>
+          <ul class="plain-list" id="home-actions"></ul>
+        </div>
+      </div>
+
+      <div class="metric-row" id="home-metrics"></div>
+
+      <div class="home-grid">
+        <div class="card span-2">
+          <div class="card-head"><h2>Needs your attention</h2><span data-fresh="approvals"></span></div>
+          <div id="home-attention"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Today</h2><span data-fresh="data"></span></div>
+          <div id="home-schedule"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Active projects</h2><span data-fresh="projects"></span></div>
+          <div id="home-projects"></div>
+        </div>
+        <div class="card span-2">
+          <div class="card-head"><h2>Recent activity</h2><span data-fresh="data"></span></div>
+          <div id="home-activity"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MYA: CHAT + VOICE -->
+    <section class="view view-mya" data-view="mya" aria-labelledby="mya-title" hidden>
+      <div class="mya-layout">
+        <aside class="mya-side">
+          <div class="core-slot core-slot-conv" id="core-slot-mya"></div>
+          <div class="core-state"><span class="state-dot" aria-hidden="true"></span><span data-core-state-label>Ready</span></div>
+          <h1 id="mya-title" class="mya-title">Mya</h1>
+          <p class="muted small center">The same Mya who answers your phone line and runs on your desktop — one brain, one memory.</p>
+          <div class="toggle-row">
+            <button type="button" class="pill-btn" data-mic-toggle aria-pressed="false"><svg class="icon"><use href="#i-mic"/></svg><span data-label>Mic off</span></button>
+            <button type="button" class="pill-btn" data-voice-toggle aria-pressed="true"><svg class="icon"><use href="#i-speaker"/></svg><span data-label>Voice on</span></button>
+          </div>
+          <p class="voice-status" data-voice-status hidden></p>
+          <p class="muted small center">Say “Mya” when the mic is on. She keeps listening for 45 seconds after each reply.</p>
+        </aside>
+        <div class="chat-panel card">
+          <div class="chat-empty" id="chat-empty">
+            <p class="eyebrow">Conversation</p>
+            <p>Ask about your day, a project, or a customer — or tell her to remember something.</p>
+            <div class="chip-row" id="chat-suggestions">
+              <button type="button" class="chip" data-suggest>What needs my attention today?</button>
+              <button type="button" class="chip" data-suggest>Summarize today's calls</button>
+              <button type="button" class="chip" data-suggest>Which projects need a next step?</button>
+              <button type="button" class="chip" data-suggest>What can you do?</button>
+            </div>
+          </div>
+          <div class="chat-log" id="mf-command-log" aria-live="polite"></div>
+          <form class="chat-input" id="mf-command-form" autocomplete="off">
+            <label class="sr-only" for="mf-command-input">Message Mya</label>
+            <input type="text" id="mf-command-input" placeholder="Message Mya…">
+            <button type="button" class="icon-btn" data-mic-toggle aria-pressed="false"><svg class="icon"><use href="#i-mic"/></svg></button>
+            <button type="button" class="icon-btn" data-voice-toggle aria-pressed="true"><svg class="icon"><use href="#i-speaker"/></svg></button>
+            <button type="submit" class="icon-btn primary" id="mf-command-send" aria-label="Send"><svg class="icon"><use href="#i-send"/></svg></button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- PROJECTS -->
+    <section class="view" data-view="projects" aria-labelledby="projects-title" hidden>
+      <header class="view-head">
+        <div><p class="eyebrow">Construction operations</p><h1 id="projects-title">Projects</h1>
+          <p class="view-sub">Active jobs from Mya's project records, with the next action on each.</p></div>
+        <span data-fresh="projects"></span>
+      </header>
+      <div class="grid-2-1">
+        <div class="card">
+          <div class="card-head"><h2>Active projects</h2><span class="muted small" id="projects-note"></span></div>
+          <div id="projects-list"></div>
+        </div>
+        <div class="stack">
+          <div class="card">
+            <div class="card-head"><h2>Contractors &amp; subs</h2><span data-fresh="contractors"></span></div>
+            <div id="contractors-list" class="scroll-y"></div>
+          </div>
+          <div class="card integration-card" data-integration="houzz"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- APPROVALS -->
+    <section class="view" data-view="approvals" aria-labelledby="approvals-title" hidden>
+      <header class="view-head">
+        <div><p class="eyebrow">Consequential-action review</p><h1 id="approvals-title">Approvals</h1>
+          <p class="view-sub">Anything waiting on your decision. Nothing here is acted on until you choose.</p></div>
+        <span data-fresh="approvals"></span>
+      </header>
+      <div class="grid-2-1">
+        <div class="card">
+          <div class="card-head"><h2>Pending</h2><span class="count-pill" id="approvals-count">–</span></div>
+          <div id="approvals-list"></div>
+        </div>
+        <div class="stack">
+          <div class="card">
+            <div class="card-head"><h2>Overdue</h2><span data-fresh="alerts"></span></div>
+            <div id="approvals-alerts"></div>
+          </div>
+          <div class="card note-card">
+            <h2>How approvals work today</h2>
+            <p class="muted small">Approve or decline marks the request resolved — the same behavior as the classic dashboard. Routing Mya's own consequential actions here for sign-off before they run is a later phase; it isn't enforced yet.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MEMORY / CONSTELLATION -->
+    <section class="view" data-view="memory" aria-labelledby="memory-title" hidden>
+      <header class="view-head">
+        <div><p class="eyebrow">Hindsight · Constellation</p><h1 id="memory-title">Memory</h1>
+          <p class="view-sub">What Mya remembers. Each star is one real remembered fact.</p></div>
+        <span data-fresh="memory"></span>
+      </header>
+      <div class="metric-row" id="memory-metrics"></div>
+      <div class="grid-2-1">
+        <div class="card constellation-card">
+          <div class="card-head"><h2>Constellation</h2><span class="muted small" id="constellation-caption"></span></div>
+          <div class="constellation-wrap">
+            <svg class="constellation" id="constellation" viewBox="0 0 640 360" role="img" aria-label="Remembered facts"></svg>
+            <p class="constellation-focus" id="constellation-focus" aria-live="polite"></p>
+          </div>
+        </div>
+        <div class="stack">
+          <div class="card">
+            <div class="card-head"><h2>People Mya knows</h2><span data-fresh="data"></span></div>
+            <div id="memory-people"></div>
+          </div>
+          <div class="card integration-card" data-integration="hindsight"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Remembered facts</h2><span data-fresh="memory"></span></div>
+        <div id="memory-facts" class="scroll-y tall"></div>
+      </div>
+    </section>
+
+    <!-- FILES -->
+    <section class="view" data-view="files" aria-labelledby="files-title" hidden>
+      <header class="view-head">
+        <div><p class="eyebrow">Generated work</p><h1 id="files-title">Files</h1>
+          <p class="view-sub">Reports, estimates, and documents Mya produces for you.</p></div>
+        <span class="fresh offline"><span class="fresh-dot"></span>Not connected</span>
+      </header>
+      <div class="card empty-state">
+        <svg class="icon icon-xl" aria-hidden="true"><use href="#i-files"/></svg>
+        <h2>No file store connected yet</h2>
+        <p class="muted">Mya doesn't have a place to save generated work in the Command Center yet, so there's nothing to list — this isn't an empty folder, it's an unconnected one. When the file store is connected, reports and documents she creates will appear here with where they came from.</p>
+      </div>
+    </section>
+
+    <!-- OPERATIONS -->
+    <section class="view" data-view="operations" aria-labelledby="ops-title" hidden>
+      <header class="view-head">
+        <div><p class="eyebrow">Activity · automations</p><h1 id="ops-title">Operations</h1>
+          <p class="view-sub">What Mya has done, what's happening, and what's overdue.</p></div>
+        <span data-fresh="data"></span>
+      </header>
+      <div class="metric-row" id="ops-metrics"></div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h2>Mya's recent actions</h2><span data-fresh="data"></span></div>
+          <ul class="plain-list" id="ops-actions"></ul>
+          <p class="muted small">Reversible actions from Mya's undo log. Say “undo that” to Mya to reverse the latest.</p>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Calls &amp; intakes</h2><span data-fresh="data"></span></div>
+          <div id="ops-activity"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Proactive alerts</h2><span data-fresh="alerts"></span></div>
+          <div id="ops-alerts"></div>
+        </div>
+        <div class="stack">
+          <div class="card unconnected-card">
+            <div class="card-head"><h2>Audit log</h2><span class="fresh offline"><span class="fresh-dot"></span>Not connected</span></div>
+            <p class="muted small">Every tool call Mya makes is already recorded server-side with its permission level. Showing it here needs a read endpoint that doesn't exist yet.</p>
+          </div>
+          <div class="card unconnected-card">
+            <div class="card-head"><h2>Automations</h2><span class="fresh offline"><span class="fresh-dot"></span>Not connected</span></div>
+            <p class="muted small">Scheduled and background work runs in the Hermes runtime, which isn't connected to the Command Center yet.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DEVICES -->
+    <section class="view" data-view="devices" aria-labelledby="devices-title" hidden>
+      <header class="view-head">
+        <div><p class="eyebrow">Computer control</p><h1 id="devices-title">Devices</h1>
+          <p class="view-sub">Where Mya runs, and what she's allowed to touch.</p></div>
+      </header>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h2>This device</h2><span class="fresh live"><span class="fresh-dot"></span>Live</span></div>
+          <dl class="kv" id="device-this"></dl>
+        </div>
+        <div class="card integration-card" data-integration="windows"></div>
+        <div class="card unconnected-card span-2">
+          <div class="card-head"><h2>Computer access &amp; pause</h2><span class="fresh offline"><span class="fresh-dot"></span>Not connected</span></div>
+          <p class="muted small">A switch to allow or block computer control, and a Pause Mya kill switch that both the brain and the Windows bridge obey, arrive with the approvals and devices phases. They are not shown as controls here because they wouldn't do anything yet.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SYSTEMS -->
+    <section class="view" data-view="systems" aria-labelledby="systems-title" hidden>
+      <header class="view-head">
+        <div><p class="eyebrow">Integrations · health</p><h1 id="systems-title">Systems</h1>
+          <p class="view-sub">What the Command Center can see, how fresh it is, and what isn't connected yet.</p></div>
+      </header>
+      <div class="card">
+        <div class="card-head"><h2>Command Center data sources</h2><span class="muted small">Refreshes every minute while open</span></div>
+        <div class="table-wrap"><table class="table" id="sources-table">
+          <thead><tr><th>Source</th><th>Status</th><th>Last success</th><th class="hide-sm">Endpoint</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h2>Configured services</h2><span data-fresh="data"></span></div>
+          <div id="services-list"></div>
+          <p class="muted small">“Configured” means the server has credentials for it. It is not a live reachability check.</p>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Mya integrations</h2><span class="muted small">External systems</span></div>
+          <div id="integrations-list"></div>
+        </div>
+      </div>
+      <div class="card" id="dev-card" hidden>
+        <div class="card-head"><h2>Mya Core states</h2><span class="fresh stale"><span class="fresh-dot"></span>Dev preview</span></div>
+        <p class="muted small">Developer preview only — not real activity. Visible because the page was opened with <code>?dev=1</code>.</p>
+        <div class="chip-row" id="mf-dev-states-row"></div>
+        <button type="button" class="chip" id="mf-replay-intro-btn">↻ Replay core intro</button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============ MOBILE TAB BAR ============ -->
+  <nav class="tabbar" aria-label="Command Center">
+    <a href="#/home" data-route="home"><svg class="icon"><use href="#i-home"/></svg><span>Home</span></a>
+    <a href="#/approvals" data-route="approvals"><svg class="icon"><use href="#i-approvals"/></svg><span>Approvals</span><em class="badge" data-approvals-badge hidden></em></a>
+    <a href="#/mya" data-route="mya" class="tab-core" aria-label="Mya"><div class="core-slot core-slot-tab" id="core-slot-tab"></div></a>
+    <a href="#/projects" data-route="projects"><svg class="icon"><use href="#i-projects"/></svg><span>Projects</span></a>
+    <button type="button" id="more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="more-sheet"><svg class="icon"><use href="#i-more"/></svg><span>More</span></button>
+  </nav>
+
+  <div class="sheet-backdrop" id="more-backdrop" hidden></div>
+  <div class="sheet" id="more-sheet" role="dialog" aria-modal="true" aria-label="More modules" hidden>
+    <div class="sheet-grip" aria-hidden="true"></div>
+    <div class="sheet-grid">
+      <a href="#/memory" data-route="memory"><svg class="icon"><use href="#i-memory"/></svg><span>Memory</span></a>
+      <a href="#/files" data-route="files"><svg class="icon"><use href="#i-files"/></svg><span>Files</span></a>
+      <a href="#/operations" data-route="operations"><svg class="icon"><use href="#i-ops"/></svg><span>Operations</span></a>
+      <a href="#/devices" data-route="devices"><svg class="icon"><use href="#i-devices"/></svg><span>Devices</span></a>
+      <a href="#/systems" data-route="systems"><svg class="icon"><use href="#i-systems"/></svg><span>Systems</span></a>
+      <a href="/command-center/index.html"><svg class="icon"><use href="#i-classic"/></svg><span>Classic</span></a>
+    </div>
+    <button type="button" class="sheet-logout" data-logout><svg class="icon"><use href="#i-logout"/></svg>Log out</button>
   </div>
 
-  <p class="mf-greeting" id="mf-greeting">Hello.</p>
+</div>
 
+<!-- The ONE Mya Core. MyaShell moves this node between the core slots above
+     (hero, conversation, rail dock, tab bar) -- never cloned. Markup is the
+     Build 12 Core unchanged. -->
+<div id="core-home" hidden>
   <div class="mya-core-perspective">
   <div class="mya-core-stage" id="mya-core-stage">
     <div class="mya-core" id="mya-core" data-state="idle" role="img" aria-label="Mya's core, currently idle">
@@ -65,25 +424,9 @@
             <stop offset="100%" stop-color="var(--core-center-lo)" stop-opacity="0"/>
           </radialGradient>
         </defs>
-
-        <!-- Large tilted "Saturn ring" style orbits, crossing at different
-             angles -- the outer structure from the reference image. -->
-        <!-- Each tilted ring's static rotation lives on its own wrapping <g>
-             (an SVG presentation attribute), while the CSS spin animation
-             (see .orbit-a etc. in styles.css) applies only to the <ellipse>
-             itself. Putting both an SVG transform attribute AND a CSS
-             transform animation on the SAME element makes the browser
-             rotate around the wrong origin (the two systems fight over
-             transform-box), which sent the ring flying off-stage -- this
-             split avoids that entirely. -->
         <g class="orbit-group">
           <g transform="rotate(12 240 240)">
             <ellipse class="orbit-path orbit-a" cx="240" cy="240" rx="172" ry="60"/>
-            <!-- Traveler: a node that visibly moves ALONG this ring via
-                 CSS offset-path, rather than relying on the ring's own
-                 rotation to read as motion (an unmarked ellipse looks
-                 nearly identical at most rotation angles, which is why the
-                 core looked static before -- a moving dot is unambiguous). -->
             <circle class="orbit-traveler traveler-a" r="5.5"
               style="offset-path: path('M 68,240 A 172,60 0 1,0 412,240 A 172,60 0 1,0 68,240 Z');"/>
           </g>
@@ -101,19 +444,7 @@
           <circle class="orbit-traveler traveler-d" r="4"
             style="offset-path: path('M 92,240 A 148,148 0 1,0 388,240 A 148,148 0 1,0 92,240 Z');"/>
         </g>
-
-        <!-- Dense wireframe sphere -- procedurally generated at load time by
-             app.js (see generateCoreMesh()), not hand-authored. This is the
-             decorative "many small nodes forming a sphere silhouette" layer
-             from the reference. -->
         <g class="mesh-group" id="mesh-group"></g>
-
-        <!-- A small set of named, individually-addressable links/nodes --
-             kept separate from the generated mesh above because several
-             Mya Core states (tool-use, delegating, alert) target ONE
-             specific path by name (see styles.css). The dense mesh reacts
-             to state only as a group (color/speed), these six react
-             individually. -->
         <g class="neural-links">
           <line class="link link-1" x1="240" y1="240" x2="118" y2="148"/>
           <line class="link link-2" x1="240" y1="240" x2="362" y2="158"/>
@@ -122,7 +453,6 @@
           <line class="link link-5" x1="240" y1="240" x2="240" y2="88"/>
           <line class="link link-6" x1="240" y1="240" x2="240" y2="392"/>
         </g>
-
         <g class="neural-points">
           <circle class="node node-1" cx="118" cy="148" r="4"/>
           <circle class="node node-2" cx="362" cy="158" r="4"/>
@@ -131,7 +461,6 @@
           <circle class="node node-5" cx="240" cy="88" r="4"/>
           <circle class="node node-6" cx="240" cy="392" r="4"/>
         </g>
-
         <circle class="core-halo" cx="240" cy="240" r="110"/>
         <circle class="core-center" cx="240" cy="240" r="52" fill="url(#coreCenterGrad)"/>
         <text class="core-wordmark" x="240" y="246" text-anchor="middle">MYA</text>
@@ -139,104 +468,15 @@
     </div>
   </div>
   </div>
-
-  <div class="mf-state-label" id="mf-state-label">idle</div>
-
-  <div class="mf-command-panel">
-    <form class="mf-command-bar" id="mf-command-form">
-      <input type="text" id="mf-command-input" placeholder="Type a message to Mya…" autocomplete="off">
-      <button type="button" class="mf-voice-toggle" id="mf-voice-toggle" title="Mya speaks her replies out loud">🔊</button>
-      <button type="button" class="mf-mic-toggle" id="mf-mic-toggle" title="Always listen for &quot;Mya&quot;">🎙</button>
-      <button type="submit" id="mf-command-send">➤</button>
-    </form>
-    <div class="mf-voice-status" id="mf-voice-status" hidden></div>
-    <div class="mf-command-log" id="mf-command-log"></div>
-  </div>
-
-  <!-- ============ WORKSPACE (Milestone 4-5) ============
-       Information "existing around Mya" rather than a traditional fixed
-       dashboard grid -- each panel below is a self-contained
-       .workspace-panel with a stable data-panel-id, exactly the
-       "isolated wrapper + positioning abstraction" the plan called for so
-       move/resize/dock/collapse can be added later without rebuilding
-       these panels' internals. Every panel below fetches from the exact
-       same existing API endpoint the current Command Center uses -- no
-       backend change, no new endpoint, same data. Read-only in this pass
-       (approve/decline, add contractor, forget a memory, etc. still work
-       today through natural-language chat below; wiring those same
-       actions as direct panel controls is a further, separate step). -->
-  <div class="mf-workspace" id="mf-workspace">
-
-    <div class="workspace-kpi-row" id="wp-kpis"></div>
-
-    <div class="workspace-grid">
-      <div class="workspace-panel" data-panel-id="schedule">
-        <div class="wp-header"><h3>Today's Schedule</h3></div>
-        <div class="wp-body" id="wp-schedule"></div>
-      </div>
-
-      <div class="workspace-panel" data-panel-id="activity">
-        <div class="wp-header"><h3>Recent Activity</h3></div>
-        <div class="wp-body" id="wp-activity"></div>
-      </div>
-
-      <div class="workspace-panel" data-panel-id="approvals">
-        <div class="wp-header"><h3>Needs Your Attention</h3><span class="wp-count" id="wp-approvals-count">0</span></div>
-        <div class="wp-body" id="wp-approvals"></div>
-      </div>
-
-      <div class="workspace-panel" data-panel-id="leads">
-        <div class="wp-header"><h3>New Leads</h3></div>
-        <div class="wp-body" id="wp-leads"></div>
-      </div>
-
-      <div class="workspace-panel" data-panel-id="projects">
-        <div class="wp-header"><h3>Projects Needing Attention</h3></div>
-        <div class="wp-body" id="wp-projects"></div>
-      </div>
-
-      <div class="workspace-panel" data-panel-id="memory-insights">
-        <div class="wp-header"><h3>Memory Insights</h3></div>
-        <div class="wp-body" id="wp-memory-insights"></div>
-      </div>
-
-      <div class="workspace-panel" data-panel-id="working-now">
-        <div class="wp-header"><h3>Mya Working Now</h3></div>
-        <ul class="wp-body wp-list-plain" id="wp-working-now"></ul>
-      </div>
-
-      <div class="workspace-panel" data-panel-id="contractors">
-        <div class="wp-header"><h3>Contractors &amp; Sub-Contractors</h3></div>
-        <div class="wp-body wp-scroll" id="wp-contractors"></div>
-      </div>
-
-      <div class="workspace-panel" data-panel-id="memory-facts">
-        <div class="wp-header"><h3>Mya's Memory</h3></div>
-        <div class="wp-body wp-scroll" id="wp-memory-facts"></div>
-      </div>
-
-      <div class="workspace-panel" data-panel-id="services">
-        <div class="wp-header"><h3>Connected Services</h3></div>
-        <div class="wp-body" id="wp-services"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- DEV ONLY: manual preview of the eight states that have no real
-       signal wired up yet in this Phase 1 shell (listening depends on the
-       voice pipeline, ported in a later milestone; the rest depend on
-       backend signal work not yet exposed to the client). Nothing here
-       represents real Mya activity -- see app.js for how these are kept
-       distinct from the real event emissions above. -->
-  <div class="mf-dev-states" data-dev="true">
-    <div class="mf-dev-states-label">Dev preview only — not real activity</div>
-    <div class="mf-dev-states-row" id="mf-dev-states-row"></div>
-    <button type="button" class="mf-replay-intro-btn" id="mf-replay-intro-btn">↻ Replay core intro animation</button>
-  </div>
-
 </div>
 
-<script src="mya-events.js?v=12"></script>
-<script src="app.js?v=12"></script>
+<script src="lib.js?v=13"></script>
+<script src="mya-events.js?v=13"></script>
+<script src="core.js?v=13"></script>
+<script src="data.js?v=13"></script>
+<script src="chat.js?v=13"></script>
+<script src="views.js?v=13"></script>
+<script src="shell.js?v=13"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>

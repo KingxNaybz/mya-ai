@@ -1,0 +1,189 @@
+/**
+ * Mya Core — mesh generation, entrance animation, and the state controller.
+ *
+ * Moved out of app.js (Build 12) unchanged in behavior so the Command
+ * Center shell can host the Core in different places (the Home hero, the
+ * Mya conversation view, the desktop rail dock, the mobile tab-bar button)
+ * without touching its internals. There is exactly ONE Core element in the
+ * page; MyaShell moves it between slots rather than cloning it, so every
+ * state change is always reflected wherever she currently is.
+ *
+ * REAL vs DEV states: idle, listening, thinking and speaking are driven by
+ * real signals (see chat.js). Every other state (memory-retrieval,
+ * tool-use, working, delegating, awaiting-approval, completed, alert,
+ * error) has no backend signal yet and is only reachable from the dev-only
+ * preview row (Systems view, ?dev=1), which marks itself as dev.
+ */
+(function (global) {
+  "use strict";
+
+  /* ---------------- Wireframe sphere mesh (decorative, generated once) ----------------
+     Procedurally distributes points over a sphere (a standard Fibonacci
+     sphere) and projects them to 2D. Depth only ever affects size/opacity;
+     plain SVG circles and lines, generated once at load and animated purely
+     with CSS (see .mesh-group in core.css). Decorative chrome, not data. */
+  function generateCoreMesh() {
+    var svgNS = "http://www.w3.org/2000/svg";
+    var group = document.getElementById("mesh-group");
+    if (!group) return;
+    var cx = 240, cy = 240, R = 150;
+    var count = 72;
+    var golden = Math.PI * (3 - Math.sqrt(5));
+    var points = [];
+
+    for (var i = 0; i < count; i++) {
+      var y = 1 - (i / (count - 1)) * 2; // top (-1) to bottom (1)
+      var radiusAtY = Math.sqrt(Math.max(0, 1 - y * y));
+      var theta = golden * i;
+      var x = Math.cos(theta) * radiusAtY;
+      var z = Math.sin(theta) * radiusAtY;
+      points.push({ x: x, y: y, z: z });
+    }
+
+    // Links first (drawn under the nodes): a light spiral thread (i -> i+1)
+    // plus occasional short cross-links, so it reads as a connected mesh.
+    points.forEach(function (p, i) {
+      var next = points[i + 1];
+      if (next) group.appendChild(makeMeshLine(p, next, cx, cy, R));
+      var cross = points[i + 9];
+      if (cross) {
+        var dx = (p.x - cross.x) * R, dy = (p.y - cross.y) * R;
+        if (Math.sqrt(dx * dx + dy * dy) < 90) group.appendChild(makeMeshLine(p, cross, cx, cy, R));
+      }
+    });
+
+    points.forEach(function (p) {
+      var depth = (p.z + 1) / 2; // 0 = far side, 1 = near side
+      var px = cx + p.x * R;
+      var py = cy + p.y * R * 0.92;
+      var circle = document.createElementNS(svgNS, "circle");
+      circle.setAttribute("cx", px.toFixed(1));
+      circle.setAttribute("cy", py.toFixed(1));
+      circle.setAttribute("r", (0.8 + depth * 1.4).toFixed(2));
+      circle.setAttribute("class", "mesh-node");
+      circle.style.opacity = (0.15 + depth * 0.55).toFixed(2);
+      // Randomized negative delay so the particles' twinkle doesn't pulse
+      // in lockstep.
+      circle.style.animationDelay = (-Math.random() * 3.4).toFixed(2) + "s";
+      group.appendChild(circle);
+    });
+
+    function makeMeshLine(a, b, cx, cy, R) {
+      var line = document.createElementNS(svgNS, "line");
+      line.setAttribute("x1", (cx + a.x * R).toFixed(1));
+      line.setAttribute("y1", (cy + a.y * R * 0.92).toFixed(1));
+      line.setAttribute("x2", (cx + b.x * R).toFixed(1));
+      line.setAttribute("y2", (cy + b.y * R * 0.92).toFixed(1));
+      line.setAttribute("class", "mesh-link");
+      line.style.animationDelay = (-Math.random() * 4.2).toFixed(2) + "s";
+      return line;
+    }
+  }
+  generateCoreMesh();
+
+  /* ---------------- Entrance animation ---------------- */
+  function playCoreIntro() {
+    var stage = document.getElementById("mya-core-stage");
+    stage.classList.remove("intro-play");
+    void stage.offsetWidth; // force reflow so re-adding the class restarts the animation
+    stage.classList.add("intro-play");
+  }
+
+  /* ---------------- Mya Core state controller ---------------- */
+  var coreEl = document.getElementById("mya-core");
+  var idleTimer = null;
+
+  // Human-facing wording for each state, shown in the status strip and
+  // under the Core. Keys are the Core's own data-state values.
+  var STATE_LABELS = {
+    "idle": "Ready",
+    "listening": "Listening",
+    "thinking": "Thinking",
+    "speaking": "Speaking",
+    "memory-retrieval": "Recalling",
+    "tool-use": "Using a tool",
+    "working": "Working",
+    "delegating": "Delegating",
+    "awaiting-approval": "Awaiting approval",
+    "completed": "Done",
+    "alert": "Alert",
+    "error": "Error"
+  };
+
+  function setCoreState(stateName, opts) {
+    opts = opts || {};
+    coreEl.setAttribute("data-state", stateName);
+    document.documentElement.setAttribute("data-mya-state", stateName);
+    var label = (STATE_LABELS[stateName] || stateName) + (opts.dev ? " (dev preview)" : "");
+    var labelEls = document.querySelectorAll("[data-core-state-label]");
+    for (var i = 0; i < labelEls.length; i++) labelEls[i].textContent = label;
+    coreEl.setAttribute("aria-label", "Mya's core, currently " + label.toLowerCase());
+  }
+
+  function getCoreState() {
+    return coreEl.getAttribute("data-state");
+  }
+
+  // Where a temporary state settles back to once its hold period ends.
+  // Plain idle by default; chat.js points it at the mic state once the voice
+  // pipeline initializes, so "she stopped talking" settles to "listening"
+  // instead of "idle" whenever the mic is on.
+  var settleFn = function () { setCoreState("idle"); };
+
+  function settleCore() { settleFn(); }
+  function setSettle(fn) { settleFn = fn; }
+
+  // Real transitions auto-return after a short settle period.
+  function setCoreStateTemporary(stateName, holdMs) {
+    clearTimeout(idleTimer);
+    setCoreState(stateName);
+    idleTimer = setTimeout(function () { settleCore(); }, holdMs);
+  }
+
+  function clearIdleTimer() { clearTimeout(idleTimer); }
+
+  // Real event -> state wiring (same three emissions as Build 12).
+  MyaEvents.on("mya.thinking", function () { clearTimeout(idleTimer); setCoreState("thinking"); });
+  MyaEvents.on("mya.responding", function () { setCoreStateTemporary("speaking", 2200); });
+  MyaEvents.on("mya.idle", function () { clearTimeout(idleTimer); setCoreState("idle"); });
+
+  /* ---------------- Dev-only state preview row ----------------
+     Not part of the product experience; only rendered when the page is
+     opened with ?dev=1 (see the Systems view). Every click emits with
+     dev: true and never touches the network. */
+  var DEV_PREVIEW_STATES = [
+    "idle", "listening", "thinking", "speaking", "memory-retrieval",
+    "tool-use", "working", "delegating", "awaiting-approval",
+    "completed", "alert", "error"
+  ];
+
+  function renderDevStateRow(row) {
+    if (!row) return;
+    row.textContent = "";
+    DEV_PREVIEW_STATES.forEach(function (stateName) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "chip";
+      btn.textContent = stateName;
+      btn.addEventListener("click", function () {
+        clearTimeout(idleTimer);
+        setCoreState(stateName, { dev: true });
+        MyaEvents.emit("dev.state-preview", { state: stateName, dev: true });
+      });
+      row.appendChild(btn);
+    });
+  }
+
+  global.MyaCore = {
+    el: coreEl,
+    setState: setCoreState,
+    getState: getCoreState,
+    setTemporary: setCoreStateTemporary,
+    settle: settleCore,
+    setSettle: setSettle,
+    clearIdleTimer: clearIdleTimer,
+    playIntro: playCoreIntro,
+    renderDevStateRow: renderDevStateRow,
+    STATE_LABELS: STATE_LABELS
+  };
+})(window);

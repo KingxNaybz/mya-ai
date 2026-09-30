@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="75%">
+      <stop offset="0%" stop-color="#12233d"/>
+      <stop offset="100%" stop-color="#05080e"/>
+    </radialGradient>
+    <radialGradient id="orb" cx="44%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="35%" stop-color="#8fcaff"/>
+      <stop offset="75%" stop-color="#4aa8ff"/>
+      <stop offset="100%" stop-color="#4aa8ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#4aa8ff" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#4aa8ff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="190" fill="url(#glow)"/>
+  <g fill="none" stroke="#8fcaff" stroke-width="7" stroke-linecap="round" opacity="0.55">
+    <ellipse cx="256" cy="256" rx="176" ry="62" transform="rotate(-24 256 256)"/>
+    <ellipse cx="256" cy="256" rx="176" ry="62" transform="rotate(34 256 256)"/>
+  </g>
+  <circle cx="98" cy="196" r="10" fill="#8fcaff"/>
+  <circle cx="404" cy="330" r="8" fill="#9b7bff"/>
+  <circle cx="256" cy="256" r="86" fill="url(#orb)"/>
+</svg>

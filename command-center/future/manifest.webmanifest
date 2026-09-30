@@ -1,0 +1,24 @@
+{
+  "name": "Mya Command Center",
+  "short_name": "Mya",
+  "description": "Mya's executive command center for Elevate Construction.",
+  "id": "/command-center/future/",
+  "start_url": "/command-center/future/index.html",
+  "scope": "/command-center/future/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "any",
+  "background_color": "#05080e",
+  "theme_color": "#070b12",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Talk to Mya", "url": "/command-center/future/index.html#/mya", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Approvals", "url": "/command-center/future/index.html#/approvals", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
