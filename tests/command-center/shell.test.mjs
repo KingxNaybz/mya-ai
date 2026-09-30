@@ -241,6 +241,11 @@ test("screen context only describes data that actually loaded", () => {
   assert.equal(lib.buildScreenContext("files", {}).text, "The owner is looking at the Command Center Files screen.");
 });
 
+test("systems overview counts statuses; unknown never counts as up", () => {
+  const c = lib.countSystemStatuses([{ status: "up" }, { status: "down" }, { status: "weird" }, {}, { status: "not_configured" }]);
+  assert.deepEqual(c, { up: 1, down: 1, configured: 0, not_configured: 1, not_observable: 2 });
+});
+
 /* ---------------- Phase 2 static guards ---------------- */
 const BASELINE = "59e8c0d";
 const readRoot = (f) => fs.readFileSync(path.join(ROOT, f), "utf8");

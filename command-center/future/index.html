@@ -19,8 +19,8 @@
      bump N in every tag below whenever any of them changes. The service
      worker (sw.js) is network-first for these, so a new N is picked up on
      the next online load. -->
-<link rel="stylesheet" href="styles.css?v=19">
-<link rel="stylesheet" href="core.css?v=19">
+<link rel="stylesheet" href="styles.css?v=20">
+<link rel="stylesheet" href="core.css?v=20">
 </head>
 <body>
 
@@ -396,13 +396,7 @@
         <div><p class="eyebrow">Integrations · health</p><h1 id="systems-title">Systems</h1>
           <p class="view-sub">What the Command Center can see, how fresh it is, and what each outside system is actually doing.</p></div>
       </header>
-      <div class="card">
-        <div class="card-head"><h2>Command Center data sources</h2><span class="muted small">Refreshes every minute while open</span></div>
-        <div class="table-wrap"><table class="table" id="sources-table">
-          <thead><tr><th>Source</th><th>Status</th><th>Last success</th><th class="hide-sm">Endpoint</th></tr></thead>
-          <tbody></tbody>
-        </table></div>
-      </div>
+      <div class="health-overview" id="systems-overview" aria-label="Health overview"></div>
       <div class="grid-2">
         <div class="card">
           <div class="card-head"><h2>Core services</h2><span data-fresh="systems"></span></div>
@@ -411,6 +405,13 @@
         <div class="card">
           <div class="card-head"><h2>Mya integrations</h2><span data-fresh="systems"></span></div>
           <div id="integrations-list"></div>
+        </div>
+        <div class="card span-2">
+          <div class="card-head"><h2>Command Center data sources</h2><span class="muted small">Refreshes every minute while open</span></div>
+          <div class="table-wrap"><table class="table" id="sources-table">
+            <thead><tr><th>Source</th><th>Status</th><th>Last success</th><th class="hide-sm">Endpoint</th></tr></thead>
+            <tbody></tbody>
+          </table></div>
         </div>
         <div class="card note-card span-2">
           <h2>What these statuses mean</h2>
@@ -521,15 +522,15 @@
   </div>
 </div>
 
-<script src="lib.js?v=19"></script>
-<script src="mya-events.js?v=19"></script>
-<script src="core.js?v=19"></script>
-<script src="data.js?v=19"></script>
-<script src="chat.js?v=19"></script>
-<script src="presence.js?v=19"></script>
-<script src="ask-about.js?v=19"></script>
-<script src="views.js?v=19"></script>
-<script src="shell.js?v=19"></script>
-<script src="app.js?v=19"></script>
+<script src="lib.js?v=20"></script>
+<script src="mya-events.js?v=20"></script>
+<script src="core.js?v=20"></script>
+<script src="data.js?v=20"></script>
+<script src="chat.js?v=20"></script>
+<script src="presence.js?v=20"></script>
+<script src="ask-about.js?v=20"></script>
+<script src="views.js?v=20"></script>
+<script src="shell.js?v=20"></script>
+<script src="app.js?v=20"></script>
 </body>
 </html>

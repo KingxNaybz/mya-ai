@@ -594,6 +594,40 @@
       return systemById(i.id) || { id: i.id, name: i.name, status: "not_observable", detail: i.role };
     }) : null;
     renderList("integrations-list", "systems", external, systemRow, "No integrations reported.", "System health");
+    renderSystemsOverview(list, external);
+  }
+
+  // Executive Mya's chat availability, as chat.js last reported it:
+  // "connected" only after a real reply in this session.
+  var myaAvailability = "loading";
+
+  function renderSystemsOverview(list, external) {
+    var el = $("systems-overview");
+    if (!el) return;
+    var f = fresh("systems");
+    var mya = myaAvailability === "connected" ? { cls: "live", value: "Connected", hint: "confirmed by her last reply" }
+      : myaAvailability === "configured" ? { cls: "configured", value: "Configured", hint: "her first reply confirms it" }
+      : myaAvailability === "unavailable" ? { cls: "down", value: "Unavailable", hint: "bridge key isn't set on the server" }
+      : myaAvailability === "loading" ? { cls: "loading", value: "Checking", hint: "" }
+      : { cls: "offline", value: "Not connected", hint: "can't check her runtime" };
+    var tiles = ['<div class="health-tile health-mya fresh-' + mya.cls + '"><span class="health-label">Executive Mya</span>' +
+      '<strong>' + h(mya.value) + "</strong>" + (mya.hint ? '<span class="health-hint">' + h(mya.hint) + "</span>" : "") + "</div>"];
+    if (!list || (f.state !== "live" && f.state !== "stale")) {
+      tiles.push('<div class="health-tile health-unknown"><span class="health-label">Systems</span><strong>Not connected</strong>' +
+        '<span class="health-hint">The health check isn\'t reachable, so no status is claimed.</span></div>');
+    } else {
+      var seen = {};
+      var all = list.concat(external || []).filter(function (x) { if (seen[x.id]) return false; seen[x.id] = true; return true; });
+      var c = MyaLib.countSystemStatuses(all);
+      var asOf = f.state === "stale" ? "as of last check" : "";
+      [["up", "Connected", "live"], ["down", "Down", "down"], ["configured", "Configured", "configured"],
+       ["not_observable", "Not observable", "offline"], ["not_configured", "Not configured", "offline"]].forEach(function (t) {
+        if (t[0] === "down" && !c.down) return;
+        tiles.push('<div class="health-tile fresh-' + t[2] + (t[0] === "down" ? " is-alert" : "") + '"><span class="health-label">' + t[1] + "</span>" +
+          "<strong>" + c[t[0]] + "</strong>" + (asOf ? '<span class="health-hint">' + asOf + "</span>" : "") + "</div>");
+      });
+    }
+    el.innerHTML = tiles.join("");
   }
 
   function systemPill(system) {
@@ -669,6 +703,7 @@
     initProjects();
     initHindsight();
     MyaEvents.on("data.changed", queueRender);
+    MyaEvents.on("mya.availability", function (a) { myaAvailability = a.availability; queueRender(); });
     MyaEvents.on("mic.changed", function (s) { micState = s; renderDevices(); });
     MyaEvents.on("voice.changed", function (s) { voiceState = s; renderDevices(); });
     window.addEventListener("online", renderDevices);

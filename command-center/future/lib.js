@@ -191,6 +191,17 @@
     return { state: st, label: SYSTEM_LABELS[st], cls: SYSTEM_CLASSES[st] };
   }
 
+  // Counts per status for the Systems overview. Anything with an unknown
+  // status counts as not_observable, never as up.
+  function countSystemStatuses(systems) {
+    var counts = { up: 0, down: 0, configured: 0, not_configured: 0, not_observable: 0 };
+    (systems || []).forEach(function (x) {
+      var st = x && SYSTEM_LABELS[x.status] ? x.status : "not_observable";
+      counts[st]++;
+    });
+    return counts;
+  }
+
   // Names of systems a LIVE Systems check found down. Stale or missing
   // data yields [] -- we don't announce outages we can't currently see.
   function systemsDown(systems, sourceFreshness) {
@@ -353,6 +364,7 @@
   return {
     integrationStatus: integrationStatus,
     systemsDown: systemsDown,
+    countSystemStatuses: countSystemStatuses,
     toolLabel: toolLabel,
     executiveMyaRoute: executiveMyaRoute,
     derivePresence: derivePresence,
