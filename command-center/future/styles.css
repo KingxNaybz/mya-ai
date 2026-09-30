@@ -1092,6 +1092,7 @@ a.metric:hover { border-color: var(--line-strong); transform: translateY(-1px); 
 .vc-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .vc-top strong { font-size: 13.5px; font-weight: 650; color: var(--text-hi); white-space: nowrap; }
 .vc-top .chip-tag { text-transform: none; white-space: nowrap; font-size: 10.5px; padding: 1px 7px; }
+.vc-top .vc-about { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .vc-detail { font-size: 13px; line-height: 1.4; color: var(--text-mid); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .voice-capsule[data-phase="listening"] .vc-detail { color: var(--text-hi); }
 .vc-btn {
@@ -1238,7 +1239,7 @@ a.metric:hover { border-color: var(--line-strong); transform: translateY(-1px); 
   .metric-row.cluster .metric:nth-child(2) { border-radius: 0 var(--radius-lg) 0 0; }
 }
 .vc-mute { flex: none; width: 34px; height: 34px; border-radius: 999px; }
-.voice-capsule:not([data-phase="speaking"]):not([data-phase="completed"]) .vc-mute { display: none; }
+html:not([data-voice-muted]) .voice-capsule:not([data-phase="speaking"]):not([data-phase="completed"]) .vc-mute { display: none; }
 /* No live level (e.g. the AudioContext wasn't running yet): a gentle meter. */
 html:not(.has-level) .voice-capsule[data-phase="speaking"] .vc-meter i,
 html:not(.has-level) .voice-capsule[data-phase="listening"] .vc-meter i { animation: meterIdle 1s ease-in-out infinite; }
@@ -1263,3 +1264,33 @@ html:not(.has-level) .voice-capsule[data-phase="listening"] .vc-meter i { animat
 
 /* "Ask Mya about <search>" above Hindsight results. */
 .hindsight-ask { display: flex; justify-content: flex-end; margin: 0 0 10px; }
+
+/* Talk from anywhere: the strip's talk control (voice.js drives every
+   [data-talk]). Green while listening, gold while she speaks (tap to
+   interrupt), struck while the mic is blocked. */
+.strip-talk {
+  display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 13px 0 11px;
+  border-radius: 999px; border: 1px solid rgba(74, 168, 255, 0.45); background: rgba(74, 168, 255, 0.12);
+  color: var(--text-hi); font: 600 12.5px/1 inherit; font-family: inherit; cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+.strip-talk:hover { background: rgba(74, 168, 255, 0.2); border-color: var(--accent); }
+.strip-talk .icon { width: 15px; height: 15px; }
+.strip-talk-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); opacity: 0.8; }
+.strip-talk.is-capturing { border-color: rgba(58, 208, 160, 0.6); background: rgba(58, 208, 160, 0.14); box-shadow: 0 0 0 4px rgba(58, 208, 160, 0.1); }
+.strip-talk.is-capturing .strip-talk-dot { background: var(--core-listening); animation: pulse 1.2s ease-in-out infinite; }
+.strip-talk.is-speaking { border-color: rgba(230, 180, 80, 0.6); background: rgba(230, 180, 80, 0.12); }
+.strip-talk.is-speaking .strip-talk-dot { background: #e6b450; animation: pulse 1.2s ease-in-out infinite; }
+.strip-talk.is-unavailable { opacity: 0.55; }
+.strip-talk.is-blocked .icon { opacity: 0.6; }
+@media (max-width: 560px) {
+  .strip-talk { padding: 0 10px; height: 30px; }
+  .strip-talk [data-talk-short] { font-size: 12px; }
+  .strip-talk-dot { display: none; }
+}
+/* Live transcript: settled words solid, the recognizer's guess dimmed. */
+.vc-final { color: var(--text-hi); }
+.vc-interim { color: var(--text-mid); font-style: italic; opacity: 0.8; }
+/* Mute is a quick, page-only silence (chat.js): gold, waves gone. */
+.vc-mute.is-muted { color: #e6b450; border-color: rgba(230, 180, 80, 0.5); }
+.vc-mute.is-muted .wave { opacity: 0; }

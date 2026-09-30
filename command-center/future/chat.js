@@ -34,6 +34,13 @@
  *     muted, reply, toolsUsed }.
  * The wake word ("Mya", always listening) is unchanged and is now labelled
  * as what it is: the hands-free wake word.
+ *
+ * Two different "quiet" controls:
+ *   - Voice replies on/off ([data-voice-toggle], saved preference): whether
+ *     she speaks at all. Off stops her and requests no audio.
+ *   - Mute ([data-voice-mute], this page only): silence her right now
+ *     without stopping the reply; unmute mid-sentence to hear the rest.
+ *     While muted no new audio is requested. Event: voice.muted { muted }.
  */
 (function (global) {
   "use strict";
@@ -53,6 +60,8 @@
     var voiceStatusEls = document.querySelectorAll("[data-voice-status]");
     var history = [];
     var voiceEnabled = localStorage.getItem("mya-voice-enabled") !== "off";
+    var mutedNow = false;
+    var muteBtns = document.querySelectorAll("[data-voice-mute]");
     // Executive Mya (Hermes) is the only assistant here. Chat is enabled only
     // while Systems reports her bridge configured, and there's no fallback to
     // another model. Once enabled, it stays enabled for the page unless
@@ -214,14 +223,34 @@
         b.classList.toggle("is-muted", !voiceEnabled);
         b.setAttribute("aria-pressed", voiceEnabled ? "true" : "false");
         b.title = voiceEnabled
-          ? "Mya speaks her replies out loud (click to mute)"
-          : "Mya's voice is muted (click to unmute)";
+          ? "Voice replies on: Mya speaks her answers (click to turn off)"
+          : "Voice replies off: answers are text only (click to turn on)";
+        b.setAttribute("aria-label", b.title);
         var lbl = b.querySelector("[data-label]");
-        if (lbl) lbl.textContent = voiceEnabled ? "Voice on" : "Muted";
+        if (lbl) lbl.textContent = voiceEnabled ? "Voice replies on" : "Voice replies off";
       }
       MyaEvents.emit("voice.changed", { voiceEnabled: voiceEnabled });
     }
     applyVoiceToggleUI();
+
+    function applyMuteUI() {
+      document.documentElement.toggleAttribute("data-voice-muted", mutedNow);
+      for (var i = 0; i < muteBtns.length; i++) {
+        var b = muteBtns[i];
+        b.classList.toggle("is-muted", mutedNow);
+        b.setAttribute("aria-pressed", mutedNow ? "true" : "false");
+        b.title = mutedNow ? "Muted: tap to hear Mya again" : "Mute Mya (she keeps going, silently)";
+        b.setAttribute("aria-label", b.title);
+      }
+    }
+    function setMuted(m) {
+      mutedNow = Boolean(m);
+      if (currentAudio) currentAudio.muted = mutedNow;
+      applyMuteUI();
+      MyaEvents.emit("voice.muted", { muted: mutedNow });
+    }
+    for (var mi = 0; mi < muteBtns.length; mi++) muteBtns[mi].addEventListener("click", function () { setMuted(!mutedNow); });
+    applyMuteUI();
 
     function onVoiceToggle() {
       voiceEnabled = !voiceEnabled;
@@ -548,6 +577,7 @@
         if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; }
         stopLevel();
         currentAudio = new Audio("data:audio/mpeg;base64," + audioBase64);
+        currentAudio.muted = mutedNow;
         var audio = currentAudio;
         MyaCore.clearIdleTimer();
         micRestartedForCurrentReply = false;
@@ -608,7 +638,7 @@
       return fetch("/api/command-center-ask-mya", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: outbound, history: priorHistory, voice: voiceEnabled }),
+        body: JSON.stringify({ message: outbound, history: priorHistory, voice: voiceEnabled && !mutedNow }),
       })
         .then(function (res) {
           clearPending();
@@ -643,7 +673,7 @@
           history.push({ role: "assistant", content: reply });
           MyaEvents.emit("mya.outcome", { ok: true, reply: reply, inline: opts.inline });
           var playing = playReplyAudio(result.data.audioBase64);
-          MyaEvents.emit("voice.reply", { audio: playing, muted: !voiceEnabled, reply: reply, toolsUsed: result.data.toolsUsed || [], voice: Boolean(opts.voice) });
+          MyaEvents.emit("voice.reply", { audio: playing, muted: !voiceEnabled || mutedNow, reply: reply, toolsUsed: result.data.toolsUsed || [], voice: Boolean(opts.voice) });
           MyaEvents.emit("mya.responding", { dev: false, audio: playing });
           if (!playing) restartMicForNextTurn();
 

@@ -18,6 +18,16 @@
  * service down, nothing heard, Executive Mya unavailable or not answering.
  * Each says what happened and that nothing was sent elsewhere.
  *
+ * Presence: every [data-talk] control drives the same turn, including the
+ * one in the status strip, so you can start talking from any screen. The
+ * turn belongs to the page, not the Mya view: navigating while she listens,
+ * thinks or speaks keeps it going, and the "About" tag follows the screen
+ * you end up on (that screen's context is what's sent).
+ *
+ * Microphone permission is checked up front where the browser allows it
+ * (Permissions API): a blocked mic shows on every talk control and says how
+ * to fix it, instead of failing after a tap.
+ *
  * Hands-free (the "Mya" wake word) stays in chat.js. While a tap-to-talk
  * turn records, the wake-word recognizer is paused (two conflict) and
  * resumed afterwards.
@@ -42,6 +52,8 @@
   var capturing = false;
   var finalText = "";
   var interimText = "";
+  var speakingNow = false;    // her reply audio is playing
+  var micPerm = "unknown";    // granted | denied | prompt | unknown
   var silenceTimer = null, noSpeechTimer = null, hideTimer = null, tickTimer = null;
   var voiceTurn = false;      // the request in flight came from tap-to-talk
   var available = false;
@@ -75,7 +87,14 @@
     cap.hidden = false;
     cap.setAttribute("data-phase", out.phase);
     cap.querySelector("[data-vc-label]").textContent = out.label;
-    cap.querySelector("[data-vc-detail]").textContent = out.detail;
+    var detail = cap.querySelector("[data-vc-detail]");
+    if (out.heardFinal != null || out.heardInterim != null) {
+      // Final words solid, the still-changing guess dimmed.
+      detail.innerHTML = '<span class="vc-final">' + MyaLib.escapeHtml(out.heardFinal || "") + "</span>" +
+        (out.heardInterim ? ' <span class="vc-interim">' + MyaLib.escapeHtml(out.heardInterim) + "</span>" : "");
+    } else {
+      detail.textContent = out.detail;
+    }
     cap.querySelector("[data-vc-dev]").hidden = !v.dev;
     var about = cap.querySelector("[data-vc-about]");
     about.hidden = !v.about;
@@ -117,14 +136,23 @@
     var btns = document.querySelectorAll("[data-talk]");
     for (var i = 0; i < btns.length; i++) {
       var b = btns[i];
+      var blocked = micPerm === "denied";
       b.classList.toggle("is-capturing", capturing);
+      b.classList.toggle("is-speaking", speakingNow && !capturing);
+      b.classList.toggle("is-blocked", blocked);
       b.setAttribute("aria-pressed", capturing ? "true" : "false");
       b.title = !SR ? "Voice input isn't available in this browser (try Chrome or Edge)"
         : !available ? "Executive Mya is unavailable"
-        : capturing ? "Tap to send what you said" : "Tap to talk to Mya (Ctrl+Shift+Space)";
-      b.classList.toggle("is-unavailable", !SR || !available);
+        : blocked ? "Microphone blocked: allow it for this site in the address bar"
+        : capturing ? "Tap to send what you said"
+        : speakingNow ? "Interrupt Mya and talk (Ctrl+Shift+Space)"
+        : "Tap to talk to Mya (Ctrl+Shift+Space)";
+      b.setAttribute("aria-label", b.title);
+      b.classList.toggle("is-unavailable", !SR || !available || blocked);
       var lbl = b.querySelector("[data-talk-label]");
-      if (lbl) lbl.textContent = capturing ? "Listening… tap to send" : "Tap to talk";
+      if (lbl) lbl.textContent = capturing ? "Listening… tap to send" : speakingNow ? "Tap to interrupt" : blocked ? "Microphone blocked" : "Tap to talk";
+      var short = b.querySelector("[data-talk-short]");
+      if (short) short.textContent = capturing ? "Send" : speakingNow ? "Interrupt" : "Talk";
     }
   }
 
@@ -155,12 +183,13 @@
     if (capturing) return finish();
     if (!SR) return fail("unsupported");
     if (!available) return fail("unavailable");
+    if (micPerm === "denied") return fail("mic-denied");
     if (MyaChat.isBusy()) return setPhase("error", { error: "busy" });
     MyaChat.stopSpeaking(); // talking over her stops her
     capturing = true;
     finalText = interimText = "";
     var ctx = MyaAskAbout.contextFor(route());
-    setPhase("listening", { about: ctx ? ctx.label : null });
+    setPhase("listening", { about: ctx ? ctx.label : null, askPermission: micPerm === "prompt" });
     MyaCore.clearIdleTimer();
     MyaCore.setState("listening");
     MyaEvents.emit("voice.capture", { capturing: true, transcript: "" });
@@ -182,6 +211,9 @@
         interimText = inter.trim();
         var text = heard();
         v.transcript = text;
+        v.heardFinal = finalText;
+        v.heardInterim = interimText;
+        v.askPermission = false;
         render();
         MyaEvents.emit("voice.capture", { capturing: true, transcript: text });
         bumpLevel();
@@ -266,6 +298,8 @@
       if (mine) setPhase("completed", { keep: true, reply: r.reply, muted: r.muted, noAudio: !r.muted });
     });
     MyaEvents.on("voice.speaking", function (s) {
+      speakingNow = Boolean(s.on);
+      renderTalkButtons();
       if (s.on) { if (v.phase !== "speaking") setPhase("speaking", { keep: true }); return; }
       if (v.phase === "speaking") {
         if (s.interrupted) close();
@@ -273,6 +307,15 @@
       }
     });
     MyaEvents.on("auth.expired", function () { if (capturing) endCapture(null); close(); });
+
+    // The turn outlives navigation; while listening, "About" follows you to
+    // the screen whose context will be sent.
+    window.addEventListener("hashchange", function () {
+      if (!capturing) return;
+      var ctx = MyaAskAbout.contextFor(route());
+      v.about = ctx ? ctx.label : null;
+      render();
+    });
 
     var cap = $("voice-capsule");
     cap.querySelector("[data-vc-action]").addEventListener("click", function () {
@@ -374,8 +417,18 @@
     close();
   }
 
+  function watchMicPermission() {
+    if (!navigator.permissions || !navigator.permissions.query) return;
+    navigator.permissions.query({ name: "microphone" }).then(function (st) {
+      micPerm = st.state;
+      renderTalkButtons();
+      st.onchange = function () { micPerm = st.state; renderTalkButtons(); };
+    }, function () { /* not queryable here: find out on first use */ });
+  }
+
   function init() {
     wire();
+    watchMicPermission();
     renderTalkButtons();
   }
 

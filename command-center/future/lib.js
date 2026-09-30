@@ -348,12 +348,14 @@
     switch (v.phase) {
       case "listening":
         out.label = "Listening";
-        out.detail = heard || "Go ahead, I'm listening…";
+        out.detail = heard || (v.askPermission ? "Allow the microphone if your browser asks, then go ahead." : "Go ahead, I'm listening…");
         out.action = "send";
+        // Final words vs. the recognizer's still-changing guess, when known.
+        if (v.heardFinal || v.heardInterim) { out.heardFinal = v.heardFinal || ""; out.heardInterim = v.heardInterim || ""; }
         break;
       case "thinking":
         out.label = "Thinking";
-        out.detail = heard || "Working on your request";
+        out.detail = heard ? "You said " + heard : "Working on your request";
         break;
       case "waiting":
         out.label = "Still working";
@@ -409,6 +411,7 @@
     src = src || {};
     var title = CONTEXT_VIEWS[view] || "Command Center";
     var lines = ["The owner is looking at the Command Center " + title + " screen."];
+    var focus = null; // the one entity open on screen, named in the label
     var stale = function (e) { return e && e.state === "stale" ? " (last known, may be stale)" : ""; };
 
     if (view === "projects") {
@@ -417,6 +420,7 @@
       if (p && (d.state === "live" || d.state === "stale")) {
         lines.push("Open project" + stale(d) + ": " + p.project_name + (p.client_name ? " for " + p.client_name : "") +
           (p.status ? ", status " + p.status : "") + (p.next_action ? ", next action: " + p.next_action : "") + ".");
+        focus = p.project_name;
       }
       var pe = src.projects;
       var note = sourceNote(pe, "Project list");
@@ -447,7 +451,7 @@
         ((se.data && se.data.systems) || []).slice(0, 12).forEach(function (x) { lines.push("- " + x.name + ": " + String(x.status).replace(/_/g, " ")); });
       }
     }
-    return { label: title, text: lines.join("\n") };
+    return { label: focus ? title + " · " + snippet(focus, 32) : title, text: lines.join("\n") };
   }
 
   // Which runtime chat should use. Hermes has no health endpoint, so a

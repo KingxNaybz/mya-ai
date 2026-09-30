@@ -364,3 +364,33 @@ test("browser code never references server-side secrets", () => {
     assert.doesNotMatch(read(f), /HINDSIGHT_|HERMES_BRIDGE_KEY|MCP_BRIDGE_KEY|hsk_/, f);
   }
 });
+
+test("voice capsule: live transcript keeps settled words apart from the recognizer's guess", () => {
+  const V = (v) => lib.voiceCapsule(v, NOW);
+  const out = V({ phase: "listening", transcript: "check the estimate for", heardFinal: "check the", heardInterim: "estimate for" });
+  assert.equal(out.heardFinal, "check the");
+  assert.equal(out.heardInterim, "estimate for");
+  assert.equal(V({ phase: "listening" }).heardFinal, undefined);
+  assert.match(V({ phase: "listening", askPermission: true }).detail, /Allow the microphone/);
+  assert.match(V({ phase: "thinking", transcript: "go back" }).detail, /You said .go back./);
+});
+
+test("screen context names the one open project, and only a project that actually loaded", () => {
+  const live = (data) => ({ state: "live", data });
+  const project = { project_name: "Fixture Project 1", client_name: "A", status: "in_progress" };
+  const withDetail = lib.buildScreenContext("projects", { projects: live({ projects: [] }), projectDetail: live({ project }) });
+  assert.equal(withDetail.label, "Projects · Fixture Project 1");
+  assert.match(withDetail.text, /Open project: Fixture Project 1/);
+  const offline = lib.buildScreenContext("projects", { projects: live({ projects: [] }), projectDetail: { state: "offline", data: { project } } });
+  assert.equal(offline.label, "Projects");
+  assert.equal(lib.buildScreenContext("memory", {}).label, "Memory");
+});
+
+test("voice controls: talk from any screen, mute is separate from voice replies", () => {
+  const html = read("index.html");
+  assert.match(html, /class="strip-talk" data-talk/);
+  assert.match(html, /data-voice-mute/);
+  const chat = read("chat.js");
+  // Muted or voice-off: no audio is requested from the server.
+  assert.match(chat, /voice: voiceEnabled && !mutedNow/);
+});
